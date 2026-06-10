@@ -11,6 +11,7 @@ import {
   type SessionUser,
 } from './auth.js'
 import { type DB } from './db.js'
+import { registerAlertsRoutes } from './alerts-routes.js'
 import { registerEquipmentRoutes } from './equipment-routes.js'
 import { requireAdmin } from './guards.js'
 import { registerInventoryRoutes } from './inventory-routes.js'
@@ -88,6 +89,7 @@ export function buildApp(db: DB): App {
   registerInventoryRoutes(app, db)
   registerEquipmentRoutes(app, db)
   registerJobsRoutes(app, db)
+  registerAlertsRoutes(app, db)
 
   // ---------- 下单域: auth ----------
 
