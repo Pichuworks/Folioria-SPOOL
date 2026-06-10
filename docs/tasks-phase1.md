@@ -5,7 +5,7 @@
       ← 先把 acceptance.md §1 全部写成测试，再实现
 - [x] T03 DB 层: better-sqlite3 接入 · migration runner · 执行 docs/schema.sql
 - [x] T04 seed 导入: data/seed.json → DB（金额已是整数，禁止换算）· acceptance §2.5 基线测试
-- [ ] T05 定价推导: 成本/地板价/报价规则/可选性三条件 ← acceptance §2 全量
+- [x] T05 定价推导: 成本/地板价/报价规则/可选性三条件 ← acceptance §2 全量
 - [ ] T06 spool init CLI: 选基准货币 + 初始 admin（首登强制改密）
 - [ ] T07 session auth: 注册关闭(Phase1) · 登录/登出 · 管理域守卫 ← acceptance §6
 - [ ] T08 定价四表 CRUD API + /calculator 页面（参数设置 tab API 化）
