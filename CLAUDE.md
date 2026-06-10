@@ -3,7 +3,7 @@
 Folioria 印刷工坊管理系统。库存 → 报价 → 下单 → 生产 → 核算 → 维护。
 
 ## 技术栈（已定稿，不讨论替代方案）
-- TypeScript 前后端 · Node LTS
+- TypeScript 前后端 · Node ≥24（LTS 下限，开发环境实测 v26.1.0）
 - API: Fastify v5 · 全端点 JSON Schema 校验
 - DB: SQLite · better-sqlite3 · WAL · STRICT tables · 每连接 `PRAGMA foreign_keys=ON`
 - 前端: React 18 + Vite + Tailwind **v4**（不要生成 v3 风格 tailwind.config.js）
