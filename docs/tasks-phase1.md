@@ -7,7 +7,7 @@
 - [x] T04 seed 导入: data/seed.json → DB（金额已是整数，禁止换算）· acceptance §2.5 基线测试
 - [x] T05 定价推导: 成本/地板价/报价规则/可选性三条件 ← acceptance §2 全量
 - [x] T06 spool init CLI: 选基准货币 + 初始 admin（首登强制改密）
-- [ ] T07 session auth: 注册关闭(Phase1) · 登录/登出 · 管理域守卫 ← acceptance §6
+- [x] T07 session auth: 注册关闭(Phase1) · 登录/登出 · 管理域守卫 ← acceptance §6
 - [ ] T08 定价四表 CRUD API + /calculator 页面（参数设置 tab API 化）
 - [ ] T09 纸张库存: papers/stocks/locations CRUD · 裁切转换 ← acceptance §3.4
 - [ ] T10 耗材: CRUD · 寿命进度条 · 换装事务 ← acceptance §3.5
