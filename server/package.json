@@ -5,7 +5,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "dev": "tsx src/serve.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

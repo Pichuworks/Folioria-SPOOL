@@ -1,7 +1,9 @@
+import Calculator from './Calculator'
+
 export default function App() {
   return (
-    <main className="grid min-h-screen place-items-center">
-      <h1 className="text-2xl font-semibold">S.P.O.O.L.</h1>
+    <main className="min-h-screen bg-stone-50">
+      <Calculator />
     </main>
   )
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatMoney,
+  formatMoneyC,
   lineTotal,
   money,
   moneyC,
@@ -206,6 +207,30 @@ describe('formatMoney（PRD §7：全系统唯一允许除法的函数）', () =
 
   it.each([-1, 1.5, 7])('非法 decimal_places %f → RangeError', (dp) => {
     expect(() => formatMoney(money(100), { symbol: '¥', decimal_places: dp })).toThrow(RangeError)
+  })
+})
+
+describe('formatMoneyC（单价层 _c 展示，T08 计算器消费）', () => {
+  const JPY = { symbol: '¥', decimal_places: 0 }
+  const USD = { symbol: '$', decimal_places: 2 }
+
+  const vectors: ReadonlyArray<
+    readonly [number, { symbol: string; decimal_places: number }, string]
+  > = [
+    [7, JPY, '¥0.07'],
+    [225, JPY, '¥2.25'],
+    [2500, JPY, '¥25'],
+    [90, JPY, '¥0.9'],
+    [0, JPY, '¥0'],
+    [7646, JPY, '¥76.46'],
+    [1234567, JPY, '¥12,345.67'],
+    [700, USD, '$0.07'],
+    [340000, USD, '$34.00'],
+    [12345, USD, '$1.2345'],
+    [-74, JPY, '-¥0.74'],
+  ]
+  it.each(vectors)('formatMoneyC(%i, %o) → %s', (priceC, currency, expected) => {
+    expect(formatMoneyC(moneyC(priceC), currency)).toBe(expected)
   })
 })
 

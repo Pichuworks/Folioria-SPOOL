@@ -1,12 +1,7 @@
 import cookie from '@fastify/cookie'
 import bcrypt from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
-import Fastify, {
-  type FastifyError,
-  type FastifyInstance,
-  type FastifyReply,
-  type FastifyRequest,
-} from 'fastify'
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify'
 import {
   changePassword,
   createSession,
@@ -16,6 +11,8 @@ import {
   type SessionUser,
 } from './auth.js'
 import { type DB } from './db.js'
+import { requireAdmin } from './guards.js'
+import { registerPricingRoutes } from './pricing-routes.js'
 
 export const SESSION_COOKIE = 'spool_session'
 
@@ -84,21 +81,7 @@ export function buildApp(db: DB): App {
     done()
   })
 
-  const requireAdmin = (req: FastifyRequest, reply: FastifyReply, done: (err?: Error) => void) => {
-    if (!req.user) {
-      void reply.status(401).send({ error: 'unauthorized' })
-      return
-    }
-    if (req.user.must_change_password !== 0) {
-      void reply.status(403).send({ error: 'password_change_required' })
-      return
-    }
-    if (req.user.role !== 'admin') {
-      void reply.status(403).send({ error: 'forbidden' })
-      return
-    }
-    done()
-  }
+  registerPricingRoutes(app, db)
 
   // ---------- 下单域: auth ----------
 

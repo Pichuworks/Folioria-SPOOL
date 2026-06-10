@@ -66,6 +66,30 @@ export function sumMoney(values: readonly Money[]): Money {
   return total as Money
 }
 
+const groupThousands = (n: number): string => String(n).replace(/\B(?=(\d{3})+$)/g, ',')
+
+/** 单价层 _c 展示：保留至多 dp+2 位小数，尾零修剪到不少于 dp 位（¥0.07 / $34.00） */
+export function formatMoneyC(
+  price: MoneyC,
+  currency: Pick<Currency, 'symbol' | 'decimal_places'>,
+): string {
+  if (!Number.isSafeInteger(price)) {
+    throw new RangeError(`formatMoneyC: not a safe integer: ${price}`)
+  }
+  const dp = currency.decimal_places
+  if (!Number.isSafeInteger(dp) || dp < 0 || dp > 6) {
+    throw new RangeError(`formatMoneyC: invalid decimal_places: ${dp}`)
+  }
+  const negative = price < 0
+  const abs = negative ? -price : price
+  const factor = 100 * 10 ** dp
+  const frac = abs % factor
+  const whole = (abs - frac) / factor
+  let fracStr = String(frac).padStart(dp + 2, '0')
+  while (fracStr.length > dp && fracStr.endsWith('0')) fracStr = fracStr.slice(0, -1)
+  return `${negative ? '-' : ''}${currency.symbol}${groupThousands(whole)}${fracStr === '' ? '' : `.${fracStr}`}`
+}
+
 /** 全系统唯一允许除法的函数（铁律 2）；divmod 精确整除，零浮点 */
 export function formatMoney(
   amount: Money,
@@ -83,7 +107,6 @@ export function formatMoney(
   const factor = 10 ** dp
   const frac = abs % factor
   const whole = (abs - frac) / factor
-  const wholeStr = String(whole).replace(/\B(?=(\d{3})+$)/g, ',')
   const fracStr = dp === 0 ? '' : `.${String(frac).padStart(dp, '0')}`
-  return `${negative ? '-' : ''}${currency.symbol}${wholeStr}${fracStr}`
+  return `${negative ? '-' : ''}${currency.symbol}${groupThousands(whole)}${fracStr}`
 }
