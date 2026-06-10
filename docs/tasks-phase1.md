@@ -1,7 +1,7 @@
 # Phase 1 任务清单（依赖序 · 一项一会话）
 
 - [x] T01 工程脚手架: pnpm workspace (server/web) · tsconfig strict · vitest · eslint
-- [ ] T02 金额模块: MoneyC/Money branded types · round_half_up · formatMoney
+- [x] T02 金额模块: MoneyC/Money branded types · round_half_up · formatMoney
       ← 先把 acceptance.md §1 全部写成测试，再实现
 - [ ] T03 DB 层: better-sqlite3 接入 · migration runner · 执行 docs/schema.sql
 - [ ] T04 seed 导入: data/seed.json → DB（金额已是整数，禁止换算）· acceptance §2.5 基线测试
