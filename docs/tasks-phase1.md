@@ -14,5 +14,5 @@
 - [x] T11 设备: 档案 · 维护事件 · 双触发校准 ← acceptance §4
 - [x] T12 作业: 新建向导(实时成本预览·可用量提示) · done 落账事务 ← acceptance §3.1-3.3
 - [x] T13 提醒: 阈值检查 · 去重 · resolve ← acceptance §4
-- [ ] T14 Dashboard 四宫格
+- [x] T14 Dashboard 四宫格
 - [ ] T15 备份: VACUUM INTO systemd timer · 恢复演练脚本

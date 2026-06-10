@@ -12,6 +12,7 @@ import {
 } from './auth.js'
 import { type DB } from './db.js'
 import { registerAlertsRoutes } from './alerts-routes.js'
+import { registerDashboardRoutes } from './dashboard-routes.js'
 import { registerEquipmentRoutes } from './equipment-routes.js'
 import { requireAdmin } from './guards.js'
 import { registerInventoryRoutes } from './inventory-routes.js'
@@ -90,6 +91,7 @@ export function buildApp(db: DB): App {
   registerEquipmentRoutes(app, db)
   registerJobsRoutes(app, db)
   registerAlertsRoutes(app, db)
+  registerDashboardRoutes(app, db)
 
   // ---------- 下单域: auth ----------
 

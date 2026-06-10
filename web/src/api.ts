@@ -35,6 +35,71 @@ export async function fetchOptions(): Promise<OptionsDto> {
   return (await res.json()) as OptionsDto
 }
 
+export interface MeDto {
+  id: string
+  email: string
+  name: string
+  role: 'customer' | 'member' | 'admin'
+  must_change_password: boolean
+}
+
+export async function fetchMe(): Promise<MeDto | null> {
+  const res = await fetch('/api/auth/me')
+  if (res.status === 401) return null
+  if (!res.ok) throw new Error(`me failed: ${res.status}`)
+  return (await res.json()) as MeDto
+}
+
+export async function login(email: string, password: string): Promise<MeDto | null> {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  if (res.status === 401) return null
+  if (!res.ok) throw new Error(`login failed: ${res.status}`)
+  return (await res.json()) as MeDto
+}
+
+export async function logout(): Promise<void> {
+  await fetch('/api/auth/logout', { method: 'POST' })
+}
+
+export async function changePassword(oldPassword: string, newPassword: string): Promise<boolean> {
+  const res = await fetch('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  })
+  return res.ok
+}
+
+export interface DashboardDto {
+  todo: { jobs_active: number; orders_active: number; maintenance_alerts: number }
+  inventory_alerts: Array<{ id: string; type: string; severity: string; message: string }>
+  monthly: {
+    jobs_done: number
+    revenue: number
+    external_cost: number
+    internal_cost: number
+    profit: number
+    pages: number
+  }
+  equipment: Array<{
+    code: string
+    name: string
+    status: string
+    total_pages: number
+    calibration_due: boolean
+  }>
+}
+
+export async function fetchDashboard(): Promise<DashboardDto> {
+  const res = await fetch('/api/dashboard')
+  if (!res.ok) throw new Error(`dashboard failed: ${res.status}`)
+  return (await res.json()) as DashboardDto
+}
+
 export async function fetchQuote(req: {
   mode_id: number
   paper_id: number
