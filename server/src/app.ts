@@ -12,6 +12,7 @@ import {
 } from './auth.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
+import { registerInventoryRoutes } from './inventory-routes.js'
 import { registerPricingRoutes } from './pricing-routes.js'
 
 export const SESSION_COOKIE = 'spool_session'
@@ -82,6 +83,7 @@ export function buildApp(db: DB): App {
   })
 
   registerPricingRoutes(app, db)
+  registerInventoryRoutes(app, db)
 
   // ---------- 下单域: auth ----------
 
