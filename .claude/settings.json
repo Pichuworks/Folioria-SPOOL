@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)", "Bash(pnpm *)", "Bash(npx vitest*)",
+      "Bash(node *)", "Bash(git status)", "Bash(git diff*)", "Bash(git log*)",
+      "Read", "Edit", "Write", "Glob", "Grep"
+    ],
+    "deny": [
+      "Write(docs/schema.sql)", "Edit(docs/schema.sql)",
+      "Write(docs/acceptance.md)", "Edit(docs/acceptance.md)",
+      "Write(data/seed.json)", "Edit(data/seed.json)"
+    ]
+  }
+}
