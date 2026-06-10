@@ -163,10 +163,13 @@ export default function Dashboard() {
         <Card title="本月统计">
           <ul className="space-y-1 text-stone-800">
             <li>完成作业：{data.monthly.jobs_done}（{data.monthly.pages} 面）</li>
-            <li>收入：{data.monthly.revenue}</li>
-            <li>外部成本：{data.monthly.external_cost} · 内部消耗：{data.monthly.internal_cost}</li>
+            <li>收入：{data.monthly.revenue_display}</li>
+            <li>
+              外部成本：{data.monthly.external_cost_display} · 内部消耗：
+              {data.monthly.internal_cost_display}
+            </li>
             <li className={data.monthly.profit < 0 ? 'text-red-700' : 'text-emerald-700'}>
-              毛利：{data.monthly.profit}
+              毛利：{data.monthly.profit_display}
             </li>
           </ul>
         </Card>

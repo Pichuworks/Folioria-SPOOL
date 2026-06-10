@@ -84,6 +84,10 @@ export interface DashboardDto {
     internal_cost: number
     profit: number
     pages: number
+    revenue_display: string
+    external_cost_display: string
+    internal_cost_display: string
+    profit_display: string
   }
   equipment: Array<{
     code: string

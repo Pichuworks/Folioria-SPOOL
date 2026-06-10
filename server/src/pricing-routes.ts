@@ -1,7 +1,8 @@
 import { type FastifyInstance } from 'fastify'
+import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
-import { formatMoney, formatMoneyC, lineTotal, type Currency } from './money.js'
+import { formatMoney, formatMoneyC, lineTotal } from './money.js'
 import { listQuotable, quote } from './pricing.js'
 
 const MONEY_C = { type: 'integer', minimum: 0 }
@@ -9,18 +10,6 @@ const ID_PARAM = {
   type: 'object',
   required: ['id'],
   properties: { id: { type: 'string', pattern: '^\\d+$' } },
-}
-
-function baseCurrency(db: DB): Currency {
-  const row = db
-    .prepare(
-      `SELECT cur.code, cur.symbol, cur.decimal_places
-       FROM system_config sc JOIN currencies cur ON cur.code = sc.base_currency
-       WHERE sc.id = 1`,
-    )
-    .get() as Currency | undefined
-  if (!row) throw new Error('pricing: system_config missing (run spool init)')
-  return row
 }
 
 const isConstraint = (err: unknown, kind: string): boolean =>

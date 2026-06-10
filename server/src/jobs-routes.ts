@@ -176,6 +176,14 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
         notes?: string | null
       }
 
+      const fieldEdits =
+        b.title !== undefined || b.quantity !== undefined || 'file_url' in b || 'notes' in b
+
+      // 状态转移与字段编辑互斥：混合 payload 语义含混且无法原子化为单条 UPDATE
+      if (b.status !== undefined && fieldEdits) {
+        return reply.status(422).send({ error: 'status_and_field_edits_mutually_exclusive' })
+      }
+
       if (b.status !== undefined) {
         if (!canTransition(job.status, b.status)) {
           return reply
@@ -197,10 +205,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
         } else {
           db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run(b.status, id)
         }
-      }
-
-      const fieldEdits = b.title !== undefined || b.quantity !== undefined || 'file_url' in b || 'notes' in b
-      if (fieldEdits) {
+      } else if (fieldEdits) {
         if (job.status !== 'draft') {
           return reply.status(409).send({ error: 'editable_only_in_draft' })
         }

@@ -1,7 +1,9 @@
 import { type FastifyInstance } from 'fastify'
 import { calibrationDue } from './alerts.js'
+import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
+import { formatMoney, money } from './money.js'
 
 interface PrinterRow {
   id: number
@@ -43,11 +45,12 @@ export function registerDashboardRoutes(app: FastifyInstance, db: DB): void {
       .prepare(
         `SELECT * FROM alerts
          WHERE resolved_at IS NULL AND type IN ('low_stock', 'consumable_low', 'moisture_warning')
-         ORDER BY severity DESC, created_at DESC LIMIT 20`,
+         ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+                  created_at DESC LIMIT 20`,
       )
       .all()
 
-    const monthly = db
+    const m = db
       .prepare(
         `SELECT COUNT(*) AS jobs_done,
                 COALESCE(SUM(CASE WHEN quoted_price IS NOT NULL THEN quoted_price END), 0) AS revenue,
@@ -57,7 +60,22 @@ export function registerDashboardRoutes(app: FastifyInstance, db: DB): void {
                 COALESCE(SUM(pages_consumed), 0) AS pages
          FROM jobs WHERE status = 'done' AND substr(completed_at, 1, 7) = ?`,
       )
-      .get(month)
+      .get(month) as {
+      jobs_done: number
+      revenue: number
+      external_cost: number
+      internal_cost: number
+      profit: number
+      pages: number
+    }
+    const currency = baseCurrency(db)
+    const monthly = {
+      ...m,
+      revenue_display: formatMoney(money(m.revenue), currency),
+      external_cost_display: formatMoney(money(m.external_cost), currency),
+      internal_cost_display: formatMoney(money(m.internal_cost), currency),
+      profit_display: formatMoney(money(m.profit), currency),
+    }
 
     const now = new Date()
     const equipment = (

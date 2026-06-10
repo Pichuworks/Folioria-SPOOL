@@ -60,6 +60,18 @@ const snapshot = () => ({
 
 describe('§3.1 done 落账（单事务）', () => {
   it('打印 200 + 废品 3：库存 −203、双日志、耗材 +203、计数器 +203、成本快照定格', async () => {
+    // 反向对照：同机 per_job_rule 件与异机 per_page 件都不得被记页（§3.1「全部」的判别力）
+    const c850 = (db.prepare("SELECT id FROM printers WHERE code = 'C850'").get() as { id: number }).id
+    const p708 = (db.prepare("SELECT id FROM printers WHERE code = 'P708'").get() as { id: number }).id
+    db.prepare(
+      `INSERT INTO consumables (id, name, type, printer_id, quantity, cost_model, rated_life_pages, unit_cost_c)
+       VALUES ('ctl-jobrule', '同机墨水', 'ink', ?, 0, 'per_job_rule', NULL, 0)`,
+    ).run(c850)
+    db.prepare(
+      `INSERT INTO consumables (id, name, type, printer_id, quantity, cost_model, rated_life_pages, unit_cost_c)
+       VALUES ('ctl-other', '他机碳粉', 'toner', ?, 0, 'per_page', 10000, 0)`,
+    ).run(p708)
+
     const jobId = await makeJob(200, 14)
     await patch(`/api/jobs/${jobId}`, { status: 'queued' })
     await patch(`/api/jobs/${jobId}`, { status: 'printing' })
@@ -79,10 +91,15 @@ describe('§3.1 done 落账（单事务）', () => {
     ])
     expect(logs.every((l) => l.related_job_id === jobId)).toBe(true)
 
-    const usage = db.prepare('SELECT current_usage_pages FROM consumables LIMIT 1').get() as {
-      current_usage_pages: number
-    }
+    const usage = db
+      .prepare("SELECT current_usage_pages FROM consumables WHERE name = 'Canon T01 CMYK套装'")
+      .get() as { current_usage_pages: number }
     expect(usage.current_usage_pages).toBe(203)
+    const controls = db
+      .prepare("SELECT id, current_usage_pages FROM consumables WHERE id IN ('ctl-jobrule', 'ctl-other')")
+      .all() as Array<{ id: string; current_usage_pages: number }>
+    expect(controls.length).toBe(2)
+    expect(controls.every((c) => c.current_usage_pages === 0)).toBe(true)
 
     const printer = db.prepare("SELECT total_pages FROM printers WHERE code = 'C850'").get() as {
       total_pages: number
@@ -121,6 +138,30 @@ describe('§3.1 done 落账（单事务）', () => {
     expect(snapshot()).toEqual(before)
     const job = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId) as { status: string }
     expect(job.status).toBe('queued')
+  })
+
+  it('status 与字段混合 PATCH → 422 且全部未生效（原子性：要么全成要么全败）', async () => {
+    const jobId = await makeJob(10)
+    await patch(`/api/jobs/${jobId}`, { status: 'queued' })
+
+    const mixed = await patch(`/api/jobs/${jobId}`, { status: 'cancelled', notes: '客户取消' })
+    expect(mixed.statusCode).toBe(422)
+    const job = db.prepare('SELECT status, notes, quantity FROM jobs WHERE id = ?').get(jobId) as {
+      status: string
+      notes: string | null
+      quantity: number
+    }
+    expect(job.status).toBe('queued')
+    expect(job.notes).toBeNull()
+
+    const draftJob = await makeJob(10)
+    const mixed2 = await patch(`/api/jobs/${draftJob}`, { status: 'queued', quantity: 99999 })
+    expect(mixed2.statusCode).toBe(422)
+    const j2 = db.prepare('SELECT status, quantity FROM jobs WHERE id = ?').get(draftJob) as {
+      status: string
+      quantity: number
+    }
+    expect(j2).toEqual({ status: 'draft', quantity: 10 })
   })
 
   it('done 后 cancelled/再 done 均拒绝（状态机）', async () => {

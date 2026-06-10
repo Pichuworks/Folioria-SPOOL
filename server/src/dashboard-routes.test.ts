@@ -77,6 +77,8 @@ describe('Dashboard 四宫格', () => {
         external_cost: number
         internal_cost: number
         profit: number
+        revenue_display: string
+        profit_display: string
       }
       equipment: Array<{ code: string; status: string; calibration_due: boolean }>
     }
@@ -92,6 +94,9 @@ describe('Dashboard 四宫格', () => {
     expect(body.monthly.external_cost).toBe(71)
     expect(body.monthly.internal_cost).toBe(18)
     expect(body.monthly.profit).toBe(-57)
+    // 金额展示走唯一除法点 formatMoney（铁律 2），dp>0 货币不再裸渲染最小单位
+    expect(body.monthly.revenue_display).toBe('¥14')
+    expect(body.monthly.profit_display).toBe('-¥57')
 
     expect(body.equipment.length).toBe(6)
     expect(body.equipment[0]?.code).toBe('C850')

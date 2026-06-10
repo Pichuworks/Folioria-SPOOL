@@ -134,6 +134,28 @@ describe('§3.5 耗材换装（单事务）', () => {
     ).toBe(0)
   })
 
+  it('换装事务中途失败 → 全部回滚（§3.5 全程单事务）', async () => {
+    db.prepare('UPDATE consumables SET current_usage_pages = 1000 WHERE id = ?').run(tonerId)
+    db.exec(
+      "CREATE TRIGGER boom BEFORE INSERT ON inventory_log BEGIN SELECT RAISE(ABORT, 'boom'); END",
+    )
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/equipment/${c850Id}/maintenance`,
+      headers: { cookie: adminCookie },
+      payload: { type: 'toner_change', consumable_id: tonerId, final_usage: 1000 },
+    })
+    expect(res.statusCode).toBe(500)
+    db.exec('DROP TRIGGER boom')
+
+    const c = db
+      .prepare('SELECT current_usage_pages, quantity, installed_at FROM consumables WHERE id = ?')
+      .get(tonerId) as { current_usage_pages: number; quantity: number; installed_at: string | null }
+    expect(c).toEqual({ current_usage_pages: 1000, quantity: 1, installed_at: null })
+    expect((db.prepare('SELECT COUNT(*) n FROM maintenance_events').get() as { n: number }).n).toBe(0)
+    expect((db.prepare('SELECT COUNT(*) n FROM inventory_log').get() as { n: number }).n).toBe(0)
+  })
+
   it('toner_change 缺 consumable_id / final_usage → 422', async () => {
     const res = await app.inject({
       method: 'POST',

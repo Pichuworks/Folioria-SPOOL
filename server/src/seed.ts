@@ -159,16 +159,21 @@ export function importSeed(db: DB, seedPath: string = SEED_PATH): void {
       )
     }
 
-    db.prepare(
-      `UPDATE system_config SET min_margin_bp = ?, unify_pricing = ?, force_min_margin = ?,
-                                overhead_dep_months = ?, overhead_month_volume = ?
-       WHERE id = 1`,
-    ).run(
-      seed.settings.min_margin_bp,
-      seed.settings.unify_pricing ? 1 : 0,
-      seed.settings.force_min_margin ? 1 : 0,
-      seed.settings.overhead_dep_months,
-      seed.settings.overhead_month_volume,
-    )
+    const { changes } = db
+      .prepare(
+        `UPDATE system_config SET min_margin_bp = ?, unify_pricing = ?, force_min_margin = ?,
+                                  overhead_dep_months = ?, overhead_month_volume = ?
+         WHERE id = 1`,
+      )
+      .run(
+        seed.settings.min_margin_bp,
+        seed.settings.unify_pricing ? 1 : 0,
+        seed.settings.force_min_margin ? 1 : 0,
+        seed.settings.overhead_dep_months,
+        seed.settings.overhead_month_volume,
+      )
+    if (changes !== 1) {
+      throw new Error('importSeed: system_config missing — run spool init first')
+    }
   })()
 }
