@@ -1,0 +1,16 @@
+# S.P.O.O.L. 每日备份（PRD E 节：VACUUM INTO → NAS，禁止直接 cp）
+# 安装: cp deploy/spool-backup.{service,timer} /etc/systemd/system/
+#       systemctl daemon-reload && systemctl enable --now spool-backup.timer
+[Unit]
+Description=S.P.O.O.L. SQLite backup (VACUUM INTO, keep 30)
+Wants=spool-backup.timer
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/folioria-spool/server
+ExecStart=/usr/bin/env pnpm run cli backup --db /var/lib/spool/folioria.db --dest /mnt/nas/spool-backups --keep 30
+User=spool
+Group=spool
+
+[Install]
+WantedBy=multi-user.target
