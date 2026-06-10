@@ -55,7 +55,7 @@ function getConfig(db: DB): PricingConfig {
   return cfg
 }
 
-interface QuoteRow {
+interface CostRow {
   pricing_mode: string
   ink_price_c: number
   ml_per_batch: number | null
@@ -65,8 +65,46 @@ interface QuoteRow {
   size_area: number
   pack_price_c: number | null
   pack_count: number | null
-  sell_c: number | null
-  internal_sell_c: number | null
+}
+
+export interface UnitCost {
+  ink_c: MoneyC
+  paper_c: MoneyC
+  total_c: MoneyC
+}
+
+/** §2.3 单张成本推导（不要求 combo 存在——内部作业也要核算）。尺寸越界/无采购口径 → null */
+export function deriveUnitCost(
+  db: DB,
+  modeId: number,
+  paperId: number,
+  sizeKey: string,
+): UnitCost | null {
+  const row = db
+    .prepare(
+      `SELECT m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
+              rs.area AS ref_area, mx.area AS max_area, s.area AS size_area,
+              psc.pack_price_c, psc.pack_count
+       FROM print_modes m
+       JOIN sizes rs ON rs.key = m.ref_size
+       JOIN sizes mx ON mx.key = m.max_size
+       JOIN sizes s ON s.key = @size
+       LEFT JOIN paper_size_costs psc ON psc.paper_id = @paper AND psc.size_key = @size
+       WHERE m.id = @mode AND m.archived = 0`,
+    )
+    .get({ mode: modeId, paper: paperId, size: sizeKey }) as CostRow | undefined
+
+  if (!row) return null
+  if (row.size_area > row.max_area) return null
+  if (row.pack_price_c == null || row.pack_count == null) return null
+  if (row.pricing_mode === 'ml' && row.ml_per_batch == null) {
+    throw new Error(`pricing: mode ${modeId} pricing_mode=ml requires ml_per_batch`)
+  }
+  const effInk =
+    row.pricing_mode === 'ml' ? row.ink_price_c * (row.ml_per_batch as number) : row.ink_price_c
+  const ink = divRoundHalfUp(effInk * row.size_area, row.yield_sheets * row.ref_area)
+  const paper = divRoundHalfUp(row.pack_price_c, row.pack_count)
+  return { ink_c: moneyC(ink), paper_c: moneyC(paper), total_c: moneyC(ink + paper) }
 }
 
 /** 可选性三条件 + §2.3 推导。不可选 → null（API 层转 404） */
@@ -77,41 +115,31 @@ export function quote(
   sizeKey: string,
   opts?: QuoteOptions,
 ): Quote | null {
-  const row = db
+  const comboRow = db
     .prepare(
-      `SELECT m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
-              rs.area AS ref_area, mx.area AS max_area, s.area AS size_area,
-              psc.pack_price_c, psc.pack_count, cp.sell_c, cp.internal_sell_c
+      `SELECT cp.sell_c, cp.internal_sell_c
        FROM combos c
-       JOIN print_modes m ON m.id = c.mode_id AND m.archived = 0
        JOIN papers p ON p.id = c.paper_id AND p.archived = 0
-       JOIN sizes rs ON rs.key = m.ref_size
-       JOIN sizes mx ON mx.key = m.max_size
-       JOIN sizes s ON s.key = @size
-       LEFT JOIN paper_size_costs psc ON psc.paper_id = c.paper_id AND psc.size_key = @size
        LEFT JOIN combo_prices cp ON cp.combo_id = c.id AND cp.size_key = @size
        WHERE c.mode_id = @mode AND c.paper_id = @paper AND c.archived = 0`,
     )
-    .get({ mode: modeId, paper: paperId, size: sizeKey }) as QuoteRow | undefined
+    .get({ mode: modeId, paper: paperId, size: sizeKey }) as
+    | { sell_c: number | null; internal_sell_c: number | null }
+    | undefined
+  if (!comboRow) return null
 
-  if (!row) return null
-  if (row.size_area > row.max_area) return null
-  if (row.pack_price_c == null || row.pack_count == null) return null
-
-  if (row.pricing_mode === 'ml' && row.ml_per_batch == null) {
-    throw new Error(`pricing: mode ${modeId} pricing_mode=ml requires ml_per_batch`)
-  }
-  const effInk =
-    row.pricing_mode === 'ml' ? row.ink_price_c * (row.ml_per_batch as number) : row.ink_price_c
-
-  const ink = divRoundHalfUp(effInk * row.size_area, row.yield_sheets * row.ref_area)
-  const paper = divRoundHalfUp(row.pack_price_c, row.pack_count)
-  const total = ink + paper
+  const cost = deriveUnitCost(db, modeId, paperId, sizeKey)
+  if (!cost) return null
+  const ink: number = cost.ink_c
+  const paper: number = cost.paper_c
+  const total: number = cost.total_c
 
   const cfg = getConfig(db)
   const auto = ceilDiv(total * 10000, 10000 - cfg.min_margin_bp)
 
-  const manual = opts?.internal ? (row.internal_sell_c ?? row.sell_c) : row.sell_c
+  const manual = opts?.internal
+    ? (comboRow.internal_sell_c ?? comboRow.sell_c)
+    : comboRow.sell_c
 
   let sell: number
   let source: Quote['source']

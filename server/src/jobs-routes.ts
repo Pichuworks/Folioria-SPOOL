@@ -1,0 +1,252 @@
+import { randomUUID } from 'node:crypto'
+import { type FastifyInstance } from 'fastify'
+import { type DB } from './db.js'
+import { requireAdmin } from './guards.js'
+import { availability, canTransition, completeJob, JobError } from './jobs.js'
+import { deriveUnitCost, overheadC } from './pricing.js'
+
+export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
+  app.get(
+    '/api/jobs',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            status: {
+              type: 'string',
+              enum: ['draft', 'queued', 'printing', 'done', 'cancelled'],
+            },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const { status } = req.query as { status?: string }
+      const sql = `SELECT j.*, m.name AS mode_name, p.name AS paper_name
+                   FROM jobs j
+                   JOIN print_modes m ON m.id = j.mode_id
+                   JOIN papers p ON p.id = j.paper_id
+                   ${status ? 'WHERE j.status = ?' : ''}
+                   ORDER BY j.created_at DESC LIMIT 500`
+      return status ? db.prepare(sql).all(status) : db.prepare(sql).all()
+    },
+  )
+
+  app.get('/api/jobs/availability', { preHandler: requireAdmin }, async (req, reply) => {
+    const q = req.query as { paper_id?: string; size_key?: string }
+    const paperId = Number(q.paper_id)
+    if (!Number.isSafeInteger(paperId) || paperId < 1 || !q.size_key) {
+      return reply.status(422).send({ error: 'paper_id_and_size_key_required' })
+    }
+    return availability(db, paperId, q.size_key)
+  })
+
+  app.get('/api/jobs/preview', { preHandler: requireAdmin }, async (req, reply) => {
+    const q = req.query as {
+      mode_id?: string
+      paper_id?: string
+      size_key?: string
+      quantity?: string
+    }
+    const modeId = Number(q.mode_id)
+    const paperId = Number(q.paper_id)
+    if (!Number.isSafeInteger(modeId) || !Number.isSafeInteger(paperId) || !q.size_key) {
+      return reply.status(422).send({ error: 'mode_paper_size_required' })
+    }
+    const cost = deriveUnitCost(db, modeId, paperId, q.size_key)
+    if (!cost) return reply.status(404).send({ error: 'cost_underivable' })
+    const printer = db
+      .prepare('SELECT printer_id FROM print_modes WHERE id = ?')
+      .get(modeId) as { printer_id: number }
+    const overhead = overheadC(db, printer.printer_id)
+    const avail = availability(db, paperId, q.size_key)
+    return {
+      ink_c: cost.ink_c,
+      paper_c: cost.paper_c,
+      overhead_c: overhead,
+      unit_total_c: cost.ink_c + cost.paper_c + overhead,
+      ...avail,
+    }
+  })
+
+  app.post(
+    '/api/jobs',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['title', 'mode_id', 'paper_id', 'size_key', 'quantity'],
+          additionalProperties: false,
+          properties: {
+            title: { type: 'string', minLength: 1 },
+            mode_id: { type: 'integer', minimum: 1 },
+            paper_id: { type: 'integer', minimum: 1 },
+            size_key: { type: 'string', minLength: 1 },
+            quantity: { type: 'integer', minimum: 1, maximum: 1000000 },
+            order_item_id: { type: ['string', 'null'] },
+            quoted_price: { type: ['integer', 'null'], minimum: 0 },
+            file_url: { type: ['string', 'null'] },
+            notes: { type: ['string', 'null'] },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body as {
+        title: string
+        mode_id: number
+        paper_id: number
+        size_key: string
+        quantity: number
+        order_item_id?: string | null
+        quoted_price?: number | null
+        file_url?: string | null
+        notes?: string | null
+      }
+      const id = randomUUID()
+      try {
+        db.prepare(
+          `INSERT INTO jobs (id, order_item_id, requester_id, title, mode_id, paper_id, size_key,
+                             quantity, quoted_price, file_url, notes, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)`,
+        ).run(
+          id,
+          b.order_item_id ?? null,
+          req.user?.id ?? '',
+          b.title,
+          b.mode_id,
+          b.paper_id,
+          b.size_key,
+          b.quantity,
+          b.quoted_price ?? null,
+          b.file_url ?? null,
+          b.notes ?? null,
+          new Date().toISOString(),
+        )
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('FOREIGN KEY')) {
+          return reply.status(409).send({ error: 'unknown_mode_paper_or_size' })
+        }
+        throw err
+      }
+      const avail = availability(db, b.paper_id, b.size_key)
+      const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Record<string, unknown>
+      return reply.status(201).send({
+        ...job,
+        availability: avail,
+        availability_warning: avail.available < b.quantity,
+      })
+    },
+  )
+
+  app.patch(
+    '/api/jobs/:id',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: {
+            status: { type: 'string', enum: ['queued', 'printing', 'cancelled'] },
+            title: { type: 'string', minLength: 1 },
+            quantity: { type: 'integer', minimum: 1, maximum: 1000000 },
+            file_url: { type: ['string', 'null'] },
+            notes: { type: ['string', 'null'] },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string }
+      const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as
+        | { status: string; title: string; quantity: number; file_url: string | null; notes: string | null }
+        | undefined
+      if (!job) return reply.status(404).send({ error: 'not_found' })
+      const b = req.body as {
+        status?: string
+        title?: string
+        quantity?: number
+        file_url?: string | null
+        notes?: string | null
+      }
+
+      if (b.status !== undefined) {
+        if (!canTransition(job.status, b.status)) {
+          return reply
+            .status(409)
+            .send({ error: `invalid_transition_${job.status}_to_${b.status}` })
+        }
+        const stamp =
+          b.status === 'printing'
+            ? 'started_at = ?'
+            : b.status === 'cancelled'
+              ? 'completed_at = ?'
+              : null
+        if (stamp) {
+          db.prepare(`UPDATE jobs SET status = ?, ${stamp} WHERE id = ?`).run(
+            b.status,
+            new Date().toISOString(),
+            id,
+          )
+        } else {
+          db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run(b.status, id)
+        }
+      }
+
+      const fieldEdits = b.title !== undefined || b.quantity !== undefined || 'file_url' in b || 'notes' in b
+      if (fieldEdits) {
+        if (job.status !== 'draft') {
+          return reply.status(409).send({ error: 'editable_only_in_draft' })
+        }
+        db.prepare('UPDATE jobs SET title = ?, quantity = ?, file_url = ?, notes = ? WHERE id = ?').run(
+          b.title ?? job.title,
+          b.quantity ?? job.quantity,
+          'file_url' in b ? (b.file_url ?? null) : job.file_url,
+          'notes' in b ? (b.notes ?? null) : job.notes,
+          id,
+        )
+      }
+      return db.prepare('SELECT * FROM jobs WHERE id = ?').get(id)
+    },
+  )
+
+  app.post(
+    '/api/jobs/:id/done',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            waste_quantity: { type: 'integer', minimum: 0 },
+            pages_consumed: { type: 'integer', minimum: 1 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string }
+      const b = req.body as { waste_quantity?: number; pages_consumed?: number }
+      try {
+        completeJob(db, id, {
+          wasteQuantity: b.waste_quantity ?? 0,
+          pagesConsumed: b.pages_consumed,
+          operatorId: req.user?.id,
+        })
+      } catch (err) {
+        if (err instanceof JobError) {
+          return reply.status(err.status).send({ error: err.message })
+        }
+        throw err
+      }
+      return db.prepare('SELECT * FROM jobs WHERE id = ?').get(id)
+    },
+  )
+}
