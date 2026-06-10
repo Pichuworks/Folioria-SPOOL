@@ -26,6 +26,7 @@ Folioria 印刷工坊管理系统。库存 → 报价 → 下单 → 生产 → 
 
 ## 工作方式
 - 一个任务一个会话；做完勾 docs/tasks-phase1.md 的 checkbox 再 commit
+- 每个 commit 直接 push 到 origin（https://github.com/Pichuworks/Folioria-SPOOL.git，分支 main）
 - 大改动先 plan mode 复述理解
 - 每次代码改动后跑 `npm run typecheck && npm test`
 - 不要重构与当前任务无关的代码；不要写多余注释
