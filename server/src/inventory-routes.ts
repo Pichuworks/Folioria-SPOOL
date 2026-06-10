@@ -6,6 +6,15 @@ import { requireAdmin } from './guards.js'
 const MOVEMENT_ACTIONS = ['purchase', 'consume', 'adjust', 'scrap', 'return'] as const
 type MovementAction = (typeof MOVEMENT_ACTIONS)[number]
 
+/** 寿命剩余基点（非金额，整数 floor）：per_page 专用，其余 null */
+function remainingBp(costModel: string, rated: number | null, usage: number): number | null {
+  if (costModel !== 'per_page' || rated == null || rated <= 0) return null
+  const left = rated - usage
+  if (left <= 0) return 0
+  const num = left * 10000
+  return (num - (num % rated)) / rated
+}
+
 interface MovementBody {
   action: MovementAction
   quantity_delta: number
@@ -350,6 +359,138 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
         insertLog.run(randomUUID(), b.to.stock_id, b.to.quantity_delta, group, b.reason ?? null, req.user?.id ?? null, now)
       })()
       return reply.status(201).send({ convert_group: group })
+    },
+  )
+
+  // ---------- consumables（C2：单表 + cost_model 区分） ----------
+
+  app.get('/api/inventory/consumables', { preHandler: requireAdmin }, async () => {
+    const rows = db
+      .prepare(
+        `SELECT c.*, p.code AS printer_code, p.name AS printer_name
+         FROM consumables c JOIN printers p ON p.id = c.printer_id
+         WHERE c.archived = 0 ORDER BY p.id, c.name`,
+      )
+      .all() as Array<{ cost_model: string; rated_life_pages: number | null; current_usage_pages: number }>
+    return rows.map((r) => ({
+      ...r,
+      remaining_bp: remainingBp(r.cost_model, r.rated_life_pages, r.current_usage_pages),
+    }))
+  })
+
+  app.post(
+    '/api/inventory/consumables',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['name', 'type', 'printer_id', 'cost_model', 'unit_cost_c'],
+          additionalProperties: false,
+          properties: {
+            name: { type: 'string', minLength: 1 },
+            type: { type: 'string', enum: ['toner', 'ink', 'printhead', 'fuser', 'drum', 'other'] },
+            printer_id: { type: 'integer', minimum: 1 },
+            quantity: { type: 'integer', minimum: 0 },
+            cost_model: { type: 'string', enum: ['per_page', 'per_job_rule'] },
+            rated_life_pages: { type: ['integer', 'null'], minimum: 1 },
+            unit_cost_c: { type: 'integer', minimum: 0 },
+            supplier: { type: ['string', 'null'] },
+            alert_threshold_bp: { type: 'integer', minimum: 0, maximum: 10000 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body as {
+        name: string
+        type: string
+        printer_id: number
+        quantity?: number
+        cost_model: string
+        rated_life_pages?: number | null
+        unit_cost_c: number
+        supplier?: string | null
+        alert_threshold_bp?: number
+      }
+      if (b.cost_model === 'per_page' && b.rated_life_pages == null) {
+        return reply.status(422).send({ error: 'rated_life_pages_required' })
+      }
+      const id = randomUUID()
+      try {
+        db.prepare(
+          `INSERT INTO consumables (id, name, type, printer_id, quantity, cost_model,
+                                    rated_life_pages, unit_cost_c, supplier, alert_threshold_bp)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          id,
+          b.name,
+          b.type,
+          b.printer_id,
+          b.quantity ?? 0,
+          b.cost_model,
+          b.rated_life_pages ?? null,
+          b.unit_cost_c,
+          b.supplier ?? null,
+          b.alert_threshold_bp ?? 2000,
+        )
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('FOREIGN KEY')) {
+          return reply.status(409).send({ error: 'unknown_printer' })
+        }
+        throw err
+      }
+      const row = db.prepare('SELECT * FROM consumables WHERE id = ?').get(id) as {
+        cost_model: string
+        rated_life_pages: number | null
+        current_usage_pages: number
+      }
+      return reply.status(201).send({
+        ...row,
+        remaining_bp: remainingBp(row.cost_model, row.rated_life_pages, row.current_usage_pages),
+      })
+    },
+  )
+
+  app.patch(
+    '/api/inventory/consumables/:id',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: {
+            name: { type: 'string', minLength: 1 },
+            quantity: { type: 'integer', minimum: 0 },
+            rated_life_pages: { type: ['integer', 'null'], minimum: 1 },
+            unit_cost_c: { type: 'integer', minimum: 0 },
+            supplier: { type: ['string', 'null'] },
+            alert_threshold_bp: { type: 'integer', minimum: 0, maximum: 10000 },
+            archived: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string }
+      const existing = db.prepare('SELECT * FROM consumables WHERE id = ?').get(id) as
+        | Record<string, unknown>
+        | undefined
+      if (!existing) return reply.status(404).send({ error: 'not_found' })
+      const b = req.body as Record<string, unknown>
+      const merged = { ...existing, ...b }
+      if (typeof b['archived'] === 'boolean') merged['archived'] = b['archived'] ? 1 : 0
+      if (merged['cost_model'] === 'per_page' && merged['rated_life_pages'] == null) {
+        return reply.status(422).send({ error: 'rated_life_pages_required' })
+      }
+      db.prepare(
+        `UPDATE consumables SET name=@name, quantity=@quantity, rated_life_pages=@rated_life_pages,
+           unit_cost_c=@unit_cost_c, supplier=@supplier, alert_threshold_bp=@alert_threshold_bp,
+           archived=@archived WHERE id=@id`,
+      ).run(merged)
+      return db.prepare('SELECT * FROM consumables WHERE id = ?').get(id)
     },
   )
 
