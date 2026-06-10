@@ -1,7 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import { type FastifyInstance } from 'fastify'
+import { calibrationDue } from './alerts.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
+
+interface PrinterRow {
+  id: number
+  code: string
+  total_pages: number
+  last_calibration_at: string | null
+  last_calibration_pages: number
+  calibration_interval_pages: number | null
+  calibration_interval_days: number | null
+}
 
 const MAINT_TYPES = [
   'calibration',
@@ -16,8 +27,60 @@ const MAINT_TYPES = [
 ] as const
 
 export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
-  app.get('/api/equipment', { preHandler: requireAdmin }, async () =>
-    db.prepare('SELECT * FROM printers WHERE archived = 0 ORDER BY id').all(),
+  app.get('/api/equipment', { preHandler: requireAdmin }, async () => {
+    const now = new Date()
+    const rows = db.prepare('SELECT * FROM printers WHERE archived = 0 ORDER BY id').all() as PrinterRow[]
+    return rows.map((p) => ({ ...p, calibration_due: calibrationDue(p, now) }))
+  })
+
+  app.get('/api/equipment/:id', { preHandler: requireAdmin }, async (req, reply) => {
+    const id = Number((req.params as { id: string }).id)
+    const p = db.prepare('SELECT * FROM printers WHERE id = ?').get(id) as PrinterRow | undefined
+    if (!p) return reply.status(404).send({ error: 'not_found' })
+    return { ...p, calibration_due: calibrationDue(p, new Date()) }
+  })
+
+  app.patch(
+    '/api/equipment/:id',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: {
+            name: { type: 'string', minLength: 1 },
+            location: { type: ['string', 'null'] },
+            status: { type: 'string', enum: ['online', 'standby', 'maintenance', 'offline'] },
+            equipment_cost_c: { type: 'integer', minimum: 0 },
+            monthly_cost_c: { type: 'integer', minimum: 0 },
+            calibration_interval_pages: { type: ['integer', 'null'], minimum: 1 },
+            calibration_interval_days: { type: ['integer', 'null'], minimum: 1 },
+            archived: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const id = Number((req.params as { id: string }).id)
+      const existing = db.prepare('SELECT * FROM printers WHERE id = ?').get(id) as
+        | Record<string, unknown>
+        | undefined
+      if (!existing) return reply.status(404).send({ error: 'not_found' })
+      const b = req.body as Record<string, unknown>
+      const merged = { ...existing, ...b }
+      if (typeof b['archived'] === 'boolean') merged['archived'] = b['archived'] ? 1 : 0
+      db.prepare(
+        `UPDATE printers SET name=@name, location=@location, status=@status,
+           equipment_cost_c=@equipment_cost_c, monthly_cost_c=@monthly_cost_c,
+           calibration_interval_pages=@calibration_interval_pages,
+           calibration_interval_days=@calibration_interval_days, archived=@archived
+         WHERE id=@id`,
+      ).run(merged)
+      const p = db.prepare('SELECT * FROM printers WHERE id = ?').get(id) as PrinterRow
+      return { ...p, calibration_due: calibrationDue(p, new Date()) }
+    },
   )
 
   app.get('/api/equipment/:id/maintenance', { preHandler: requireAdmin }, async (req, reply) => {
@@ -110,6 +173,31 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
                                         reason, operator_id, related_job_id, created_at)
              VALUES (?, 'consumable', ?, 'consume', -1, ?, ?, NULL, ?)`,
           ).run(randomUUID(), b.consumable_id, `toner_change ${eventId}`, req.user?.id ?? null, now)
+        })()
+      } else if (b.type === 'calibration') {
+        // C6：校准事件重置双触发基线，并解决未关闭的 calibration_due 提醒
+        const occurredAt = b.occurred_at ?? now
+        db.transaction(() => {
+          insertEvent.run(
+            eventId,
+            printerId,
+            b.type,
+            occurredAt,
+            req.user?.id ?? null,
+            b.notes ?? null,
+            b.next_due ?? null,
+            b.cost ?? null,
+            null,
+          )
+          db.prepare(
+            `UPDATE printers SET last_calibration_at = ?, last_calibration_pages = total_pages
+             WHERE id = ?`,
+          ).run(occurredAt, printerId)
+          db.prepare(
+            `UPDATE alerts SET resolved_at = ?
+             WHERE target_type = 'printer' AND target_id = ? AND type = 'calibration_due'
+               AND resolved_at IS NULL`,
+          ).run(now, String(printerId))
         })()
       } else {
         insertEvent.run(

@@ -11,7 +11,7 @@
 - [x] T08 定价四表 CRUD API + /calculator 页面（参数设置 tab API 化）
 - [x] T09 纸张库存: papers/stocks/locations CRUD · 裁切转换 ← acceptance §3.4
 - [x] T10 耗材: CRUD · 寿命进度条 · 换装事务 ← acceptance §3.5
-- [ ] T11 设备: 档案 · 维护事件 · 双触发校准 ← acceptance §4
+- [x] T11 设备: 档案 · 维护事件 · 双触发校准 ← acceptance §4
 - [ ] T12 作业: 新建向导(实时成本预览·可用量提示) · done 落账事务 ← acceptance §3.1-3.3
 - [ ] T13 提醒: 阈值检查 · 去重 · resolve ← acceptance §4
 - [ ] T14 Dashboard 四宫格

@@ -144,6 +144,55 @@ describe('§3.5 耗材换装（单事务）', () => {
     expect(res.statusCode).toBe(422)
   })
 
+  it('档案编辑 + 校准事件重置基线并 resolve 提醒（C6）', async () => {
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/equipment/${c850Id}`,
+      headers: { cookie: adminCookie },
+      payload: { calibration_interval_pages: 3000, status: 'standby' },
+    })
+    expect(patched.statusCode).toBe(200)
+
+    db.prepare('UPDATE printers SET total_pages = 5000 WHERE id = ?').run(c850Id)
+    const due = await app.inject({
+      method: 'GET',
+      url: `/api/equipment/${c850Id}`,
+      headers: { cookie: adminCookie },
+    })
+    expect((due.json() as { calibration_due: boolean }).calibration_due).toBe(true)
+
+    db.prepare(
+      `INSERT INTO alerts (id, type, severity, target_type, target_id, message, created_at)
+       VALUES ('al1', 'calibration_due', 'warning', 'printer', ?, 'due', '2026-06-10T00:00:00Z')`,
+    ).run(String(c850Id))
+
+    const calibrated = await app.inject({
+      method: 'POST',
+      url: `/api/equipment/${c850Id}/maintenance`,
+      headers: { cookie: adminCookie },
+      payload: { type: 'calibration', notes: '色彩校准' },
+    })
+    expect(calibrated.statusCode).toBe(201)
+
+    const printer = db
+      .prepare('SELECT last_calibration_pages, last_calibration_at FROM printers WHERE id = ?')
+      .get(c850Id) as { last_calibration_pages: number; last_calibration_at: string | null }
+    expect(printer.last_calibration_pages).toBe(5000)
+    expect(printer.last_calibration_at).not.toBeNull()
+
+    const after = await app.inject({
+      method: 'GET',
+      url: `/api/equipment/${c850Id}`,
+      headers: { cookie: adminCookie },
+    })
+    expect((after.json() as { calibration_due: boolean }).calibration_due).toBe(false)
+
+    const alert = db.prepare("SELECT resolved_at FROM alerts WHERE id = 'al1'").get() as {
+      resolved_at: string | null
+    }
+    expect(alert.resolved_at).not.toBeNull()
+  })
+
   it('普通维护事件（nozzle_check）直接落档', async () => {
     const res = await app.inject({
       method: 'POST',
