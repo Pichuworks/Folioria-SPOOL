@@ -387,6 +387,7 @@ feat / fix / refactor / style / data / docs / test / chore
 | D8 | 定价模型 | 推导式（C9），否决 CostRule 平面表；手动价无条件生效，force 默认关——**曾误写为强制抬价，全量回归测试否决，引流价（黑白¥0.07）必须可低于地板价** |
 | D9 | Auth | session 表 + httpOnly cookie（否决 JWT：黑名单查库后无状态收益归零） |
 | D10 | 账号供给 | 下单域开放注册；member 升格制；admin 仅手动添加 + init 引导 |
+| D11 | 首登改密标记 | users.must_change_password 列（0002 migration）；spool init 创建的 admin 置 1，改密成功后应用层清零（B1 首登强制改密的落地载体） |
 
 ---
 

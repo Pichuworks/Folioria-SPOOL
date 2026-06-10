@@ -21,11 +21,11 @@ describe('migration runner', () => {
     expect(migration.equals(schema)).toBe(true)
   })
 
-  it('migrate 应用 0001 后 user_version=1，重复执行幂等', () => {
-    expect(migrate(db)).toBe(1)
-    expect(db.pragma('user_version', { simple: true })).toBe(1)
+  it('migrate 应用全部 migration 后 user_version=最新，重复执行幂等', () => {
+    expect(migrate(db)).toBe(2)
+    expect(db.pragma('user_version', { simple: true })).toBe(2)
     expect(migrate(db)).toBe(0)
-    expect(db.pragma('user_version', { simple: true })).toBe(1)
+    expect(db.pragma('user_version', { simple: true })).toBe(2)
   })
 
   it('外键每连接开启', () => {
