@@ -28,9 +28,11 @@ ingress:
 EOF
 
 $CF tunnel route dns spool spool.pichu.moe || echo "route dns: 可能已存在，继续"
-# folioria.com zone 须先在同一 Cloudflare 账号下添加并激活（NS 已从 Spaceship 切到 CF）
-$CF tunnel route dns spool folioria.com || echo "route dns folioria.com: zone 未激活或已存在，继续"
-$CF tunnel route dns spool www.folioria.com || echo "route dns www.folioria.com: zone 未激活或已存在，继续"
+# ⚠️ cert.pem 按 zone 签发（pichu.moe），route dns 管不到 folioria.com zone，
+#   跨 zone 会错误地拼成 folioria.com.pichu.moe。须在 CF 面板 folioria.com zone 手动建：
+#   CNAME @   → $UUID.cfargotunnel.com （Proxied）
+#   CNAME www → $UUID.cfargotunnel.com （Proxied）
+echo "folioria.com zone 需手动 CNAME → $UUID.cfargotunnel.com（见上方注释）"
 
 cat > ~/.config/systemd/user/spool-tunnel.service <<'EOF'
 [Unit]
@@ -47,7 +49,8 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable --now spool-tunnel
+systemctl --user enable spool-tunnel
+systemctl --user restart spool-tunnel   # ingress 变更须重启生效
 sleep 5
 systemctl --user is-active spool-api spool-web spool-tunnel
 journalctl --user -u spool-tunnel -n 5 --no-pager | tail -5
