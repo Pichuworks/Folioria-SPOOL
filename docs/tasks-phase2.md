@@ -24,9 +24,9 @@
       apex 边缘 301 跳转**非必需、不再追求**——对被 SNI 过滤的客户端无意义（过滤在 TLS 握手阶段，
       拿不到 301），对开 ECH 的客户端 apex 本就直达。实测：远端 OpenSSL 直连 apex=200（边缘无 301）、www=200。
       若日后仍想给「能正常握手 apex 的外部访客」配裸域跳转，用 CF 边缘 Redirect Rule（需 zone API token）。
-- [ ] O2 调试机备份未在跑：deploy/spool-backup.* 是系统级模板，盒上从未装。
-      装**用户级** timer：VACUUM INTO `~/.local/share/spool/folioria.db` → 滚动 30 份；
-      复用 server CLI 的 `backup` / `verify-backup` 命令（已实现）。参照 deploy/restore-drill.md。
+- [x] O2 调试机备份已上线（2026-06-12）：deploy/remote-backup-setup.sh 装**用户级** timer
+      （每日 04:30 + Persistent，VACUUM INTO → `~/.local/share/spool/backups` 滚动 30 份）。
+      盒上实测：手动触发产物 verify-backup ok（integrity ok / 0 FK / user_version 2）。
 - [ ] O3 裸域 `pichu.moe` 占位：重定向到 github.com/Pichuworks，或 Cloudflare Pages 极简主页。
 - [ ] O4（可延后）正式生产实例与调试实例分离：PRD §4 的 201 服务器 + systemd 系统级部署。
 

@@ -23,8 +23,12 @@ SPOOL_DB=$SPOOL_DB PORT=3999 pnpm --filter @spool/server run dev
 定时备份安装：
 
 ```bash
+# 正式实例（系统级，PRD §4 的 201 服务器）
 sudo cp deploy/spool-backup.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now spool-backup.timer
 systemctl list-timers spool-backup.timer
+
+# 调试机（用户级，无免密 sudo；产物在 ~/.local/share/spool/backups）
+bash deploy/remote-backup-setup.sh
 ```
