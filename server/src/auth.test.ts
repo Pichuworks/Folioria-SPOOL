@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs'
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApp, SESSION_COOKIE, type App } from './app.js'
-import { verifyLogin } from './auth.js'
+import { issueEmailVerification, verifyLogin } from './auth.js'
 import { type DB } from './db.js'
 import { spoolInit } from './init.js'
 import { collectForbiddenKeys, createTestUser, makeTestDb } from './test-helpers.js'
@@ -172,13 +172,37 @@ describe('首登强制改密（D11）', () => {
 })
 
 describe('§6 权限（双域）', () => {
-  it('Phase 1 注册通道不存在 → 404（admin 自注册同理）', async () => {
+  it('register 存在但 role 恒 customer；admin 自注册通道不存在 → 404', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/register',
-      payload: { email: 'x@y.z', password: 'whatever-12345' },
+      payload: { email: 'x@y.example', name: 'X', password: 'whatever-12345' },
     })
-    expect(res.statusCode).toBe(404)
+    expect(res.statusCode).toBe(201)
+    const role = (db.prepare('SELECT role FROM users WHERE email = ?').get('x@y.example') as { role: string }).role
+    expect(role).toBe('customer')
+
+    // payload 试图自带 role → body 白名单剥除（ajv removeAdditional），落库仍恒 customer
+    const withRole = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'evil@y.example', name: 'X', password: 'whatever-12345', role: 'admin' },
+    })
+    expect(withRole.statusCode).toBe(201)
+    expect(
+      (db.prepare('SELECT role FROM users WHERE email = ?').get('evil@y.example') as { role: string }).role,
+    ).toBe('customer')
+
+    // admin 自注册通道不存在
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/register-admin',
+          payload: { email: 'a@y.example', name: 'X', password: 'whatever-12345' },
+        })
+      ).statusCode,
+    ).toBe(404)
   })
 
   it('guest 调用管理域 → 401；member/customer → 403', async () => {
@@ -361,6 +385,145 @@ describe('限流（PRD §6：/api/auth/* 按 IP，键取 CF-Connecting-IP）', (
       headers: { 'cf-connecting-ip': '203.0.113.99' },
     })
     expect(bystander.statusCode).toBe(401)
+  })
+})
+
+describe('R4 下单域开放注册 + 邮箱验证（D10/D12）', () => {
+  const REG = { email: 'neko@202.example', name: '猫', password: 'resident-pass-1' }
+
+  it('注册成功：201 + role customer + 即登录 cookie + 未验证标记 + 不置 must_change_password', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/auth/register', payload: REG })
+    expect(res.statusCode).toBe(201)
+    expect(String(res.headers['set-cookie'])).toMatch(/spool_session=/)
+    const body = res.json() as Record<string, unknown>
+    expect(body['role']).toBe('customer')
+    expect(body['email_verified']).toBe(false)
+    expect(body['must_change_password']).toBe(false)
+    expect(collectForbiddenKeys(body)).toEqual([])
+
+    const row = db
+      .prepare('SELECT role, must_change_password, email_verified_at FROM users WHERE email = ?')
+      .get(REG.email) as { role: string; must_change_password: number; email_verified_at: string | null }
+    expect(row.role).toBe('customer')
+    expect(row.must_change_password).toBe(0)
+    expect(row.email_verified_at).toBeNull()
+  })
+
+  it('重复邮箱（大小写不敏感）→ 409', async () => {
+    await app.inject({ method: 'POST', url: '/api/auth/register', payload: REG })
+    const dup = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { ...REG, email: 'NEKO@202.example' },
+    })
+    expect(dup.statusCode).toBe(409)
+    expect((dup.json() as { error: string }).error).toBe('email_exists')
+  })
+
+  it('registration_open=0 → 403 registration_closed', async () => {
+    db.prepare('UPDATE system_config SET registration_open = 0 WHERE id = 1').run()
+    const res = await app.inject({ method: 'POST', url: '/api/auth/register', payload: REG })
+    expect(res.statusCode).toBe(403)
+    expect((res.json() as { error: string }).error).toBe('registration_closed')
+  })
+
+  it('invite_code 开启：缺码/错码 403，对码成功（D10 邀请码开关）', async () => {
+    db.prepare("UPDATE system_config SET invite_code = 'FOLIO-2026' WHERE id = 1").run()
+    const noCode = await app.inject({ method: 'POST', url: '/api/auth/register', payload: REG })
+    expect(noCode.statusCode).toBe(403)
+    expect((noCode.json() as { error: string }).error).toBe('invalid_invite_code')
+
+    const wrong = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { ...REG, invite_code: 'WRONG' },
+    })
+    expect(wrong.statusCode).toBe(403)
+
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { ...REG, invite_code: 'FOLIO-2026' },
+    })
+    expect(ok.statusCode).toBe(201)
+  })
+
+  it('邮箱验证：token 一次性消费置位 email_verified_at；复用/伪造 404', async () => {
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: REG })
+    const userId = (reg.json() as { id: string }).id
+    const token = issueEmailVerification(db, userId)
+    // token 仅存哈希
+    const stored = db.prepare('SELECT token_hash FROM email_verification_tokens').all() as Array<{
+      token_hash: string
+    }>
+    expect(stored.some((r) => r.token_hash === token)).toBe(false)
+
+    const ok = await app.inject({ method: 'POST', url: '/api/auth/verify-email', payload: { token } })
+    expect(ok.statusCode).toBe(204)
+    const row = db.prepare('SELECT email_verified_at FROM users WHERE id = ?').get(userId) as {
+      email_verified_at: string | null
+    }
+    expect(row.email_verified_at).not.toBeNull()
+
+    // 复用 → 404；伪造 → 404（不泄露存在性）
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/auth/verify-email', payload: { token } })).statusCode,
+    ).toBe(404)
+    expect(
+      (
+        await app.inject({ method: 'POST', url: '/api/auth/verify-email', payload: { token: 'bogus' } })
+      ).statusCode,
+    ).toBe(404)
+  })
+
+  it('过期 token → 404', async () => {
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: REG })
+    const userId = (reg.json() as { id: string }).id
+    const token = issueEmailVerification(db, userId)
+    db.prepare("UPDATE email_verification_tokens SET expires_at = '2020-01-01T00:00:00Z'").run()
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/auth/verify-email', payload: { token } })).statusCode,
+    ).toBe(404)
+  })
+
+  it('限流：同 IP 第 11 次注册 → 429（同 auth 口径 10/5min）', async () => {
+    const attacker = { 'cf-connecting-ip': '203.0.113.50' }
+    for (let i = 0; i < 10; i++) {
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { ...REG, email: `r${i}@202.example` },
+        headers: attacker,
+      })
+    }
+    const blocked = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { ...REG, email: 'r11@202.example' },
+      headers: attacker,
+    })
+    expect(blocked.statusCode).toBe(429)
+  })
+
+  it('admin 手动建号视为已验证（D12：admin 供给的账号不走邮箱验证）', async () => {
+    const { cookie } = await login(ADMIN.email, ADMIN.password)
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/change-password',
+      headers: { cookie },
+      payload: { old_password: ADMIN.password, new_password: 'fresh-new-password' },
+    })
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/admin/users',
+      headers: { cookie },
+      payload: { email: 'manual@202.example', name: '手动', password: 'initial-pass-1', role: 'customer' },
+    })
+    expect(created.statusCode).toBe(201)
+    const row = db.prepare('SELECT email_verified_at FROM users WHERE email = ?').get('manual@202.example') as {
+      email_verified_at: string | null
+    }
+    expect(row.email_verified_at).not.toBeNull()
   })
 })
 

@@ -6,8 +6,10 @@ import Fastify, { type FastifyError, type FastifyInstance } from 'fastify'
 import {
   changePassword,
   createSession,
+  issueEmailVerification,
   revokeSession,
   userByToken,
+  verifyEmail,
   verifyLogin,
   type SessionUser,
 } from './auth.js'
@@ -38,6 +40,7 @@ interface UserDto {
   name: string
   role: string
   must_change_password: boolean
+  email_verified: boolean
 }
 
 const userDto = (u: SessionUser): UserDto => ({
@@ -46,6 +49,7 @@ const userDto = (u: SessionUser): UserDto => ({
   name: u.name,
   role: u.role,
   must_change_password: u.must_change_password !== 0,
+  email_verified: u.email_verified_at != null,
 })
 
 const USER_DTO_SCHEMA = {
@@ -57,6 +61,7 @@ const USER_DTO_SCHEMA = {
     name: { type: 'string' },
     role: { type: 'string' },
     must_change_password: { type: 'boolean' },
+    email_verified: { type: 'boolean' },
   },
 }
 
@@ -69,6 +74,16 @@ const ERROR_SCHEMA = {
 export interface AppOptions {
   /** S6: session cookie 的 Secure 属性。默认 true；仅明文 HTTP 调试时关（生产必须 TLS 前置） */
   cookieSecure?: boolean
+}
+
+/** 验证链接落在 web 哈希路由上（#/verify/:token），origin 由部署环境注入 */
+export const verificationLink = (token: string): string =>
+  `${process.env['SPOOL_PUBLIC_ORIGIN'] ?? 'http://localhost:5173'}/#/verify/${token}`
+
+// R7 占位：块④接入 Notifier 抽象层（Resend adapter + notification_log 留痕）。
+// 当前仅 dev 输出，无邮件 key 的本地链路从这里取验证链接。
+async function sendVerificationEmail(_db: DB, to: string, token: string): Promise<void> {
+  console.log(`[notify dev] email_verification → ${to}: ${verificationLink(token)}`)
 }
 
 export function buildApp(db: DB, opts: AppOptions = {}): App {
@@ -147,6 +162,93 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         path: '/',
       })
       return userDto(user)
+    },
+  )
+
+  // R4/D10: 下单域开放注册——role 恒 customer（白名单拒绝 role 键），即注册即登录；
+  // 邮箱验证另走 verify-email（未验证可登录，但下单被 403 email_unverified 拦）
+  app.post(
+    '/api/auth/register',
+    {
+      config: { rateLimit: { max: 10, timeWindow: '5 minutes' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email', 'name', 'password'],
+          additionalProperties: false,
+          properties: {
+            email: { type: 'string', minLength: 3, maxLength: 254, pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' },
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+            password: { type: 'string', minLength: 8, maxLength: 200 },
+            contact_info: { type: ['string', 'null'], maxLength: 200 },
+            invite_code: { type: 'string', maxLength: 100 },
+          },
+        },
+        response: { 201: USER_DTO_SCHEMA, 403: ERROR_SCHEMA, 409: ERROR_SCHEMA },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body as {
+        email: string
+        name: string
+        password: string
+        contact_info?: string | null
+        invite_code?: string
+      }
+      const cfg = db
+        .prepare('SELECT registration_open, invite_code FROM system_config WHERE id = 1')
+        .get() as { registration_open: number; invite_code: string | null } | undefined
+      if (!cfg || cfg.registration_open === 0) {
+        return reply.status(403).send({ error: 'registration_closed' })
+      }
+      if (cfg.invite_code != null && b.invite_code !== cfg.invite_code) {
+        return reply.status(403).send({ error: 'invalid_invite_code' })
+      }
+      const id = randomUUID()
+      try {
+        db.prepare(
+          `INSERT INTO users (id, email, password_hash, name, role, contact_info, created_at)
+           VALUES (?, ?, ?, ?, 'customer', ?, ?)`,
+        ).run(id, b.email, bcrypt.hashSync(b.password, 12), b.name, b.contact_info ?? null, new Date().toISOString())
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('UNIQUE')) {
+          return reply.status(409).send({ error: 'email_exists' })
+        }
+        throw err
+      }
+      const verifyToken = issueEmailVerification(db, id)
+      await sendVerificationEmail(db, b.email, verifyToken)
+      const session = createSession(db, id)
+      void reply.setCookie(SESSION_COOKIE, session, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: cookieSecure,
+        path: '/',
+      })
+      const user = userByToken(db, session) as SessionUser
+      return reply.status(201).send(userDto(user))
+    },
+  )
+
+  app.post(
+    '/api/auth/verify-email',
+    {
+      config: { rateLimit: { max: 30, timeWindow: '5 minutes' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['token'],
+          additionalProperties: false,
+          properties: { token: { type: 'string', minLength: 1, maxLength: 200 } },
+        },
+        response: { 204: { type: 'null' }, 404: ERROR_SCHEMA },
+      },
+    },
+    async (req, reply) => {
+      const { token } = req.body as { token: string }
+      // 无效/过期/已消费一律 404，不泄露 token 存在性
+      if (!verifyEmail(db, token)) return reply.status(404).send({ error: 'invalid_or_expired_token' })
+      return reply.status(204).send()
     },
   )
 
@@ -256,11 +358,12 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       const body = req.body as { email: string; name: string; password: string; role: string }
       const id = randomUUID()
       try {
-        // S3: 创建者知晓的初始密码不应永久有效 → 首登强制改密（D11 同初始 admin）
+        // S3: 创建者知晓的初始密码不应永久有效 → 首登强制改密（D11 同初始 admin）。
+        // D12: admin 手动供给的账号视为已验证（不走邮箱验证链路）
         db.prepare(
-          `INSERT INTO users (id, email, password_hash, name, role, must_change_password, created_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?)`,
-        ).run(id, body.email, bcrypt.hashSync(body.password, 12), body.name, body.role, new Date().toISOString())
+          `INSERT INTO users (id, email, password_hash, name, role, must_change_password, email_verified_at, created_at)
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+        ).run(id, body.email, bcrypt.hashSync(body.password, 12), body.name, body.role, new Date().toISOString(), new Date().toISOString())
       } catch (err) {
         if (err instanceof Error && err.message.includes('UNIQUE')) {
           return reply.status(409).send({ error: 'email_exists' })
@@ -273,6 +376,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         name: body.name,
         role: body.role,
         must_change_password: true,
+        email_verified: true,
       })
     },
   )

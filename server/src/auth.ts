@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { type DB } from './db.js'
 
 export const SESSION_TTL_DAYS = 30
+export const VERIFICATION_TTL_HOURS = 48
 
 export interface SessionUser {
   id: string
@@ -10,6 +11,7 @@ export interface SessionUser {
   name: string
   role: 'customer' | 'member' | 'admin'
   must_change_password: number
+  email_verified_at: string | null
 }
 
 export function hashToken(token: string): string {
@@ -33,12 +35,44 @@ export function createSession(db: DB, userId: string): string {
 export function userByToken(db: DB, token: string): SessionUser | null {
   const row = db
     .prepare(
-      `SELECT u.id, u.email, u.name, u.role, u.must_change_password
+      `SELECT u.id, u.email, u.name, u.role, u.must_change_password, u.email_verified_at
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND u.archived = 0`,
     )
     .get(hashToken(token), new Date().toISOString()) as SessionUser | undefined
   return row ?? null
+}
+
+/** R4: 签发邮箱验证 token——仅存哈希，返回明文（经邮件外送一次） */
+export function issueEmailVerification(db: DB, userId: string): string {
+  const token = randomBytes(32).toString('base64url')
+  db.prepare(
+    'INSERT INTO email_verification_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)',
+  ).run(hashToken(token), userId, new Date(Date.now() + VERIFICATION_TTL_HOURS * 3_600_000).toISOString())
+  return token
+}
+
+/** R4: 一次性消费验证 token，置位 email_verified_at。无效/过期/已消费 → false */
+export function verifyEmail(db: DB, token: string): boolean {
+  const now = new Date().toISOString()
+  const row = db
+    .prepare(
+      `SELECT user_id FROM email_verification_tokens
+       WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?`,
+    )
+    .get(hashToken(token), now) as { user_id: string } | undefined
+  if (!row) return false
+  db.transaction(() => {
+    db.prepare('UPDATE email_verification_tokens SET consumed_at = ? WHERE token_hash = ?').run(
+      now,
+      hashToken(token),
+    )
+    db.prepare('UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL').run(
+      now,
+      row.user_id,
+    )
+  })()
+  return true
 }
 
 export function revokeSession(db: DB, token: string): void {
@@ -54,7 +88,7 @@ const DUMMY_HASH = '$2b$12$USNoAd.LkznkSolTZdR9eOblhwfg.1kZ.ppLhoyc2Vk4dmMvhn7Ca
 export function verifyLogin(db: DB, email: string, password: string): SessionUser | null {
   const row = db
     .prepare(
-      `SELECT id, email, name, role, must_change_password, password_hash
+      `SELECT id, email, name, role, must_change_password, email_verified_at, password_hash
        FROM users WHERE email = ? AND archived = 0`,
     )
     .get(email) as (SessionUser & { password_hash: string }) | undefined

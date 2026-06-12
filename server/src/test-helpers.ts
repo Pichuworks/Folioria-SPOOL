@@ -16,18 +16,26 @@ export function withSystemConfig(db: DB, baseCurrency = 'JPY'): void {
 
 export function createTestUser(
   db: DB,
-  opts: { email: string; role?: 'customer' | 'member' | 'admin'; password?: string; name?: string },
+  opts: {
+    email: string
+    role?: 'customer' | 'member' | 'admin'
+    password?: string
+    name?: string
+    /** 默认 true；R4 未验证下单拦截用例显式传 false */
+    emailVerified?: boolean
+  },
 ): string {
   const id = randomUUID()
   db.prepare(
-    `INSERT INTO users (id, email, password_hash, name, role, created_at)
-     VALUES (?, ?, ?, ?, ?, '2026-06-10T00:00:00Z')`,
+    `INSERT INTO users (id, email, password_hash, name, role, email_verified_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, '2026-06-10T00:00:00Z')`,
   ).run(
     id,
     opts.email,
     bcrypt.hashSync(opts.password ?? 'test-password', 4),
     opts.name ?? opts.email,
     opts.role ?? 'customer',
+    (opts.emailVerified ?? true) ? '2026-06-10T00:00:00Z' : null,
   )
   return id
 }

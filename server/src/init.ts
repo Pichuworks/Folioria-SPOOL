@@ -29,9 +29,10 @@ export function spoolInit(db: DB, opts: InitOptions): void {
       opts.baseCurrency,
       now,
     )
+    // D12: init 供给的 admin 同 admin 手动建号——视为已验证
     db.prepare(
-      `INSERT INTO users (id, email, password_hash, name, role, must_change_password, created_at)
-       VALUES (?, ?, ?, ?, 'admin', 1, ?)`,
-    ).run(randomUUID(), opts.adminEmail, hash, opts.adminName, now)
+      `INSERT INTO users (id, email, password_hash, name, role, must_change_password, email_verified_at, created_at)
+       VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)`,
+    ).run(randomUUID(), opts.adminEmail, hash, opts.adminName, now, now)
   })()
 }
