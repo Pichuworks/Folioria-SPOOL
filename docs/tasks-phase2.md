@@ -47,7 +47,7 @@
       min_margin_bp 上限 9999（10000 会让地板价除零）。server/src/settings-routes.ts
 - [x] F2 Reports API：`GET /api/reports/{monthly,equipment-usage,paper-consumption}`（?month=YYYY-MM，
       缺省当月；monthly 内部消耗单列＝quoted_price IS NULL）。server/src/reports-routes.ts
-- [ ] F3 管理域 Web UI（最大一块，可拆多会话；API 全已就绪，下单域字段白名单已在序列化层）。
+- [x] F3 管理域 Web UI（最大一块，可拆多会话；API 全已就绪，下单域字段白名单已在序列化层）。
       按使用频率排：
       `/admin/jobs`（新建向导·实时成本预览·可用量提示）→
       `/admin/inventory`（纸张卡片 / 耗材寿命进度条 / 出入库时间线·含裁切录入）→
@@ -60,6 +60,20 @@
         服务端补 display 字段（jobs 列表 + preview est_total 走唯一舍入点，formatMoney 服务端格式化，测试先行）。
         本地临时库实测：账面48 + queued 20/10 → 可用 18 → cancel → 28 → done(废品3) → 库存 25，
         双日志/耗材+23/计数器+23/成本快照 ¥8/毛利 ¥6 全部与 §3.1–3.3 一致。
+  - [x] F3b `/admin/inventory`（2026-06-12）：纸张库存按纸分卡、出入库面板（动作符号由服务端校验）、
+        裁切成对录入（同纸异尺寸，实测 convert_group 共享）、耗材寿命进度条（remaining_bp，低于阈值标橙）、
+        出入库时间线（动作筛选 + 目标解析）。App.tsx 改路由表统一挂全部管理视图。
+  - [x] F3c `/admin/pricing`（2026-06-12）：报价总览按组合分组（187 基线实测吻合，below_margin 橙 25 / LOSS 红 4）、
+        手动价/内部价编辑（PUT combo prices，留空=自动地板）、纸张+尺寸口径/模式/尺寸/组合四表 CRUD。
+        服务端 quotes 端点补 display（测试先行，用例 A 0.74/2.25/0.9）。
+  - [x] F3d `/admin/equipment`（2026-06-12）：设备卡（状态即点即改、成本 display、双触发校准间隔编辑）、
+        维护时间线 + 落档表单；实测 C6 校准基线重置（@23P）与 §3.5 换装事务（备品-1/usage 清零/installed_at）。
+  - [x] F3e `/admin/users`（2026-06-12）：名册（角色即点即改、归档/恢复）+ 添加账号（首登强制改密）；
+        实测 S1 last_admin 守卫 409 提示。
+  - [x] F3f `/admin/settings`（2026-06-12）：基准货币只读展示（锁定语义）+ 定价参数表单（PATCH 实测回显）。
+  - [x] F3g `/admin/reports`（2026-06-12）：月份切换，月度损益（内外分列）/设备利用/纸张消耗三段；
+        实测与当月作业数据逐项吻合（¥14/¥8/¥6 · C850 23P · 纸耗 23 张含废 3）。
+        —— F3 全部七个视图完成，F3 整项闭合。
 
 ## P3 Phase 2 订单系统（PRD 排期 2–4 周；acceptance §5/§6 订单项 = 验收基准）
 
