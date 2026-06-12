@@ -64,7 +64,13 @@ const ERROR_SCHEMA = {
   properties: { error: { type: 'string' }, message: { type: 'string' } },
 }
 
-export function buildApp(db: DB): App {
+export interface AppOptions {
+  /** S6: session cookie 的 Secure 属性。默认 true；仅明文 HTTP 调试时关（生产必须 TLS 前置） */
+  cookieSecure?: boolean
+}
+
+export function buildApp(db: DB, opts: AppOptions = {}): App {
+  const cookieSecure = opts.cookieSecure ?? true
   // coerceTypes 必须关死：金额字段传 "100"/1.5 须 422，不允许静默转换（acceptance §7）
   const app = Fastify({ logger: false, ajv: { customOptions: { coerceTypes: false } } })
 
@@ -133,7 +139,7 @@ export function buildApp(db: DB): App {
       void reply.setCookie(SESSION_COOKIE, token, {
         httpOnly: true,
         sameSite: 'lax',
-        secure: true,
+        secure: cookieSecure,
         path: '/',
       })
       return userDto(user)

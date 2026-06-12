@@ -97,6 +97,30 @@ describe('登录/登出', () => {
   })
 })
 
+describe('S6 cookie secure 配置化', () => {
+  it('默认 Secure；cookieSecure:false 时不带（明文 HTTP 调试场景，生产禁用）', async () => {
+    const secure = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: ADMIN.email, password: ADMIN.password },
+    })
+    expect(String(secure.headers['set-cookie'])).toMatch(/;\s*Secure/i)
+
+    const plainApp = buildApp(db, { cookieSecure: false })
+    try {
+      const plain = await plainApp.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: ADMIN.email, password: ADMIN.password },
+      })
+      expect(plain.statusCode).toBe(200)
+      expect(String(plain.headers['set-cookie'])).not.toMatch(/;\s*Secure/i)
+    } finally {
+      await plainApp.close()
+    }
+  })
+})
+
 describe('S2 登录恒时比对', () => {
   it('未知邮箱与已知邮箱同样执行一次 bcrypt 比对（消除计时侧信道）', () => {
     const spy = vi.spyOn(bcrypt, 'compareSync')
