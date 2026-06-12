@@ -22,6 +22,7 @@ import { defaultUploadDir, registerFilesRoutes } from './files-routes.js'
 import { requireAdmin } from './guards.js'
 import { registerInventoryRoutes } from './inventory-routes.js'
 import { registerJobsRoutes } from './jobs-routes.js'
+import { notifyAddress, templates } from './notify.js'
 import { registerOrdersRoutes } from './orders-routes.js'
 import { registerPricingRoutes } from './pricing-routes.js'
 import { registerReportsRoutes } from './reports-routes.js'
@@ -85,15 +86,6 @@ export interface AppOptions {
 
 export const UPLOAD_MAX_BYTES = 200 * 1024 * 1024
 
-/** 验证链接落在 web 哈希路由上（#/verify/:token），origin 由部署环境注入 */
-export const verificationLink = (token: string): string =>
-  `${process.env['SPOOL_PUBLIC_ORIGIN'] ?? 'http://localhost:5173'}/#/verify/${token}`
-
-// R7 占位：块④接入 Notifier 抽象层（Resend adapter + notification_log 留痕）。
-// 当前仅 dev 输出，无邮件 key 的本地链路从这里取验证链接。
-async function sendVerificationEmail(_db: DB, to: string, token: string): Promise<void> {
-  console.log(`[notify dev] email_verification → ${to}: ${verificationLink(token)}`)
-}
 
 export function buildApp(db: DB, opts: AppOptions = {}): App {
   const cookieSecure = opts.cookieSecure ?? true
@@ -232,7 +224,8 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         throw err
       }
       const verifyToken = issueEmailVerification(db, id)
-      await sendVerificationEmail(db, b.email, verifyToken)
+      // R7: 分发永不抛错（无 key → skipped 落 notification_log），注册不被邮件阻塞
+      await notifyAddress(db, 'email_verification', b.email, templates.emailVerification(verifyToken))
       const session = createSession(db, id)
       void reply.setCookie(SESSION_COOKIE, session, {
         httpOnly: true,

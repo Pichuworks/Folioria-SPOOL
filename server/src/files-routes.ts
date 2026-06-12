@@ -8,7 +8,8 @@ import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireUser } from './guards.js'
-import { getOrder, getOrderItems, OrderError, syncFileState, type OrderRow } from './orders.js'
+import { notifyAdmins, templates } from './notify.js'
+import { getOrder, OrderError, syncFileState, type OrderRow } from './orders.js'
 import { ERROR_SCHEMA, ORDER_SCHEMA, orderDto } from './orders-routes.js'
 
 /** R5: 类型白名单——扩展名与 magic bytes 双查，二者一致才收（PDF/TIFF/PNG，PRD §2.5） */
@@ -124,7 +125,11 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
         storedName,
         iid,
       )
-      syncFileState(db, id)
+      const sync = syncFileState(db, id)
+      // R7: 文件传齐进入审稿 → 通知 admin（分发永不抛错）
+      if (sync.changed && sync.status === 'file_pending') {
+        await notifyAdmins(db, 'order_file_pending', templates.orderFilePending(order.order_number))
+      }
 
       const updated = getOrder(db, id) as OrderRow
       return reply.status(201).send(orderDto(db, updated, baseCurrency(db), { admin, includeToken: true }))

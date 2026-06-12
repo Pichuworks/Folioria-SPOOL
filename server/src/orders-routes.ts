@@ -3,6 +3,7 @@ import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin, requireUser } from './guards.js'
 import { formatMoney, formatMoneyC, money, moneyC, type Currency } from './money.js'
+import { notifyUser, templates } from './notify.js'
 import {
   adminCanTransition,
   cancelOrder,
@@ -391,7 +392,19 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         }
       }
       const updated = getOrder(db, id) as OrderRow
-      return orderDto(db, updated, baseCurrency(db), { admin, includeToken: true })
+      const currency = baseCurrency(db)
+      // R7: confirm/ready 通知客户（分发永不抛错，状态流转不被通知阻塞）
+      if (status === 'confirmed') {
+        await notifyUser(
+          db,
+          'order_confirmed',
+          updated.customer_id,
+          templates.orderConfirmed(updated.order_number, formatMoney(money(updated.total), currency)),
+        )
+      } else if (status === 'ready') {
+        await notifyUser(db, 'order_ready', updated.customer_id, templates.orderReady(updated.order_number))
+      }
+      return orderDto(db, updated, currency, { admin, includeToken: true })
     },
   )
 
