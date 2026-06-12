@@ -388,6 +388,11 @@ feat / fix / refactor / style / data / docs / test / chore
 | D9 | Auth | session 表 + httpOnly cookie（否决 JWT：黑名单查库后无状态收益归零） |
 | D10 | 账号供给 | 下单域开放注册；member 升格制；admin 仅手动添加 + init 引导 |
 | D11 | 首登改密标记 | users.must_change_password 列（0002 migration）；spool init 创建的 admin 置 1，改密成功后应用层清零（B1 首登强制改密的落地载体） |
+| D12 | 注册与验证 | POST /api/auth/register 即注册即登录（role 恒 customer，body 白名单剥除 role 键；admin 自注册通道仍 404）；验证 token 仅存 sha256、48h 一次性；未验证可登录但下单 403 email_unverified；admin/init 手动供给的账号视为已验证；registration_open（默认开）+ invite_code（NULL=关）走 0003 migration |
+| D13 | 审稿流转 | file_pending/file_approved 仅系统自动流转（不可手动 PATCH）：全部 item 有文件→file_pending；全 approved→file_approved，任一 rejected 留 file_pending 等重传；重传重置该 item pending 并清驳回意见、旧文件删除；file_approved 起上传冻结（admin 驳回才解锁） |
+| D14 | confirm 与取消 | confirm 仅 file_approved 且未过 quote_valid_until（过期 409 quote_expired，其余状态不受时效影响）；单事务逐 item 建 Job(queued, quoted_price=line_total) 并回写 order_items.job_id；done 落账只走既有 completeJob；customer 仅可取消 confirm 前自己的单，confirmed 起仅 admin，取消连带取消未完成 Job（done 不动——C3 零回滚语义） |
+| D15 | 文件存储 | SPOOL_UPLOAD_DIR（默认 ~/.local/share/spool/uploads，代码目录之外不可执行）+ randomUUID 存储名（原始文件名不落盘，路径穿越无面）；PDF/TIFF/PNG 扩展名+magic bytes 双查、≤200MB、超限/伪装不留半截文件；下载限 owner/admin，attachment + nosniff + octet-stream |
+| D16 | 通知落地 | NotificationChannel 接口 + Resend HTTP adapter（家庭宽带直发 SMTP 必进垃圾箱，否决）；无 SPOOL_RESEND_API_KEY → skipped 落 notification_log + console dev 输出，分发永不抛错不阻塞业务；事件 email_verification / order_file_pending(→全体活跃 admin) / order_confirmed / order_ready(→customer，尊重 notify_channels/notify_addresses) |
 
 ---
 

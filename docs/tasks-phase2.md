@@ -76,16 +76,33 @@
         —— F3 全部七个视图完成，F3 整项闭合。
 
 ## P3 Phase 2 订单系统（PRD 排期 2–4 周；acceptance §5/§6 订单项 = 验收基准）
+> R1–R8 于 2026-06-13 整段完成（commit c733e03…）：测试先行（§5/§6 全绿，全套 257 个），
+> 本地临时库全链路实测：注册→邮箱验证→#/quote 两行下单→上传→驳回（意见落 item）→重传→
+> 复审→confirm 自动建 2 Job→printing→done 落账（库存 −203/−100、C850 +303P、毛利与 §2.3 推导一致）
+> →ready→delivered+收款¥104；反例：过期 confirm 409 quote_expired、错 token/order_number 作 token 404、
+> member 内部价 ¥0.05 下单 is_internal=1（customer 同组合仍 ¥0.07）。决策留痕 prd.md 附录 A D12–D16。
 
-- [ ] R1 订单全状态流 quoted→file_pending→file_approved→confirmed→in_production→ready→delivered（+cancelled）← §5
-- [ ] R2 access_token 防枚举查询 `/order/:token`；顺序 order_number 不可用于查询接口 ← §5/§6
-- [ ] R3 unit_price_c 下单定格快照（改价不影响既有单）；discount 非整数/负数超 subtotal → 422 ← §5
-- [ ] R4 下单域开放注册 + 邮箱验证（邀请码开关默认关）← PRD D10
-- [ ] R5 文件上传：order_item 级，类型白名单 / ≤200MB / 不可执行目录隔离存储 + 人工审稿 file_status
-- [ ] R6 支付状态记录（unpaid/deposit/paid）+ 报价有效期闭环（过期 quoted → confirm 拒绝 409）← §5
-- [ ] R7 Notifier 抽象层 + email adapter（Resend/SES 事务邮件商）
-      ← 依赖 folioria.com 的 SPF/DKIM（域名已接好）；LINE Notify 已停服，文档不得引用
-- [ ] R8 下单域门面：`/quote` 公开配置器 · `/price-list` 价目表 · `/my/orders`
+- [x] R1 订单全状态流 quoted→file_pending→file_approved→confirmed→in_production→ready→delivered（+cancelled）← §5
+      file_pending/file_approved 仅系统自动流转（D13）；confirm 建 Job 见 D14。server/src/orders.ts
+- [x] R2 access_token 防枚举查询 `/order/:token`；顺序 order_number 不可用于查询接口 ← §5/§6
+      GET /api/orders/by-token/:token（错 token 404，不泄露存在性）；他人订单 id 同样 404。
+- [x] R3 unit_price_c 下单定格快照（改价不影响既有单）；discount 非整数/负数超 subtotal → 422 ← §5
+      member/admin 下单取 internal_sell_c 口径并置 is_internal（B1.1）；subtotal 整数加法。
+- [x] R4 下单域开放注册 + 邮箱验证（邀请码开关默认关）← PRD D10
+      0003 migration：email_verification_tokens + registration_open/invite_code；
+      未验证可登录但下单 403 email_unverified；注册不置 must_change_password（D11 仅 admin 供给）。
+- [x] R5 文件上传：order_item 级，类型白名单 / ≤200MB / 不可执行目录隔离存储 + 人工审稿 file_status
+      扩展+magic bytes 双查；randomUUID 存储名（原名不落盘）；下载限 owner/admin + attachment+nosniff；
+      重传重置 pending 清驳回意见。server/src/files-routes.ts
+- [x] R6 支付状态记录（unpaid/deposit/paid）+ 报价有效期闭环（过期 quoted → confirm 拒绝 409）← §5
+      PATCH /api/orders/:id/payment · /discount；quote_valid_until = created + quote_valid_days。
+- [x] R7 Notifier 抽象层 + email adapter（Resend HTTP API；无 key → skipped 落 notification_log 不阻塞）
+      事件：email_verification / order_file_pending(→admin) / order_confirmed / order_ready(→customer)。
+      server/src/notify.ts ← SPF/DKIM 就绪后设 SPOOL_RESEND_API_KEY/SPOOL_MAIL_FROM 即升级实发
+- [x] R8 下单域门面：`/quote` 公开配置器+购物车（提交即下单，CustomerGate 登录/注册门）·
+      `/price-list` 公开价目表 · `/order/:token` 公开查询+owner 上传 · `/my/orders` · `/verify/:token`；
+      `#/calculator` 跳转 `#/quote`；导航三态（guest/下单用户/admin，公开导航不罗列管理链接）；
+      管理域 `#/admin/orders` 六列看板（审稿/confirm 建 job/状态推进/收款/折扣）。
   - [x] `/` 首页（2026-06-12）：视觉方案 = Asagaya 设计系统 modern·杂志版式 × eri 配色
         （酒红 #800020 / 金 #D9A11E / 暖纸底，Noto Serif SC + EB Garamond，无渐变·1px 墨线）。
         web/src/Home.tsx；#/ 缺省路由，Calculator 挪 #/calculator；价目区实时取

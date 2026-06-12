@@ -55,13 +55,18 @@ function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
       ? 'border-b-2 border-wine pb-1 text-[14px] font-medium text-wine-ink'
       : 'pb-1 text-[14px] text-dim hover:text-ink'
 
+  const switchMode = (m: 'login' | 'register') => {
+    setMode(m)
+    setError(null)
+  }
+
   return (
     <AuthCard tag="ATELIER" title={mode === 'login' ? '登录' : '注册账号'}>
       <div className="mb-5 flex gap-6">
-        <button type="button" className={tabClass(mode === 'login')} onClick={() => setMode('login')}>
+        <button type="button" className={tabClass(mode === 'login')} onClick={() => switchMode('login')}>
           登录
         </button>
-        <button type="button" className={tabClass(mode === 'register')} onClick={() => setMode('register')}>
+        <button type="button" className={tabClass(mode === 'register')} onClick={() => switchMode('register')}>
           注册
         </button>
       </div>
