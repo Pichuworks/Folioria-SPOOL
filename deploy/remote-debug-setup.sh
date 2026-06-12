@@ -10,6 +10,7 @@ loginctl enable-linger neko || echo "WARN: enable-linger failed (服务将随登
 loginctl show-user neko -p Linger
 
 mkdir -p ~/.config/systemd/user
+mkdir -p ~/.local/share/spool/uploads   # R5 上传隔离目录（代码树之外）
 
 cat > ~/.config/systemd/user/spool-api.service <<'EOF'
 [Unit]
@@ -20,6 +21,9 @@ After=network.target
 Environment=PATH=/home/neko/.local/node24/bin:/usr/bin:/bin
 Environment=SPOOL_DB=/home/neko/.local/share/spool/folioria.db
 Environment=PORT=3000
+# R4/R7: 邮箱验证链接的公网 origin；R5: 上传隔离目录（实发邮件另需 SPOOL_RESEND_API_KEY/SPOOL_MAIL_FROM）
+Environment=SPOOL_PUBLIC_ORIGIN=https://www.folioria.com
+Environment=SPOOL_UPLOAD_DIR=/home/neko/.local/share/spool/uploads
 WorkingDirectory=/home/neko/code/folioria-spool/server
 ExecStart=/home/neko/code/folioria-spool/server/node_modules/.bin/tsx src/serve.ts
 Restart=on-failure
