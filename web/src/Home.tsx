@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { fetchOptions, type OptionsDto } from './api'
+import { fetchOptions, getOptionsCache, type OptionsDto } from './api'
+import { Leader } from './spec'
 
 /* Asagaya modern·杂志版式 × eri 配色。家具：墨标签节头 / 撕样条 / 点线引导行 / 竖排引文 / 对折页码 */
 
@@ -12,8 +13,6 @@ const MagSec = ({ n, title, id, children }: { n: string; title: string; id?: str
     {children}
   </section>
 )
-
-const Leader = () => <span className="mx-2.5 flex-1 -translate-y-1 border-b border-dotted border-line" />
 
 const PillLink = ({ href, kind, children }: { href: string; kind: 'primary' | 'ghost'; children: ReactNode }) => (
   <a
@@ -66,27 +65,30 @@ interface PriceRow {
   display: string
 }
 
+const minRows = (o: OptionsDto | null): PriceRow[] | null => {
+  if (!o) return null
+  return o.sizes
+    .slice()
+    .sort((a, b) => a.sort - b.sort)
+    .map((s) => {
+      let best: { sell_c: number; display: string } | null = null
+      for (const opt of o.options) {
+        const p = opt.prices[s.key]
+        if (p && (best === null || p.sell_c < best.sell_c)) best = p
+      }
+      return best ? { label: s.label, display: best.display } : null
+    })
+    .filter((r): r is PriceRow => r !== null)
+    .slice(0, 5)
+}
+
 export default function Home() {
-  const [rows, setRows] = useState<PriceRow[] | null>(null)
+  const [rows, setRows] = useState<PriceRow[] | null>(() => minRows(getOptionsCache()))
 
   useEffect(() => {
     fetchOptions()
-      .then((o: OptionsDto) => {
-        const mins = o.sizes
-          .slice()
-          .sort((a, b) => a.sort - b.sort)
-          .map((s) => {
-            let best: { sell_c: number; display: string } | null = null
-            for (const opt of o.options) {
-              const p = opt.prices[s.key]
-              if (p && (best === null || p.sell_c < best.sell_c)) best = p
-            }
-            return best ? { label: s.label, display: best.display } : null
-          })
-          .filter((r): r is PriceRow => r !== null)
-        setRows(mins.slice(0, 5))
-      })
-      .catch(() => setRows([]))
+      .then((o: OptionsDto) => setRows(minRows(o)))
+      .catch(() => setRows((prev) => prev ?? []))
   }, [])
 
   return (

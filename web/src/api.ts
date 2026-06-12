@@ -29,10 +29,15 @@ export interface QuoteDto {
   currency: string
 }
 
+// 模块级缓存：hash 路由切换会重挂载视图，缓存让二次进入即时渲染（后台再刷新）
+let optionsCache: OptionsDto | null = null
+export const getOptionsCache = (): OptionsDto | null => optionsCache
+
 export async function fetchOptions(): Promise<OptionsDto> {
   const res = await fetch('/api/calculator/options')
   if (!res.ok) throw new Error(`options failed: ${res.status}`)
-  return (await res.json()) as OptionsDto
+  optionsCache = (await res.json()) as OptionsDto
+  return optionsCache
 }
 
 export interface MeDto {
@@ -43,11 +48,15 @@ export interface MeDto {
   must_change_password: boolean
 }
 
+let meCache: MeDto | null | undefined = undefined
+export const getMeCache = (): MeDto | null | undefined => meCache
+
 export async function fetchMe(): Promise<MeDto | null> {
   const res = await fetch('/api/auth/me')
-  if (res.status === 401) return null
+  if (res.status === 401) return (meCache = null)
   if (!res.ok) throw new Error(`me failed: ${res.status}`)
-  return (await res.json()) as MeDto
+  meCache = (await res.json()) as MeDto
+  return meCache
 }
 
 export async function login(email: string, password: string): Promise<MeDto | null> {
@@ -58,11 +67,14 @@ export async function login(email: string, password: string): Promise<MeDto | nu
   })
   if (res.status === 401) return null
   if (!res.ok) throw new Error(`login failed: ${res.status}`)
-  return (await res.json()) as MeDto
+  meCache = (await res.json()) as MeDto
+  return meCache
 }
 
 export async function logout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST' })
+  meCache = null
+  dashboardCache = null
 }
 
 export async function changePassword(oldPassword: string, newPassword: string): Promise<boolean> {
@@ -98,10 +110,14 @@ export interface DashboardDto {
   }>
 }
 
+let dashboardCache: DashboardDto | null = null
+export const getDashboardCache = (): DashboardDto | null => dashboardCache
+
 export async function fetchDashboard(): Promise<DashboardDto> {
   const res = await fetch('/api/dashboard')
   if (!res.ok) throw new Error(`dashboard failed: ${res.status}`)
-  return (await res.json()) as DashboardDto
+  dashboardCache = (await res.json()) as DashboardDto
+  return dashboardCache
 }
 
 export async function fetchQuote(req: {

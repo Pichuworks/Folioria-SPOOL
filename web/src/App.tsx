@@ -23,21 +23,26 @@ export default function App() {
   if (view === 'home') return <Home />
 
   const tab = (active: boolean) =>
-    active ? 'font-medium text-wine-ink' : 'text-dim hover:text-ink'
+    active ? 'whitespace-nowrap font-medium text-wine-ink' : 'whitespace-nowrap text-dim hover:text-ink'
 
   return (
-    <main className="min-h-screen bg-paper">
-      <nav className="flex gap-6 border-b border-line bg-card px-8 py-3 text-sm">
-        <a href="#/" className="font-semibold text-wine-ink">
-          Folioria
-        </a>
-        <a href="#/calculator" className={tab(view === 'calculator')}>
-          自助报价
-        </a>
-        <a href="#/dashboard" className={tab(view === 'dashboard')}>
-          Dashboard
-        </a>
-      </nav>
+    <main className="min-h-screen bg-paper text-ink">
+      <div className="mx-auto max-w-5xl px-6">
+        <nav className="flex flex-wrap items-baseline gap-x-7 gap-y-1 border-b-2 border-ink pb-3 pt-5 text-[13px]">
+          <a href="#/" className="text-[19px] font-bold leading-none tracking-[.04em] text-ink">
+            Folioria
+          </a>
+          <a href="#/calculator" className={tab(view === 'calculator')}>
+            自助报价
+          </a>
+          <a href="#/dashboard" className={tab(view === 'dashboard')}>
+            Dashboard
+          </a>
+          <span className="ml-auto hidden font-mono text-[10px] tracking-[.14em] text-dim sm:inline">
+            {view === 'dashboard' ? 'S.P.O.O.L. CONSOLE' : 'QUOTE SPECIMEN'}
+          </span>
+        </nav>
+      </div>
       {view === 'dashboard' ? <Dashboard /> : <Calculator />}
     </main>
   )

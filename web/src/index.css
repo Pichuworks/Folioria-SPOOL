@@ -13,6 +13,7 @@
   --color-wine-dim: #e8cdd5; /* accentDim · 悬停/标签底 */
   --color-gold: #d9a11e; /* sideB */
   --color-cream: #f7e8c1; /* accentContrast */
+  --color-warn: #b06a1f; /* warning · 谨慎使用 */
 
   --font-serif: "Noto Serif SC", "Noto Serif JP", Georgia, serif;
   --font-garamond: "EB Garamond", Georgia, serif;

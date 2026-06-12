@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchOptions, fetchQuote, type OptionsDto, type QuoteDto } from './api'
+import { fetchOptions, fetchQuote, getOptionsCache, type OptionsDto, type QuoteDto } from './api'
+import { Field, Leader, SpecSec, specInput } from './spec'
 
 export default function Calculator() {
-  const [options, setOptions] = useState<OptionsDto | null>(null)
+  const [options, setOptions] = useState<OptionsDto | null>(getOptionsCache)
   const [error, setError] = useState<string | null>(null)
   const [modeId, setModeId] = useState<number | null>(null)
   const [paperId, setPaperId] = useState<number | null>(null)
@@ -13,7 +14,9 @@ export default function Calculator() {
   useEffect(() => {
     fetchOptions()
       .then(setOptions)
-      .catch(() => setError('价目数据加载失败'))
+      .catch(() => {
+        if (!getOptionsCache()) setError('价目数据加载失败')
+      })
   }, [])
 
   const papersForMode = useMemo(() => {
@@ -40,95 +43,106 @@ export default function Calculator() {
     return () => ctl.abort()
   }, [modeId, paperId, sizeKey, quantity, pricesForPair])
 
-  if (error) return <p className="p-8 text-red-700">{error}</p>
-  if (!options) return <p className="p-8 text-stone-500">加载中…</p>
+  if (error) return <p className="p-10 text-[14px] text-wine-ink">{error}</p>
+  if (!options) return <p className="p-10 text-[14px] text-dim">价目加载中…</p>
 
   return (
-    <div className="mx-auto max-w-xl space-y-6 p-8">
+    <div className="mx-auto max-w-2xl space-y-10 px-6 py-10">
       <header>
-        <h1 className="font-semibold text-2xl text-emerald-900">S.P.O.O.L. 自助报价</h1>
-        <p className="text-sm text-stone-500">选择模式 × 纸张 × 尺寸，实时算价</p>
+        <div className="mb-2 font-mono text-[10.5px] tracking-[.3em] text-wine-ink">FOLIORIA · QUOTE SPECIMEN</div>
+        <h1 className="text-[36px] font-medium tracking-[.02em] text-ink">自助报价</h1>
+        <p className="mt-2 text-[14px] leading-[1.85] text-dim">选择工艺、纸张与尺寸，价格由成本模型实时推导。</p>
       </header>
 
-      <div className="space-y-4 rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">打印模式</span>
-          <select
-            className="mt-1 w-full rounded-md border border-stone-300 p-2"
-            value={modeId ?? ''}
-            onChange={(e) => {
-              setModeId(e.target.value === '' ? null : Number(e.target.value))
-              setPaperId(null)
-              setSizeKey(null)
-            }}
-          >
-            <option value="">— 选择 —</option>
-            {options.modes.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">纸张</span>
-          <select
-            className="mt-1 w-full rounded-md border border-stone-300 p-2 disabled:bg-stone-100"
-            value={paperId ?? ''}
-            disabled={modeId === null}
-            onChange={(e) => {
-              setPaperId(e.target.value === '' ? null : Number(e.target.value))
-              setSizeKey(null)
-            }}
-          >
-            <option value="">— 选择 —</option>
-            {papersForMode.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">尺寸</span>
-          <select
-            className="mt-1 w-full rounded-md border border-stone-300 p-2 disabled:bg-stone-100"
-            value={sizeKey ?? ''}
-            disabled={pricesForPair === null}
-            onChange={(e) => setSizeKey(e.target.value === '' ? null : e.target.value)}
-          >
-            <option value="">— 选择 —</option>
-            {options.sizes
-              .filter((s) => pricesForPair && s.key in pricesForPair)
-              .map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}（{pricesForPair?.[s.key]?.display}/张）
+      <SpecSec n="01" title="配置" note="工艺 × 纸张 × 尺寸 × 数量">
+        <div className="space-y-5">
+          <Field label="打印模式">
+            <select
+              className={specInput}
+              value={modeId ?? ''}
+              onChange={(e) => {
+                setModeId(e.target.value === '' ? null : Number(e.target.value))
+                setPaperId(null)
+                setSizeKey(null)
+              }}
+            >
+              <option value="">— 选择 —</option>
+              {options.modes.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
                 </option>
               ))}
-          </select>
-        </label>
+            </select>
+          </Field>
 
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">数量（张）</span>
-          <input
-            type="number"
-            min={1}
-            className="mt-1 w-full rounded-md border border-stone-300 p-2"
-            value={quantity}
-            onChange={(e) => setQuantity(Math.max(1, Math.trunc(Number(e.target.value) || 1)))}
-          />
-        </label>
-      </div>
+          <Field label="纸张">
+            <select
+              className={specInput}
+              value={paperId ?? ''}
+              disabled={modeId === null}
+              onChange={(e) => {
+                setPaperId(e.target.value === '' ? null : Number(e.target.value))
+                setSizeKey(null)
+              }}
+            >
+              <option value="">— 选择 —</option>
+              {papersForMode.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="尺寸">
+            <select
+              className={specInput}
+              value={sizeKey ?? ''}
+              disabled={pricesForPair === null}
+              onChange={(e) => setSizeKey(e.target.value === '' ? null : e.target.value)}
+            >
+              <option value="">— 选择 —</option>
+              {options.sizes
+                .filter((s) => pricesForPair && s.key in pricesForPair)
+                .map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}（{pricesForPair?.[s.key]?.display}/张）
+                  </option>
+                ))}
+            </select>
+          </Field>
+
+          <Field label="数量（张）">
+            <input
+              type="number"
+              min={1}
+              className={specInput}
+              value={quantity}
+              onChange={(e) => setQuantity(Math.max(1, Math.trunc(Number(e.target.value) || 1)))}
+            />
+          </Field>
+        </div>
+      </SpecSec>
 
       {quote && (
-        <div className="rounded-lg bg-emerald-900 p-6 text-emerald-50">
-          <p className="text-sm opacity-80">
-            单价 {quote.unit_display} × {quote.quantity} 张
-          </p>
-          <p className="mt-1 font-semibold text-3xl">{quote.line_total_display}</p>
-        </div>
+        <SpecSec n="02" title="报价" note="实时推导 · 配置即报价">
+          <div className="flex items-baseline gap-3.5 border-b border-line py-[11px]">
+            <span className="min-w-24 text-[15px] font-medium text-ink">单价</span>
+            <span className="text-[12.5px] text-dim">每张</span>
+            <Leader />
+            <span className="font-mono text-[13px] tracking-[.05em] text-ink">{quote.unit_display}</span>
+          </div>
+          <div className="flex items-baseline gap-3.5 border-b border-line py-[11px]">
+            <span className="min-w-24 text-[15px] font-medium text-ink">数量</span>
+            <Leader />
+            <span className="font-mono text-[13px] tracking-[.05em] text-ink">{quote.quantity} 张</span>
+          </div>
+          <div className="mt-4 flex items-baseline justify-between border-t-2 border-ink pt-4">
+            <span className="text-[15px] font-medium text-ink">合计</span>
+            <span className="text-[34px] font-semibold tracking-[.02em] text-wine-ink">{quote.line_total_display}</span>
+          </div>
+          <p className="mt-3 font-mono text-[10.5px] tracking-[.12em] text-dim">UNIT × QTY · ROUND HALF UP · {quote.currency}</p>
+        </SpecSec>
       )}
     </div>
   )
