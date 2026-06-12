@@ -1,55 +1,62 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
+import AdminEquipment from './AdminEquipment'
+import AdminInventory from './AdminInventory'
 import AdminJobs from './AdminJobs'
+import AdminPricing from './AdminPricing'
+import AdminReports from './AdminReports'
+import AdminSettings from './AdminSettings'
+import AdminUsers from './AdminUsers'
 import Calculator from './Calculator'
 import Dashboard from './Dashboard'
 import Home from './Home'
 import { Shell } from './spec'
 
-type View = 'home' | 'dashboard' | 'calculator' | 'admin-jobs'
-
-const getView = (): View => {
-  if (window.location.hash === '#/dashboard') return 'dashboard'
-  if (window.location.hash === '#/calculator') return 'calculator'
-  if (window.location.hash === '#/admin/jobs') return 'admin-jobs'
-  return 'home'
+const ROUTES: Record<string, { nav: string; title: string; folio: string; view: ComponentType }> = {
+  '#/calculator': { nav: '自助报价', title: '自助报价', folio: 'QUOTE SHEET', view: Calculator },
+  '#/dashboard': { nav: 'Dashboard', title: 'Dashboard', folio: 'S.P.O.O.L. CONSOLE', view: Dashboard },
+  '#/admin/jobs': { nav: '作业', title: '作业管理', folio: 'JOBS LEDGER', view: AdminJobs },
+  '#/admin/inventory': { nav: '库存', title: '库存管理', folio: 'STOCK ROOM', view: AdminInventory },
+  '#/admin/pricing': { nav: '价目', title: '价目管理', folio: 'PRICE BOOK', view: AdminPricing },
+  '#/admin/equipment': { nav: '设备', title: '设备管理', folio: 'PRESS FLEET', view: AdminEquipment },
+  '#/admin/users': { nav: '用户', title: '用户管理', folio: 'STAFF ROSTER', view: AdminUsers },
+  '#/admin/settings': { nav: '设置', title: '系统设置', folio: 'HOUSE RULES', view: AdminSettings },
+  '#/admin/reports': { nav: '报表', title: '月度报表', folio: 'LEDGER DIGEST', view: AdminReports },
 }
 
-const FOLIO: Record<Exclude<View, 'home'>, string> = {
-  dashboard: 'S.P.O.O.L. CONSOLE',
-  calculator: 'QUOTE SHEET',
-  'admin-jobs': 'JOBS LEDGER',
-}
+const getHash = (): string => (window.location.hash in ROUTES ? window.location.hash : '#/')
 
 export default function App() {
-  const [view, setView] = useState(getView)
+  const [hash, setHash] = useState(getHash)
 
   useEffect(() => {
-    const onHash = () => setView(getView())
+    const onHash = () => setHash(getHash())
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  if (view === 'home') return <Home />
+  const route = ROUTES[hash]
+  if (!route) return <Home />
 
   const tab = (active: boolean) =>
     active ? 'whitespace-nowrap font-medium text-wine-ink' : 'whitespace-nowrap text-dim hover:text-ink'
+  const View = route.view
 
   return (
     <Shell
-      center={FOLIO[view]}
+      center={route.folio}
       nav={
         <>
           <a href="#/" className="whitespace-nowrap text-dim hover:text-ink">首页</a>
-          <a href="#/calculator" className={tab(view === 'calculator')}>自助报价</a>
-          <a href="#/dashboard" className={tab(view === 'dashboard')}>Dashboard</a>
-          <a href="#/admin/jobs" className={tab(view === 'admin-jobs')}>作业</a>
+          {Object.entries(ROUTES).map(([h, r]) => (
+            <a key={h} href={h} className={tab(h === hash)}>
+              {r.nav}
+            </a>
+          ))}
         </>
       }
     >
-      <h1 className="sr-only">
-        {view === 'dashboard' ? 'Dashboard' : view === 'admin-jobs' ? '作业管理' : '自助报价'}
-      </h1>
-      {view === 'dashboard' ? <Dashboard /> : view === 'admin-jobs' ? <AdminJobs /> : <Calculator />}
+      <h1 className="sr-only">{route.title}</h1>
+      <View />
     </Shell>
   )
 }

@@ -4,6 +4,27 @@ export interface CurrencyDto {
   decimal_places: number
 }
 
+/** 管理域 CRUD 通用通道：ok=false 时 data 形如 { error } */
+export async function send<T>(
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+  url: string,
+  body?: unknown,
+): Promise<{ ok: boolean; status: number; data: T }> {
+  const init: RequestInit = { method }
+  if (body !== undefined) {
+    init.headers = { 'content-type': 'application/json' }
+    init.body = JSON.stringify(body)
+  }
+  const res = await fetch(url, init)
+  let data: unknown = null
+  try {
+    data = await res.json()
+  } catch {
+    // 204 等无 body 响应
+  }
+  return { ok: res.ok, status: res.status, data: data as T }
+}
+
 export interface PriceEntryDto {
   sell_c: number
   display: string
