@@ -33,7 +33,7 @@
 ## P1 安全加固 backlog（全量对抗审查中裁决「属 Phase 2」的项；后台任务卡 task_bbca44b2）
 
 - [x] S1 PATCH /api/admin/users/:id：禁止归档/降格**最后一个活跃 admin** → 409 last_admin（防实例永久失管）。server/src/app.ts
-- [ ] S2 登录恒时比对：对不存在的邮箱也跑一次 bcrypt（消除用户枚举的计时侧信道）。server/src/auth.ts verifyLogin
+- [x] S2 登录恒时比对：对不存在的邮箱也跑一次 bcrypt（消除用户枚举的计时侧信道）。server/src/auth.ts verifyLogin
 - [ ] S3 admin 创建用户置 `must_change_password=1`（创建者知晓的初始密码不应永久有效）。server/src/app.ts
 - [ ] S4 convert 校验 from/to 同 `paper_id`（跨纸种「裁切」应拒绝；D1 只允许同纸不同尺寸折算）。server/src/inventory-routes.ts
 - [ ] S5 print_modes POST/PATCH 捕获 FK 错误 → 409/422（未知 printer_id/ref_size/max_size 现返回 500）。server/src/pricing-routes.ts

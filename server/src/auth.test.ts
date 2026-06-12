@@ -1,6 +1,8 @@
+import bcrypt from 'bcryptjs'
 import { createHash } from 'node:crypto'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApp, SESSION_COOKIE, type App } from './app.js'
+import { verifyLogin } from './auth.js'
 import { type DB } from './db.js'
 import { spoolInit } from './init.js'
 import { collectForbiddenKeys, createTestUser, makeTestDb } from './test-helpers.js'
@@ -92,6 +94,22 @@ describe('登录/登出', () => {
       revoked_at: string | null
     }
     expect(revoked.revoked_at).not.toBeNull()
+  })
+})
+
+describe('S2 登录恒时比对', () => {
+  it('未知邮箱与已知邮箱同样执行一次 bcrypt 比对（消除计时侧信道）', () => {
+    const spy = vi.spyOn(bcrypt, 'compareSync')
+    try {
+      expect(verifyLogin(db, 'ghost@nowhere.jp', 'whatever')).toBeNull()
+      expect(spy).toHaveBeenCalledTimes(1)
+
+      spy.mockClear()
+      expect(verifyLogin(db, ADMIN.email, 'wrong-password')).toBeNull()
+      expect(spy).toHaveBeenCalledTimes(1)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 

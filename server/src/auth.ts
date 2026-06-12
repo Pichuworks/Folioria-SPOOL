@@ -48,6 +48,9 @@ export function revokeSession(db: DB, token: string): void {
   )
 }
 
+// S2: 未知邮箱也比对一次的哑 hash（cost 12，与真实账号一致）；预生成常量避免启动期现算
+const DUMMY_HASH = '$2b$12$USNoAd.LkznkSolTZdR9eOblhwfg.1kZ.ppLhoyc2Vk4dmMvhn7Ca'
+
 export function verifyLogin(db: DB, email: string, password: string): SessionUser | null {
   const row = db
     .prepare(
@@ -55,7 +58,8 @@ export function verifyLogin(db: DB, email: string, password: string): SessionUse
        FROM users WHERE email = ? AND archived = 0`,
     )
     .get(email) as (SessionUser & { password_hash: string }) | undefined
-  if (!row || !bcrypt.compareSync(password, row.password_hash)) return null
+  const ok = bcrypt.compareSync(password, row?.password_hash ?? DUMMY_HASH)
+  if (!row || !ok) return null
   const { password_hash: _drop, ...user } = row
   void _drop
   return user
