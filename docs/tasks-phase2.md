@@ -45,7 +45,8 @@
 - [x] F1 Settings API：`GET|PATCH /api/settings`（min_margin_bp / 折旧参数 / unify / force / quote_valid_days）。
       base_currency 无业务数据可改（orders/jobs/inventory_log 任一非空 → 409 locked）；
       min_margin_bp 上限 9999（10000 会让地板价除零）。server/src/settings-routes.ts
-- [ ] F2 Reports API：`GET /api/reports/{monthly,equipment-usage,paper-consumption}`（内部消耗单列）。
+- [x] F2 Reports API：`GET /api/reports/{monthly,equipment-usage,paper-consumption}`（?month=YYYY-MM，
+      缺省当月；monthly 内部消耗单列＝quoted_price IS NULL）。server/src/reports-routes.ts
 - [ ] F3 管理域 Web UI（最大一块，可拆多会话；API 全已就绪，下单域字段白名单已在序列化层）。
       按使用频率排：
       `/admin/jobs`（新建向导·实时成本预览·可用量提示）→
