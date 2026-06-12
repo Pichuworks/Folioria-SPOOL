@@ -20,6 +20,7 @@ import { registerEquipmentRoutes } from './equipment-routes.js'
 import { requireAdmin } from './guards.js'
 import { registerInventoryRoutes } from './inventory-routes.js'
 import { registerJobsRoutes } from './jobs-routes.js'
+import { registerOrdersRoutes } from './orders-routes.js'
 import { registerPricingRoutes } from './pricing-routes.js'
 import { registerReportsRoutes } from './reports-routes.js'
 import { registerSettingsRoutes } from './settings-routes.js'
@@ -126,6 +127,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   registerInventoryRoutes(app, db)
   registerEquipmentRoutes(app, db)
   registerJobsRoutes(app, db)
+  registerOrdersRoutes(app, db)
   registerAlertsRoutes(app, db)
   registerDashboardRoutes(app, db)
   registerSettingsRoutes(app, db)
