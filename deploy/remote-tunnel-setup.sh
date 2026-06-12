@@ -7,7 +7,7 @@ CF=~/.local/bin/cloudflared
 if ! $CF tunnel list 2>/dev/null | grep -q '\bspool\b'; then
   $CF tunnel create spool
 fi
-UUID=$($CF tunnel list --output json | grep -o '"id":"[^"]*"[^}]*"name":"spool"' | head -1 | cut -d'"' -f4)
+UUID=$($CF tunnel list | awk '$2 == "spool" {print $1}' | head -1)
 if [ -z "$UUID" ]; then
   # 退路：从凭证文件名取
   UUID=$(ls ~/.cloudflared/*.json | head -1 | xargs -n1 basename | sed 's/\.json//')
