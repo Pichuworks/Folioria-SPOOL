@@ -9,9 +9,10 @@
 
 ## 当前线上状态（2026-06-12）
 - 调试实例公网可达：**https://spool.pichu.moe** 与 **https://www.folioria.com**（同一 Cloudflare Tunnel）。
-- **apex `folioria.com` 被本地网络链路 SNI 过滤**（实测：同 IP 同 TCP，SNI=apex 握手被掐、SNI=www 放行）；
-  服务端健康（远端 OpenSSL 访问 apex 返回 200，证书 SAN 含 apex）。ECH 已在 CF 端默认开启，
-  但客户端需开浏览器「安全 DNS / DoH」才用得上。结论：apex 走跳转到 www（见 O1）。
+- **正式主入口 = `www.folioria.com`**（对所有人可用，不被过滤，实测 200）。
+- apex `folioria.com` 被本地网络链路 SNI 过滤（实测：同 IP 同 TCP，SNI=apex 握手被掐、SNI=www 放行）；
+  服务端健康（远端 OpenSSL 访问 apex 返回 200，证书 SAN 含 apex，CF 边缘**无** 301）。
+  ECH 已在 CF 端默认开启，开了浏览器「安全 DNS / DoH」的客户端可绕过过滤直达 apex。
 - 三个 systemd 用户服务在跑：spool-api(127.0.0.1:3000) / spool-web(vite preview [::1]:5173) / spool-tunnel。
 - 限流（auth 10/5min、quote 60/min，键取 CF-Connecting-IP）已上线并公网实测（commit a5dde21）。
 
@@ -19,10 +20,10 @@
 
 ## P0 上线运维收尾
 
-- [ ] O1 apex `folioria.com` → `www.folioria.com` 301 跳转
-      首选 Cloudflare 边缘 Redirect Rule（apex 请求在 CF 层 301，不落 tunnel/应用，零部署）。
-      需 zone API token 或面板手动；本会话无 CF API 凭证（cloudflared 的 json 仅 tunnel 用，不能调 zone API）。
-      退路：若坚持应用层，vite preview 不便发跳转，仍建议 CF 边缘。
+- [x] O1 入口策略定稿：**www.folioria.com 为正式主入口**，对外宣传与书签一律用 www。
+      apex 边缘 301 跳转**非必需、不再追求**——对被 SNI 过滤的客户端无意义（过滤在 TLS 握手阶段，
+      拿不到 301），对开 ECH 的客户端 apex 本就直达。实测：远端 OpenSSL 直连 apex=200（边缘无 301）、www=200。
+      若日后仍想给「能正常握手 apex 的外部访客」配裸域跳转，用 CF 边缘 Redirect Rule（需 zone API token）。
 - [ ] O2 调试机备份未在跑：deploy/spool-backup.* 是系统级模板，盒上从未装。
       装**用户级** timer：VACUUM INTO `~/.local/share/spool/folioria.db` → 滚动 30 份；
       复用 server CLI 的 `backup` / `verify-backup` 命令（已实现）。参照 deploy/restore-drill.md。
@@ -71,5 +72,5 @@
 ---
 
 ## 建议执行顺序
-O1 apex 跳转 → O2 备份 timer（数据安全优先）→ S1–S6 安全加固（一会话扫完）→
+O2 备份 timer（数据安全优先）→ S1–S6 安全加固（一会话扫完）→
 F1 Settings → F2 Reports → F3 管理域 UI（多会话）→ R1… 订单系统。
