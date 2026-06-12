@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { type FastifyInstance } from 'fastify'
+import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
 import { availability, canTransition, completeJob, JobError } from './jobs.js'
+import { formatMoney, formatMoneyC, lineTotal, money, moneyC, type Currency } from './money.js'
 import { deriveUnitCost, overheadC } from './pricing.js'
+
+const displayOrNull = (amount: unknown, currency: Currency): string | null =>
+  amount == null ? null : formatMoney(money(amount as number), currency)
 
 export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
   app.get(
@@ -31,7 +36,16 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
                    JOIN papers p ON p.id = j.paper_id
                    ${status ? 'WHERE j.status = ?' : ''}
                    ORDER BY j.created_at DESC LIMIT 500`
-      return status ? db.prepare(sql).all(status) : db.prepare(sql).all()
+      const rows = (status ? db.prepare(sql).all(status) : db.prepare(sql).all()) as Array<
+        Record<string, unknown>
+      >
+      const currency = baseCurrency(db)
+      return rows.map((r) => ({
+        ...r,
+        total_cost_display: displayOrNull(r['total_cost'], currency),
+        profit_display: displayOrNull(r['profit'], currency),
+        quoted_price_display: displayOrNull(r['quoted_price'], currency),
+      }))
     },
   )
 
@@ -63,11 +77,24 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
       .get(modeId) as { printer_id: number }
     const overhead = overheadC(db, printer.printer_id)
     const avail = availability(db, paperId, q.size_key)
+    const unitTotal = moneyC(cost.ink_c + cost.paper_c + overhead)
+    const currency = baseCurrency(db)
+    const qty = Number(q.quantity)
+    const estTotal =
+      q.quantity !== undefined && Number.isSafeInteger(qty) && qty >= 1
+        ? lineTotal(unitTotal, qty)
+        : null
     return {
       ink_c: cost.ink_c,
       paper_c: cost.paper_c,
       overhead_c: overhead,
-      unit_total_c: cost.ink_c + cost.paper_c + overhead,
+      unit_total_c: unitTotal,
+      ink_display: formatMoneyC(cost.ink_c, currency),
+      paper_display: formatMoneyC(cost.paper_c, currency),
+      overhead_display: formatMoneyC(overhead, currency),
+      unit_total_display: formatMoneyC(unitTotal, currency),
+      est_total: estTotal,
+      est_total_display: estTotal == null ? null : formatMoney(estTotal, currency),
       ...avail,
     }
   })

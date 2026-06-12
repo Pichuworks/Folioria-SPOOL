@@ -120,6 +120,114 @@ export async function fetchDashboard(): Promise<DashboardDto> {
   return dashboardCache
 }
 
+export interface JobDto {
+  id: string
+  title: string
+  mode_id: number
+  paper_id: number
+  size_key: string
+  quantity: number
+  waste_quantity: number
+  pages_consumed: number | null
+  status: 'draft' | 'queued' | 'printing' | 'done' | 'cancelled'
+  quoted_price: number | null
+  total_cost: number | null
+  profit: number | null
+  created_at: string
+  completed_at: string | null
+  notes: string | null
+  mode_name: string
+  paper_name: string
+  total_cost_display: string | null
+  profit_display: string | null
+  quoted_price_display: string | null
+}
+
+let jobsCache: JobDto[] | null = null
+export const getJobsCache = (): JobDto[] | null => jobsCache
+
+export async function fetchJobs(): Promise<JobDto[]> {
+  const res = await fetch('/api/jobs')
+  if (!res.ok) throw new Error(`jobs failed: ${res.status}`)
+  jobsCache = (await res.json()) as JobDto[]
+  return jobsCache
+}
+
+export interface JobPreviewDto {
+  ink_c: number
+  paper_c: number
+  overhead_c: number
+  unit_total_c: number
+  ink_display: string
+  paper_display: string
+  overhead_display: string
+  unit_total_display: string
+  est_total: number | null
+  est_total_display: string | null
+  on_hand: number
+  reserved: number
+  available: number
+}
+
+export async function fetchJobPreview(req: {
+  mode_id: number
+  paper_id: number
+  size_key: string
+  quantity: number
+}): Promise<JobPreviewDto | null> {
+  const qs = new URLSearchParams({
+    mode_id: String(req.mode_id),
+    paper_id: String(req.paper_id),
+    size_key: req.size_key,
+    quantity: String(req.quantity),
+  })
+  const res = await fetch(`/api/jobs/preview?${qs}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`preview failed: ${res.status}`)
+  return (await res.json()) as JobPreviewDto
+}
+
+export async function createJob(body: {
+  title: string
+  mode_id: number
+  paper_id: number
+  size_key: string
+  quantity: number
+  quoted_price?: number | null
+}): Promise<(JobDto & { availability_warning: boolean }) | null> {
+  const res = await fetch('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as JobDto & { availability_warning: boolean }
+}
+
+export async function patchJobStatus(
+  id: string,
+  status: 'queued' | 'printing' | 'cancelled',
+): Promise<boolean> {
+  const res = await fetch(`/api/jobs/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+  return res.ok
+}
+
+export async function completeJob(
+  id: string,
+  body: { waste_quantity: number; pages_consumed?: number },
+): Promise<boolean> {
+  const res = await fetch(`/api/jobs/${id}/done`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.ok
+}
+
 export async function fetchQuote(req: {
   mode_id: number
   paper_id: number

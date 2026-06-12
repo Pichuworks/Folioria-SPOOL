@@ -54,6 +54,12 @@
       `/admin/pricing`（四表 CRUD·毛利警示标色：below_margin 橙 / LOSS 红）→
       `/admin/equipment`（档案 + 维护日历 + 校准记录）→
       `/admin/users`（member 升格 / admin 添加）→ `/admin/settings` → `/admin/reports`。
+  - [x] F3a `/admin/jobs`（2026-06-12）：#/admin/jobs 挂 AdminGate（登录门抽自 Dashboard，web/src/AdminGate.tsx）；
+        新建向导（calculator options 联动 + /api/jobs/preview 实时成本 + §3.3 可用量提示）、
+        台账按状态分组（成本/毛利快照管理域可见）、状态流 draft→queued→printing→done（废品/实耗面数录入）+cancel。
+        服务端补 display 字段（jobs 列表 + preview est_total 走唯一舍入点，formatMoney 服务端格式化，测试先行）。
+        本地临时库实测：账面48 + queued 20/10 → 可用 18 → cancel → 28 → done(废品3) → 库存 25，
+        双日志/耗材+23/计数器+23/成本快照 ¥8/毛利 ¥6 全部与 §3.1–3.3 一致。
 
 ## P3 Phase 2 订单系统（PRD 排期 2–4 周；acceptance §5/§6 订单项 = 验收基准）
 

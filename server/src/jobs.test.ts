@@ -262,6 +262,54 @@ describe('作业其他', () => {
     expect(job.total_cost).toBeGreaterThan(0)
   })
 
+  it('GET /api/jobs：done 作业带金额 display（服务端唯一除法点）；未 done 为 null', async () => {
+    const jobId = await makeJob(200, 14)
+    await patch(`/api/jobs/${jobId}`, { status: 'queued' })
+    await post(`/api/jobs/${jobId}/done`, { waste_quantity: 3 })
+    const draftId = await makeJob(10)
+
+    const res = await app.inject({ method: 'GET', url: '/api/jobs', headers: { cookie: adminCookie } })
+    expect(res.statusCode).toBe(200)
+    const rows = res.json() as Array<Record<string, unknown>>
+    const done = rows.find((r) => r['id'] === jobId)
+    // §3.1 基准：total_cost 71、profit 14 − 71 = −57
+    expect(done?.['total_cost_display']).toBe('¥71')
+    expect(done?.['profit_display']).toBe('-¥57')
+    expect(done?.['quoted_price_display']).toBe('¥14')
+    const draft = rows.find((r) => r['id'] === draftId)
+    expect(draft?.['total_cost_display']).toBeNull()
+    expect(draft?.['profit_display']).toBeNull()
+    expect(draft?.['quoted_price_display']).toBeNull()
+  })
+
+  it('preview 带 quantity：est_total 走唯一舍入点（35_c × 333 → 117）+ 分项 display', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/jobs/preview?mode_id=1&paper_id=1&size_key=A4&quantity=333',
+      headers: { cookie: adminCookie },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json() as Record<string, unknown>
+    expect(body['ink_display']).toBe('¥0.03')
+    expect(body['paper_display']).toBe('¥0.03')
+    expect(body['overhead_display']).toBe('¥0.29')
+    expect(body['unit_total_display']).toBe('¥0.35')
+    expect(body['est_total']).toBe(117)
+    expect(body['est_total_display']).toBe('¥117')
+  })
+
+  it('preview 不带 quantity：est_total 为 null', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/jobs/preview?mode_id=1&paper_id=1&size_key=A4',
+      headers: { cookie: adminCookie },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json() as Record<string, unknown>
+    expect(body['est_total']).toBeNull()
+    expect(body['est_total_display']).toBeNull()
+  })
+
   it('done 时无库存档案 → 409；guest 全线 401', async () => {
     const res = await post('/api/jobs', {
       title: '无档案纸',
