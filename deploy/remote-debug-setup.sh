@@ -48,7 +48,9 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable --now spool-api spool-web
+systemctl --user enable spool-api spool-web
+# enable --now 对已在跑的服务不会重启（拿不到新代码/新 unit env），必须显式 restart
+systemctl --user restart spool-api spool-web
 sleep 3
 systemctl --user --no-pager status spool-api spool-web | grep -E "spool-|Active"
 ss -tln | grep -E ":(3000|5173)"
