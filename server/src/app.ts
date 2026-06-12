@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie'
+import rateLimit from '@fastify/rate-limit'
 import bcrypt from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify'
@@ -79,6 +80,14 @@ export function buildApp(db: DB): App {
   })
 
   void app.register(cookie)
+  // PRD §6 限流：实例躲在 Cloudflare Tunnel 后，真实客户端 IP 在 CF-Connecting-IP
+  void app.register(rateLimit, {
+    global: false,
+    keyGenerator: (req) => {
+      const cf = req.headers['cf-connecting-ip']
+      return (Array.isArray(cf) ? cf[0] : cf) ?? req.ip
+    },
+  })
   app.decorateRequest('user', null)
   app.addHook('preHandler', (req, _reply, done) => {
     const token = req.cookies[SESSION_COOKIE]
@@ -86,6 +95,10 @@ export function buildApp(db: DB): App {
     done()
   })
 
+  // 路由注册必须推迟到 rate-limit 插件之后：@fastify/rate-limit 经 onRoute 钩子装配，
+  // 同步注册的路由会赶在插件 ready 之前、错过钩子导致 config.rateLimit 失效（PRD §6）。
+  // 回调参数同名遮蔽外层 app；decorateRequest/preHandler/errorHandler 由父作用域继承。
+  void app.register(async (app) => {
   registerPricingRoutes(app, db)
   registerInventoryRoutes(app, db)
   registerEquipmentRoutes(app, db)
@@ -98,6 +111,7 @@ export function buildApp(db: DB): App {
   app.post(
     '/api/auth/login',
     {
+      config: { rateLimit: { max: 10, timeWindow: '5 minutes' } },
       schema: {
         body: {
           type: 'object',
@@ -126,7 +140,7 @@ export function buildApp(db: DB): App {
     },
   )
 
-  app.post('/api/auth/logout', async (req, reply) => {
+  app.post('/api/auth/logout', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const token = req.cookies[SESSION_COOKIE]
     if (token) revokeSession(db, token)
     void reply.clearCookie(SESSION_COOKIE, { path: '/' })
@@ -135,7 +149,10 @@ export function buildApp(db: DB): App {
 
   app.get(
     '/api/auth/me',
-    { schema: { response: { 200: USER_DTO_SCHEMA, 401: ERROR_SCHEMA } } },
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: { response: { 200: USER_DTO_SCHEMA, 401: ERROR_SCHEMA } },
+    },
     async (req, reply) => {
       if (!req.user) return reply.status(401).send({ error: 'unauthorized' })
       return userDto(req.user)
@@ -145,6 +162,7 @@ export function buildApp(db: DB): App {
   app.post(
     '/api/auth/change-password',
     {
+      config: { rateLimit: { max: 10, timeWindow: '5 minutes' } },
       schema: {
         body: {
           type: 'object',
@@ -288,6 +306,7 @@ export function buildApp(db: DB): App {
       return userDto(updated)
     },
   )
+  })
 
   return app
 }

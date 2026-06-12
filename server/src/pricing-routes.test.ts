@@ -314,6 +314,21 @@ describe('计算器（下单域）', () => {
   })
 })
 
+describe('限流（PRD §6：/api/calculator/quote 按 IP）', () => {
+  it('同 IP 第 61 次报价 → 429', async () => {
+    const payload = { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 1 }
+    const headers = { 'cf-connecting-ip': '198.51.100.9' }
+    for (let i = 0; i < 60; i++) {
+      const r = await app.inject({ method: 'POST', url: '/api/calculator/quote', payload, headers })
+      expect(r.statusCode).toBe(200)
+    }
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/calculator/quote', payload, headers }))
+        .statusCode,
+    ).toBe(429)
+  })
+})
+
 describe('管理域成本速查', () => {
   it('GET /api/admin/pricing/quotes：187 行含成本与警示 flag；下单域不可达', async () => {
     const res = await app.inject({

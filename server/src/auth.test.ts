@@ -208,6 +208,36 @@ describe('管理域用户管理（B1 账号供给）', () => {
   })
 })
 
+describe('限流（PRD §6：/api/auth/* 按 IP，键取 CF-Connecting-IP）', () => {
+  it('登录暴力尝试第 11 次 → 429；其他 IP 不受牵连', async () => {
+    const attacker = { 'cf-connecting-ip': '203.0.113.7' }
+    for (let i = 0; i < 10; i++) {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'ghost@x.jp', password: 'wrong' },
+        headers: attacker,
+      })
+      expect(r.statusCode).toBe(401)
+    }
+    const blocked = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'ghost@x.jp', password: 'wrong' },
+      headers: attacker,
+    })
+    expect(blocked.statusCode).toBe(429)
+
+    const bystander = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'ghost@x.jp', password: 'wrong' },
+      headers: { 'cf-connecting-ip': '203.0.113.99' },
+    })
+    expect(bystander.statusCode).toBe(401)
+  })
+})
+
 describe('§7 schema 校验边界', () => {
   it('登录 body 缺字段 / 类型错 → 422', async () => {
     const missing = await app.inject({ method: 'POST', url: '/api/auth/login', payload: {} })

@@ -607,6 +607,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   app.post(
     '/api/calculator/quote',
     {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: {
         body: {
           type: 'object',
