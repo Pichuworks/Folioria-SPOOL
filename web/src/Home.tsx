@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchOptions, getOptionsCache, type OptionsDto } from './api'
+import { fetchOptions, getOptionsCache, type MeDto, type OptionsDto } from './api'
 import { Leader, MagSec, PillLink, Shell } from './spec'
 
 /* Asagaya modern·杂志版式 × eri 配色。家具：墨标签节头 / 撕样条 / 点线引导行 / 竖排引文 / 对折页码 */
@@ -32,9 +32,9 @@ const PAPERS = [
 
 const STEPS = [
   { n: '01', title: '自助报价', body: '选择工艺、纸张与尺寸，价格即时可见，无需注册。' },
-  { n: '02', title: '委托确认', body: '与工坊确认文件与工期；在线下单功能即将上线。' },
-  { n: '03', title: '审稿与生产', body: '人工预检文件的出血、分辨率与色彩，确认后排产。' },
-  { n: '04', title: '交付', body: '按约定自取或寄送，作品以无酸材料衬护包装。' },
+  { n: '02', title: '在线下单', body: '注册并验证邮箱后在线提交订单，逐行上传印刷文件。' },
+  { n: '03', title: '审稿与生产', body: '人工预检出血、分辨率与色彩；驳回可改稿重传，确认后排产。' },
+  { n: '04', title: '交付', body: '完成后通知取件，按约定自取或寄送，作品以无酸材料衬护包装。' },
 ]
 
 interface PriceRow {
@@ -59,7 +59,8 @@ const minRows = (o: OptionsDto | null): PriceRow[] | null => {
     .slice(0, 5)
 }
 
-export default function Home() {
+/** 首页导航三态：guest（登录/注册入口）/ 下单用户（我的订单）/ admin（管理台入口） */
+export default function Home({ me }: { me: MeDto | null }) {
   const [rows, setRows] = useState<PriceRow[] | null>(() => minRows(getOptionsCache()))
 
   useEffect(() => {
@@ -68,6 +69,7 @@ export default function Home() {
       .catch(() => setRows((prev) => prev ?? []))
   }, [])
 
+  const anchor = 'whitespace-nowrap text-dim hover:text-ink'
   return (
     <Shell
       center="WWW.FOLIORIA.COM"
@@ -81,11 +83,22 @@ export default function Home() {
       }
       nav={
         <>
-          <a href="#craft" className="whitespace-nowrap text-dim hover:text-ink">工艺</a>
-          <a href="#paper" className="whitespace-nowrap text-dim hover:text-ink">纸张</a>
-          <a href="#price" className="whitespace-nowrap text-dim hover:text-ink">价格</a>
-          <a href="#flow" className="whitespace-nowrap text-dim hover:text-ink">流程</a>
-          <PillLink href="#/calculator" kind="primary">自助报价</PillLink>
+          <a href="#craft" className={anchor}>工艺</a>
+          <a href="#paper" className={anchor}>纸张</a>
+          <a href="#price" className={anchor}>价格</a>
+          <a href="#flow" className={anchor}>流程</a>
+          <a href="#/price-list" className={anchor}>价目表</a>
+          {me === null ? (
+            <a href="#/my/orders" className={anchor}>登录 / 注册</a>
+          ) : me.role === 'admin' ? (
+            <>
+              <a href="#/my/orders" className={anchor}>我的订单</a>
+              <a href="#/dashboard" className="whitespace-nowrap font-medium text-wine-ink hover:opacity-80">管理台</a>
+            </>
+          ) : (
+            <a href="#/my/orders" className={anchor}>我的订单</a>
+          )}
+          <PillLink href="#/quote" kind="primary">自助报价</PillLink>
         </>
       }
     >
@@ -112,7 +125,7 @@ export default function Home() {
               从单张微喷到小批量图文，价格由成本模型实时推导——配置即报价，不必询价等待。
             </p>
             <div className="mt-6 flex items-center gap-3">
-              <PillLink href="#/calculator" kind="primary">自助报价 →</PillLink>
+              <PillLink href="#/quote" kind="primary">自助报价 · 在线下单 →</PillLink>
               <PillLink href="#craft" kind="ghost">了解工艺</PillLink>
             </div>
           </div>
@@ -174,8 +187,9 @@ export default function Home() {
               </div>
             )}
             <div className="mt-6 flex items-center gap-4">
-              <PillLink href="#/calculator" kind="primary">进入自助报价 →</PillLink>
-              <span className="font-mono text-[10.5px] tracking-[.12em] text-dim">价格由成本模型实时推导 · 配置即报价</span>
+              <PillLink href="#/quote" kind="primary">进入自助报价 →</PillLink>
+              <PillLink href="#/price-list" kind="ghost">完整价目表 →</PillLink>
+              <span className="font-mono text-[10.5px] tracking-[.12em] text-dim">价格由成本模型实时推导 · 配置即报价 · 下单时单价定格</span>
             </div>
           </MagSec>
 

@@ -67,7 +67,12 @@ export interface MeDto {
   name: string
   role: 'customer' | 'member' | 'admin'
   must_change_password: boolean
+  email_verified: boolean
 }
+
+/** 登录态变化广播：App 导航条三态（guest/下单用户/admin）即时切换 */
+export const AUTH_EVENT = 'spool-auth-changed'
+const fireAuthChanged = () => window.dispatchEvent(new Event(AUTH_EVENT))
 
 let meCache: MeDto | null | undefined = undefined
 export const getMeCache = (): MeDto | null | undefined => meCache
@@ -89,13 +94,39 @@ export async function login(email: string, password: string): Promise<MeDto | nu
   if (res.status === 401) return null
   if (!res.ok) throw new Error(`login failed: ${res.status}`)
   meCache = (await res.json()) as MeDto
+  fireAuthChanged()
   return meCache
+}
+
+/** R4 下单域注册：成功即登录；403=注册关闭/邀请码错，409=邮箱已注册 */
+export async function register(body: {
+  email: string
+  name: string
+  password: string
+  invite_code?: string
+}): Promise<{ me: MeDto | null; error: string | null }> {
+  const res = await send<MeDto & { error?: string }>('POST', '/api/auth/register', body)
+  if (!res.ok) return { me: null, error: (res.data as { error?: string })?.error ?? `http_${res.status}` }
+  meCache = res.data
+  fireAuthChanged()
+  return { me: res.data, error: null }
+}
+
+export async function verifyEmailToken(token: string): Promise<boolean> {
+  const res = await fetch('/api/auth/verify-email', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+  if (res.ok && meCache) meCache = { ...meCache, email_verified: true }
+  return res.ok
 }
 
 export async function logout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST' })
   meCache = null
   dashboardCache = null
+  fireAuthChanged()
 }
 
 export async function changePassword(oldPassword: string, newPassword: string): Promise<boolean> {
@@ -248,6 +279,123 @@ export async function completeJob(
   })
   return res.ok
 }
+
+// ---------- 订单（R1–R6/R8） ----------
+
+export interface OrderItemDto {
+  id: string
+  mode_id: number
+  mode_name: string
+  paper_id: number
+  paper_name: string
+  size_key: string
+  size_label: string
+  quantity: number
+  unit_price_c: number
+  unit_display: string
+  line_total: number
+  line_total_display: string
+  has_file: boolean
+  file_status: 'pending' | 'approved' | 'rejected'
+  file_note: string | null
+  job_id?: string | null | undefined
+}
+
+export interface OrderDto {
+  id: string
+  order_number: string
+  access_token?: string | undefined
+  status:
+    | 'quoted'
+    | 'file_pending'
+    | 'file_approved'
+    | 'confirmed'
+    | 'in_production'
+    | 'ready'
+    | 'delivered'
+    | 'cancelled'
+  contact_info: string | null
+  subtotal: number
+  subtotal_display: string
+  discount: number
+  discount_display: string
+  total: number
+  total_display: string
+  payment_status: 'unpaid' | 'deposit' | 'paid'
+  paid_amount: number
+  paid_amount_display: string
+  payment_method: string | null
+  paid_at: string | null
+  quote_valid_until: string
+  quote_expired: boolean
+  created_at: string
+  confirmed_at: string | null
+  completed_at: string | null
+  notes: string | null
+  items: OrderItemDto[]
+  is_internal?: boolean | undefined
+  customer?: { id: string; name: string; email: string; role: string } | undefined
+}
+
+export const ORDER_STATUS_LABEL: Record<OrderDto['status'], string> = {
+  quoted: '报价中',
+  file_pending: '待审稿',
+  file_approved: '审稿通过',
+  confirmed: '已确认',
+  in_production: '生产中',
+  ready: '待取件',
+  delivered: '已交付',
+  cancelled: '已取消',
+}
+
+export const createOrder = (body: {
+  items: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
+  contact_info?: string | null
+  notes?: string | null
+}) => send<OrderDto & { error?: string }>('POST', '/api/orders', body)
+
+export const fetchOrders = (status?: string) =>
+  send<OrderDto[]>('GET', `/api/orders${status ? `?status=${status}` : ''}`)
+
+export const fetchOrderByToken = (token: string) =>
+  send<OrderDto>('GET', `/api/orders/by-token/${encodeURIComponent(token)}`)
+
+export const patchOrderStatus = (id: string, status: string) =>
+  send<OrderDto & { error?: string }>('PATCH', `/api/orders/${id}/status`, { status })
+
+export const reviewOrderItem = (orderId: string, itemId: string, verdict: 'approved' | 'rejected', note?: string) =>
+  send<OrderDto>('PATCH', `/api/orders/${orderId}/items/${itemId}/file-review`, {
+    file_status: verdict,
+    file_note: note ?? null,
+  })
+
+export const patchOrderPayment = (
+  id: string,
+  body: { payment_status: 'unpaid' | 'deposit' | 'paid'; paid_amount?: number; payment_method?: string | null },
+) => send<OrderDto>('PATCH', `/api/orders/${id}/payment`, body)
+
+export const patchOrderDiscount = (id: string, discount: number) =>
+  send<OrderDto & { error?: string }>('PATCH', `/api/orders/${id}/discount`, { discount })
+
+export async function uploadOrderItemFile(
+  orderId: string,
+  itemId: string,
+  file: File,
+): Promise<{ ok: boolean; status: number; data: OrderDto | { error?: string } }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`/api/orders/${orderId}/items/${itemId}/file`, { method: 'POST', body: form })
+  let data: unknown = null
+  try {
+    data = await res.json()
+  } catch {
+    // 无 body
+  }
+  return { ok: res.ok, status: res.status, data: data as OrderDto | { error?: string } }
+}
+
+export const orderItemFileUrl = (orderId: string, itemId: string): string =>
+  `/api/orders/${orderId}/items/${itemId}/file`
 
 export async function fetchQuote(req: {
   mode_id: number
