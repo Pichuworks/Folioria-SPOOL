@@ -513,7 +513,15 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
 
   // ---------- 管理域: 成本速查 ----------
 
-  app.get('/api/admin/pricing/quotes', { preHandler: requireAdmin }, async () => listQuotable(db))
+  app.get('/api/admin/pricing/quotes', { preHandler: requireAdmin }, async () => {
+    const currency = baseCurrency(db)
+    return listQuotable(db).map((q) => ({
+      ...q,
+      total_display: formatMoneyC(q.total_c, currency),
+      auto_display: formatMoneyC(q.auto_sell_c, currency),
+      sell_display: formatMoneyC(q.sell_c, currency),
+    }))
+  })
 
   // ---------- 下单域: 计算器 ----------
 

@@ -1,18 +1,29 @@
 import { randomUUID } from 'node:crypto'
 import { type FastifyInstance } from 'fastify'
 import { calibrationDue } from './alerts.js'
+import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
+import { formatMoney, formatMoneyC, money, moneyC, type Currency } from './money.js'
 
 interface PrinterRow {
   id: number
   code: string
   total_pages: number
+  equipment_cost_c: number
+  monthly_cost_c: number
   last_calibration_at: string | null
   last_calibration_pages: number
   calibration_interval_pages: number | null
   calibration_interval_days: number | null
 }
+
+const printerDto = (p: PrinterRow, now: Date, currency: Currency) => ({
+  ...p,
+  calibration_due: calibrationDue(p, now),
+  equipment_cost_display: formatMoneyC(moneyC(p.equipment_cost_c), currency),
+  monthly_cost_display: formatMoneyC(moneyC(p.monthly_cost_c), currency),
+})
 
 const MAINT_TYPES = [
   'calibration',
@@ -29,15 +40,16 @@ const MAINT_TYPES = [
 export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
   app.get('/api/equipment', { preHandler: requireAdmin }, async () => {
     const now = new Date()
+    const currency = baseCurrency(db)
     const rows = db.prepare('SELECT * FROM printers WHERE archived = 0 ORDER BY id').all() as PrinterRow[]
-    return rows.map((p) => ({ ...p, calibration_due: calibrationDue(p, now) }))
+    return rows.map((p) => printerDto(p, now, currency))
   })
 
   app.get('/api/equipment/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const id = Number((req.params as { id: string }).id)
     const p = db.prepare('SELECT * FROM printers WHERE id = ?').get(id) as PrinterRow | undefined
     if (!p) return reply.status(404).send({ error: 'not_found' })
-    return { ...p, calibration_due: calibrationDue(p, new Date()) }
+    return printerDto(p, new Date(), baseCurrency(db))
   })
 
   app.patch(
@@ -79,7 +91,7 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
          WHERE id=@id`,
       ).run(merged)
       const p = db.prepare('SELECT * FROM printers WHERE id = ?').get(id) as PrinterRow
-      return { ...p, calibration_due: calibrationDue(p, new Date()) }
+      return printerDto(p, new Date(), baseCurrency(db))
     },
   )
 
@@ -88,9 +100,14 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
     if (!db.prepare('SELECT 1 FROM printers WHERE id = ?').get(id)) {
       return reply.status(404).send({ error: 'not_found' })
     }
-    return db
+    const currency = baseCurrency(db)
+    const rows = db
       .prepare('SELECT * FROM maintenance_events WHERE printer_id = ? ORDER BY occurred_at DESC')
-      .all(id)
+      .all(id) as Array<Record<string, unknown> & { cost: number | null }>
+    return rows.map((r) => ({
+      ...r,
+      cost_display: r.cost == null ? null : formatMoney(money(r.cost), currency),
+    }))
   })
 
   app.post(

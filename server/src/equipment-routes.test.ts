@@ -228,3 +228,46 @@ describe('§3.5 耗材换装（单事务）', () => {
     ).toBe(1)
   })
 })
+
+describe('管理域金额展示（display 由服务端唯一除法点生成）', () => {
+  it('GET /api/equipment：C850 设备成本/月成本 display', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/equipment', headers: { cookie: adminCookie } })
+    const rows = res.json() as Array<Record<string, unknown>>
+    const c850 = rows.find((r) => r['code'] === 'C850')
+    expect(c850?.['equipment_cost_display']).toBe('¥20,600')
+    expect(c850?.['monthly_cost_display']).toBe('¥500')
+  })
+
+  it('GET /api/inventory/consumables：T01 unit_cost_display ¥1,400', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/inventory/consumables',
+      headers: { cookie: adminCookie },
+    })
+    const rows = res.json() as Array<Record<string, unknown>>
+    expect(rows[0]?.['unit_cost_display']).toBe('¥1,400')
+  })
+
+  it('GET maintenance：cost 有值出 display，NULL 为 null', async () => {
+    await app.inject({
+      method: 'POST',
+      url: `/api/equipment/${c850Id}/maintenance`,
+      headers: { cookie: adminCookie },
+      payload: { type: 'deep_clean', cost: 3500 },
+    })
+    await app.inject({
+      method: 'POST',
+      url: `/api/equipment/${c850Id}/maintenance`,
+      headers: { cookie: adminCookie },
+      payload: { type: 'nozzle_check' },
+    })
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/equipment/${c850Id}/maintenance`,
+      headers: { cookie: adminCookie },
+    })
+    const rows = res.json() as Array<Record<string, unknown>>
+    expect(rows.find((r) => r['type'] === 'deep_clean')?.['cost_display']).toBe('¥3,500')
+    expect(rows.find((r) => r['type'] === 'nozzle_check')?.['cost_display']).toBeNull()
+  })
+})

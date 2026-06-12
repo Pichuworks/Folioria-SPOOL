@@ -386,4 +386,18 @@ describe('管理域成本速查', () => {
       ).statusCode,
     ).toBe(403)
   })
+
+  it('quotes 行带 display（服务端唯一除法点）：用例 A 6×6 A3 = 0.74/2.25/0.9', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/pricing/quotes',
+      headers: { cookie: adminCookie },
+    })
+    const rows = res.json() as Array<Record<string, unknown>>
+    const a = rows.find((r) => r['mode_id'] === 6 && r['paper_id'] === 6 && r['size_key'] === 'A3')
+    expect(a?.['total_display']).toBe('¥0.74')
+    expect(a?.['auto_display']).toBe('¥2.25')
+    expect(a?.['sell_display']).toBe('¥0.9')
+    expect(a?.['flag']).toBe('below_margin')
+  })
 })

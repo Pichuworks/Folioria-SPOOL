@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { type FastifyInstance } from 'fastify'
+import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
+import { formatMoneyC, moneyC } from './money.js'
 
 const MOVEMENT_ACTIONS = ['purchase', 'consume', 'adjust', 'scrap', 'return'] as const
 type MovementAction = (typeof MOVEMENT_ACTIONS)[number]
@@ -371,16 +373,23 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
   // ---------- consumables（C2：单表 + cost_model 区分） ----------
 
   app.get('/api/inventory/consumables', { preHandler: requireAdmin }, async () => {
+    const currency = baseCurrency(db)
     const rows = db
       .prepare(
         `SELECT c.*, p.code AS printer_code, p.name AS printer_name
          FROM consumables c JOIN printers p ON p.id = c.printer_id
          WHERE c.archived = 0 ORDER BY p.id, c.name`,
       )
-      .all() as Array<{ cost_model: string; rated_life_pages: number | null; current_usage_pages: number }>
+      .all() as Array<{
+      cost_model: string
+      rated_life_pages: number | null
+      current_usage_pages: number
+      unit_cost_c: number
+    }>
     return rows.map((r) => ({
       ...r,
       remaining_bp: remainingBp(r.cost_model, r.rated_life_pages, r.current_usage_pages),
+      unit_cost_display: formatMoneyC(moneyC(r.unit_cost_c), currency),
     }))
   })
 
