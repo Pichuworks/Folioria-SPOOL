@@ -330,11 +330,17 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
       if (b.from.stock_id === b.to.stock_id) {
         return reply.status(422).send({ error: 'same_stock' })
       }
-      const fromStock = db.prepare('SELECT quantity FROM paper_stocks WHERE id = ?').get(b.from.stock_id) as
-        | { quantity: number }
+      const fromStock = db
+        .prepare('SELECT quantity, paper_id FROM paper_stocks WHERE id = ?')
+        .get(b.from.stock_id) as { quantity: number; paper_id: number } | undefined
+      const toStock = db.prepare('SELECT paper_id FROM paper_stocks WHERE id = ?').get(b.to.stock_id) as
+        | { paper_id: number }
         | undefined
-      const toStock = db.prepare('SELECT 1 FROM paper_stocks WHERE id = ?').get(b.to.stock_id)
       if (!fromStock || !toStock) return reply.status(404).send({ error: 'not_found' })
+      // S4/D1: 裁切只允许同纸不同尺寸折算，跨纸种拒绝
+      if (fromStock.paper_id !== toStock.paper_id) {
+        return reply.status(422).send({ error: 'cross_paper' })
+      }
       if (fromStock.quantity + b.from.quantity_delta < 0) {
         return reply.status(409).send({ error: 'insufficient_stock' })
       }

@@ -155,6 +155,26 @@ describe('出入库 movements（事件溯源）', () => {
 })
 
 describe('§3.4 裁切转换守恒', () => {
+  it('S4: 跨纸种 convert 拒绝（D1 只允许同纸不同尺寸折算），账面零变化', async () => {
+    const fromId = await makeStock(6, 'A3P', 50)
+    const toId = await makeStock(1, 'A4', 0)
+
+    const res = await post('/api/inventory/convert', {
+      from: { stock_id: fromId, quantity_delta: -10 },
+      to: { stock_id: toId, quantity_delta: 20 },
+    })
+    expect(res.statusCode).toBe(422)
+    expect((res.json() as { error: string }).error).toBe('cross_paper')
+
+    const qty = (id: string) =>
+      (db.prepare('SELECT quantity FROM paper_stocks WHERE id = ?').get(id) as { quantity: number }).quantity
+    expect(qty(fromId)).toBe(50)
+    expect(qty(toId)).toBe(0)
+    expect(
+      (db.prepare("SELECT COUNT(*) n FROM inventory_log WHERE action = 'convert'").get() as { n: number }).n,
+    ).toBe(0)
+  })
+
   it('A3+ −10 / A4 +20 成对日志同 convert_group，账面同步', async () => {
     const fromId = await makeStock(6, 'A3P', 50)
     const toId = await makeStock(6, 'A4', 0)
