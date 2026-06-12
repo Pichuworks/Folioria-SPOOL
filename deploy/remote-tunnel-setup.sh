@@ -20,10 +20,17 @@ credentials-file: /home/neko/.cloudflared/$UUID.json
 ingress:
   - hostname: spool.pichu.moe
     service: http://localhost:5173
+  - hostname: folioria.com
+    service: http://localhost:5173
+  - hostname: www.folioria.com
+    service: http://localhost:5173
   - service: http_status:404
 EOF
 
 $CF tunnel route dns spool spool.pichu.moe || echo "route dns: 可能已存在，继续"
+# folioria.com zone 须先在同一 Cloudflare 账号下添加并激活（NS 已从 Spaceship 切到 CF）
+$CF tunnel route dns spool folioria.com || echo "route dns folioria.com: zone 未激活或已存在，继续"
+$CF tunnel route dns spool www.folioria.com || echo "route dns www.folioria.com: zone 未激活或已存在，继续"
 
 cat > ~/.config/systemd/user/spool-tunnel.service <<'EOF'
 [Unit]
