@@ -42,8 +42,9 @@
 
 ## P2 Phase 1.5 缺口（建议在订单系统前补齐；PRD §8 点名但未建）
 
-- [ ] F1 Settings API：`GET|PATCH /api/settings`（min_margin_bp / 折旧参数 / unify / force / quote_valid_days）。
-      现状只能直接改库。遵 schema system_config 单行表；base_currency 产生数据后锁定不可改。
+- [x] F1 Settings API：`GET|PATCH /api/settings`（min_margin_bp / 折旧参数 / unify / force / quote_valid_days）。
+      base_currency 无业务数据可改（orders/jobs/inventory_log 任一非空 → 409 locked）；
+      min_margin_bp 上限 9999（10000 会让地板价除零）。server/src/settings-routes.ts
 - [ ] F2 Reports API：`GET /api/reports/{monthly,equipment-usage,paper-consumption}`（内部消耗单列）。
 - [ ] F3 管理域 Web UI（最大一块，可拆多会话；API 全已就绪，下单域字段白名单已在序列化层）。
       按使用频率排：

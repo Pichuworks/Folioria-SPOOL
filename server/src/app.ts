@@ -19,6 +19,7 @@ import { requireAdmin } from './guards.js'
 import { registerInventoryRoutes } from './inventory-routes.js'
 import { registerJobsRoutes } from './jobs-routes.js'
 import { registerPricingRoutes } from './pricing-routes.js'
+import { registerSettingsRoutes } from './settings-routes.js'
 
 export const SESSION_COOKIE = 'spool_session'
 
@@ -111,6 +112,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   registerJobsRoutes(app, db)
   registerAlertsRoutes(app, db)
   registerDashboardRoutes(app, db)
+  registerSettingsRoutes(app, db)
 
   // ---------- 下单域: auth ----------
 
