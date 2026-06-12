@@ -225,6 +225,38 @@ describe('管理域用户管理（B1 账号供给）', () => {
     expect(dup.statusCode).toBe(409)
   })
 
+  it('S3: admin 创建的用户初始密码一次性（must_change_password=1，改密后清零）', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/admin/users',
+      headers: { cookie: adminCookie },
+      payload: { email: 'fresh@202.jp', name: '新人', password: 'initial-pass-1', role: 'customer' },
+    })
+    expect(created.statusCode).toBe(201)
+    expect((created.json() as { must_change_password: boolean }).must_change_password).toBe(true)
+
+    const flag = db
+      .prepare('SELECT must_change_password FROM users WHERE email = ?')
+      .get('fresh@202.jp') as { must_change_password: number }
+    expect(flag.must_change_password).toBe(1)
+
+    const { cookie } = await login('fresh@202.jp', 'initial-pass-1')
+    const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } })
+    expect((me.json() as { must_change_password: boolean }).must_change_password).toBe(true)
+
+    const changed = await app.inject({
+      method: 'POST',
+      url: '/api/auth/change-password',
+      headers: { cookie },
+      payload: { old_password: 'initial-pass-1', new_password: 'my-own-password' },
+    })
+    expect(changed.statusCode).toBe(204)
+    const cleared = db
+      .prepare('SELECT must_change_password FROM users WHERE email = ?')
+      .get('fresh@202.jp') as { must_change_password: number }
+    expect(cleared.must_change_password).toBe(0)
+  })
+
   it('S1: 最后一个活跃 admin 不可归档/降格 → 409 last_admin', async () => {
     const adminId = (db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN.email) as { id: string }).id
 

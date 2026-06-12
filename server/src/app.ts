@@ -246,9 +246,10 @@ export function buildApp(db: DB): App {
       const body = req.body as { email: string; name: string; password: string; role: string }
       const id = randomUUID()
       try {
+        // S3: 创建者知晓的初始密码不应永久有效 → 首登强制改密（D11 同初始 admin）
         db.prepare(
-          `INSERT INTO users (id, email, password_hash, name, role, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO users (id, email, password_hash, name, role, must_change_password, created_at)
+           VALUES (?, ?, ?, ?, ?, 1, ?)`,
         ).run(id, body.email, bcrypt.hashSync(body.password, 12), body.name, body.role, new Date().toISOString())
       } catch (err) {
         if (err instanceof Error && err.message.includes('UNIQUE')) {
@@ -261,7 +262,7 @@ export function buildApp(db: DB): App {
         email: body.email,
         name: body.name,
         role: body.role,
-        must_change_password: false,
+        must_change_password: true,
       })
     },
   )
