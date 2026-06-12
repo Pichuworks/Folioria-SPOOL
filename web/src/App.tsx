@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Calculator from './Calculator'
 import Dashboard from './Dashboard'
 import Home from './Home'
+import { Shell } from './spec'
 
 type View = 'home' | 'dashboard' | 'calculator'
 
@@ -26,24 +27,18 @@ export default function App() {
     active ? 'whitespace-nowrap font-medium text-wine-ink' : 'whitespace-nowrap text-dim hover:text-ink'
 
   return (
-    <main className="min-h-screen bg-paper text-ink">
-      <div className="mx-auto max-w-5xl px-6">
-        <nav className="flex flex-wrap items-baseline gap-x-7 gap-y-1 border-b-2 border-ink pb-3 pt-5 text-[13px]">
-          <a href="#/" className="text-[19px] font-bold leading-none tracking-[.04em] text-ink">
-            Folioria
-          </a>
-          <a href="#/calculator" className={tab(view === 'calculator')}>
-            自助报价
-          </a>
-          <a href="#/dashboard" className={tab(view === 'dashboard')}>
-            Dashboard
-          </a>
-          <span className="ml-auto hidden font-mono text-[10px] tracking-[.14em] text-dim sm:inline">
-            {view === 'dashboard' ? 'S.P.O.O.L. CONSOLE' : 'QUOTE SPECIMEN'}
-          </span>
-        </nav>
-      </div>
+    <Shell
+      center={view === 'dashboard' ? 'S.P.O.O.L. CONSOLE' : 'QUOTE SHEET'}
+      nav={
+        <>
+          <a href="#/" className="whitespace-nowrap text-dim hover:text-ink">首页</a>
+          <a href="#/calculator" className={tab(view === 'calculator')}>自助报价</a>
+          <a href="#/dashboard" className={tab(view === 'dashboard')}>Dashboard</a>
+        </>
+      }
+    >
+      <h1 className="sr-only">{view === 'dashboard' ? 'Dashboard' : '自助报价'}</h1>
       {view === 'dashboard' ? <Dashboard /> : <Calculator />}
-    </main>
+    </Shell>
   )
 }

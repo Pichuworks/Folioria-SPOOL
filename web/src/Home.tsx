@@ -1,31 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { fetchOptions, getOptionsCache, type OptionsDto } from './api'
-import { Leader } from './spec'
+import { Leader, MagSec, PillLink, Shell } from './spec'
 
 /* Asagaya modern·杂志版式 × eri 配色。家具：墨标签节头 / 撕样条 / 点线引导行 / 竖排引文 / 对折页码 */
-
-const MagSec = ({ n, title, id, children }: { n: string; title: string; id?: string; children: ReactNode }) => (
-  <section id={id} className="pt-13">
-    <div className="mb-[22px] flex items-center gap-3.5 border-b border-ink pb-3">
-      <span className="bg-ink px-2.5 py-1 font-mono text-[11px] tracking-[.22em] text-paper">{n}</span>
-      <h2 className="text-[26px] font-semibold text-ink">{title}</h2>
-    </div>
-    {children}
-  </section>
-)
-
-const PillLink = ({ href, kind, children }: { href: string; kind: 'primary' | 'ghost'; children: ReactNode }) => (
-  <a
-    href={href}
-    className={
-    kind === 'primary'
-      ? 'inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-wine bg-wine px-[18px] py-2.5 text-[14px] font-medium tracking-[.02em] text-cream shadow-e1 transition-opacity hover:opacity-90'
-      : 'inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-transparent px-[18px] py-2.5 text-[14px] font-medium tracking-[.02em] text-wine-ink hover:bg-wine-dim/40'
-    }
-  >
-    {children}
-  </a>
-)
 
 const CRAFTS = [
   {
@@ -92,25 +69,26 @@ export default function Home() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <div className="mx-auto max-w-[1200px] px-10">
-        {/* 刊头 */}
-        <header className="flex flex-wrap items-end justify-between gap-x-[18px] gap-y-3 border-b border-ink pb-4 pt-[30px]">
-          <div className="flex items-end gap-5">
-            <span className="text-[44px] font-bold leading-none tracking-[.04em]">Folioria</span>
-            <div className="pb-1">
-              <div className="text-[15px] font-medium tracking-[.08em]">印刷工坊</div>
-              <div className="font-garamond text-[13px] italic text-dim">Fine Print Atelier</div>
-            </div>
-          </div>
-          <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-1 text-[13px]">
-            <a href="#craft" className="whitespace-nowrap text-dim hover:text-ink">工艺</a>
-            <a href="#paper" className="whitespace-nowrap text-dim hover:text-ink">纸张</a>
-            <a href="#price" className="whitespace-nowrap text-dim hover:text-ink">价格</a>
-            <a href="#flow" className="whitespace-nowrap text-dim hover:text-ink">流程</a>
-            <PillLink href="#/calculator" kind="primary">自助报价</PillLink>
-          </nav>
-        </header>
+    <Shell
+      center="WWW.FOLIORIA.COM"
+      right={
+        <>
+          © 2026 FOLIORIA ·{' '}
+          <a href="#/dashboard" className="hover:text-ink">
+            STAFF →
+          </a>
+        </>
+      }
+      nav={
+        <>
+          <a href="#craft" className="whitespace-nowrap text-dim hover:text-ink">工艺</a>
+          <a href="#paper" className="whitespace-nowrap text-dim hover:text-ink">纸张</a>
+          <a href="#price" className="whitespace-nowrap text-dim hover:text-ink">价格</a>
+          <a href="#flow" className="whitespace-nowrap text-dim hover:text-ink">流程</a>
+          <PillLink href="#/calculator" kind="primary">自助报价</PillLink>
+        </>
+      }
+    >
 
         {/* 跨页 hero */}
         <div className="relative overflow-hidden border-b border-ink md:min-h-[430px]">
@@ -140,8 +118,7 @@ export default function Home() {
           </div>
         </div>
 
-        <main className="pb-16">
-          <MagSec n="01" title="工艺" id="craft">
+        <MagSec tag="01" title="工艺" id="craft">
             <div className="grid grid-cols-1 border-l border-t border-line md:grid-cols-3">
               {CRAFTS.map((c) => (
                 <div key={c.title} className="border-b border-r border-line p-7">
@@ -153,7 +130,7 @@ export default function Home() {
             </div>
           </MagSec>
 
-          <MagSec n="02" title="纸张" id="paper">
+          <MagSec tag="02" title="纸张" id="paper">
             <div className="flex h-[110px] border border-ink">
               {PAPERS.map((p, i) => (
                 <div
@@ -172,14 +149,14 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <div className="mt-6 w-[300px] border-t border-ink pt-2">
+            <div className="mt-6 max-w-[300px] border-t border-ink pt-2">
               <p className="text-[10.5px] leading-[1.9] text-dim">
                 ※ — 纸张口径与库存以报价页实时数据为准。
               </p>
             </div>
           </MagSec>
 
-          <MagSec n="03" title="价格" id="price">
+          <MagSec tag="03" title="价格" id="price">
             {rows === null ? (
               <p className="text-[13px] text-dim">价目加载中…</p>
             ) : rows.length === 0 ? (
@@ -202,31 +179,17 @@ export default function Home() {
             </div>
           </MagSec>
 
-          <MagSec n="04" title="流程" id="flow">
-            <div className="grid grid-cols-1 gap-x-8 md:grid-cols-4">
-              {STEPS.map((s) => (
-                <div key={s.n} className="border-t-2 border-ink pt-3">
-                  <span className="font-mono text-[12px] text-wine-ink">{s.n}</span>
-                  <h3 className="mt-2 text-[18px] font-medium">{s.title}</h3>
-                  <p className="mt-2 text-[12.5px] leading-[1.85] text-dim">{s.body}</p>
-                </div>
-              ))}
-            </div>
-          </MagSec>
-        </main>
-
-        {/* 对折页码 footer */}
-        <footer className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-ink pb-7 pt-3 font-mono text-[10.5px] tracking-[.14em] text-dim">
-          <span>FOLIORIA · S.P.O.O.L.</span>
-          <span>WWW.FOLIORIA.COM</span>
-          <span>
-            © 2026 FOLIORIA ·{' '}
-            <a href="#/dashboard" className="hover:text-ink">
-              STAFF →
-            </a>
-          </span>
-        </footer>
-      </div>
-    </div>
+        <MagSec tag="04" title="流程" id="flow">
+          <div className="grid grid-cols-1 gap-x-8 md:grid-cols-4">
+            {STEPS.map((s) => (
+              <div key={s.n} className="border-t-2 border-ink pt-3">
+                <span className="font-mono text-[12px] text-wine-ink">{s.n}</span>
+                <h3 className="mt-2 text-[18px] font-medium">{s.title}</h3>
+                <p className="mt-2 text-[12.5px] leading-[1.85] text-dim">{s.body}</p>
+              </div>
+            ))}
+          </div>
+        </MagSec>
+    </Shell>
   )
 }

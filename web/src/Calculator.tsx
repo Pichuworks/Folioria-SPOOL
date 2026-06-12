@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchOptions, fetchQuote, getOptionsCache, type OptionsDto, type QuoteDto } from './api'
-import { Field, Leader, SpecSec, specInput } from './spec'
+import { Field, MagSec, SpecRow, specInput } from './spec'
+
+type QuoteState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
 
 export default function Calculator() {
   const [options, setOptions] = useState<OptionsDto | null>(getOptionsCache)
@@ -10,6 +12,7 @@ export default function Calculator() {
   const [sizeKey, setSizeKey] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(100)
   const [quote, setQuote] = useState<QuoteDto | null>(null)
+  const [quoteState, setQuoteState] = useState<QuoteState>('idle')
 
   useEffect(() => {
     fetchOptions()
@@ -32,30 +35,37 @@ export default function Calculator() {
 
   useEffect(() => {
     setQuote(null)
-    if (modeId === null || paperId === null || sizeKey === null || quantity < 1) return
-    if (!pricesForPair || !(sizeKey in pricesForPair)) return
+    if (modeId === null || paperId === null || sizeKey === null || quantity < 1) {
+      setQuoteState('idle')
+      return
+    }
+    if (!pricesForPair || !(sizeKey in pricesForPair)) {
+      setQuoteState('idle')
+      return
+    }
+    setQuoteState('loading')
     const ctl = new AbortController()
     fetchQuote({ mode_id: modeId, paper_id: paperId, size_key: sizeKey, quantity })
       .then((q) => {
-        if (!ctl.signal.aborted) setQuote(q)
+        if (ctl.signal.aborted) return
+        setQuote(q)
+        setQuoteState(q ? 'ready' : 'unavailable')
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!ctl.signal.aborted) setQuoteState('error')
+      })
     return () => ctl.abort()
   }, [modeId, paperId, sizeKey, quantity, pricesForPair])
 
-  if (error) return <p className="p-10 text-[14px] text-wine-ink">{error}</p>
-  if (!options) return <p className="p-10 text-[14px] text-dim">价目加载中…</p>
+  if (error) return <p className="pt-13 text-[14px] text-wine-ink">{error}</p>
+  if (!options) return <p className="pt-13 text-[14px] text-dim">价目加载中…</p>
 
   return (
-    <div className="mx-auto max-w-2xl space-y-10 px-6 py-10">
-      <header>
-        <div className="mb-2 font-mono text-[10.5px] tracking-[.3em] text-wine-ink">FOLIORIA · QUOTE SPECIMEN</div>
-        <h1 className="text-[36px] font-medium tracking-[.02em] text-ink">自助报价</h1>
-        <p className="mt-2 text-[14px] leading-[1.85] text-dim">选择工艺、纸张与尺寸，价格由成本模型实时推导。</p>
-      </header>
-
-      <SpecSec n="01" title="配置" note="工艺 × 纸张 × 尺寸 × 数量">
-        <div className="space-y-5">
+    <MagSec tag="报价" title="自助报价" note="CONFIG × PAPER × SIZE · REALTIME">
+      <div className="grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
+        {/* 左栏：配置 */}
+        <div className="space-y-5 border-b border-ink p-7 md:border-b-0 md:border-r">
+          <div className="font-mono text-[10px] tracking-[.14em] text-dim">CONFIGURATION</div>
           <Field label="打印模式">
             <select
               className={specInput}
@@ -122,28 +132,55 @@ export default function Calculator() {
             />
           </Field>
         </div>
-      </SpecSec>
 
-      {quote && (
-        <SpecSec n="02" title="报价" note="实时推导 · 配置即报价">
-          <div className="flex items-baseline gap-3.5 border-b border-line py-[11px]">
-            <span className="min-w-24 text-[15px] font-medium text-ink">单价</span>
-            <span className="text-[12.5px] text-dim">每张</span>
-            <Leader />
-            <span className="font-mono text-[13px] tracking-[.05em] text-ink">{quote.unit_display}</span>
-          </div>
-          <div className="flex items-baseline gap-3.5 border-b border-line py-[11px]">
-            <span className="min-w-24 text-[15px] font-medium text-ink">数量</span>
-            <Leader />
-            <span className="font-mono text-[13px] tracking-[.05em] text-ink">{quote.quantity} 张</span>
-          </div>
-          <div className="mt-4 flex items-baseline justify-between border-t-2 border-ink pt-4">
-            <span className="text-[15px] font-medium text-ink">合计</span>
-            <span className="text-[34px] font-semibold tracking-[.02em] text-wine-ink">{quote.line_total_display}</span>
-          </div>
-          <p className="mt-3 font-mono text-[10.5px] tracking-[.12em] text-dim">UNIT × QTY · ROUND HALF UP · {quote.currency}</p>
-        </SpecSec>
-      )}
-    </div>
+        {/* 右栏：报价 */}
+        <div className="flex flex-col p-7">
+          <div className="font-mono text-[10px] tracking-[.14em] text-dim">QUOTATION</div>
+          {quoteState === 'ready' && quote ? (
+            <div className="flex flex-1 flex-col">
+              <div className="mt-3">
+                <SpecRow label="单价" note="每张" value={quote.unit_display} />
+                <SpecRow label="数量" value={`${quote.quantity} 张`} />
+              </div>
+              <div className="mt-auto pt-8">
+                <div className="flex items-baseline justify-between border-t-2 border-ink pt-4">
+                  <span className="text-[15px] font-medium text-ink">合计</span>
+                  <span className="text-[44px] font-semibold leading-none tracking-[.02em] text-wine-ink">
+                    {quote.line_total_display}
+                  </span>
+                </div>
+                <p className="mt-3 text-right font-mono text-[10px] tracking-[.12em] text-dim">
+                  UNIT × QTY · ROUND HALF UP · {quote.currency}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col items-start justify-center gap-2 py-12">
+              <span className="text-[40px] font-medium leading-none text-dim opacity-60">
+                {options.currency.symbol} ——
+              </span>
+              <p className="text-[13px] leading-[1.85] text-dim">
+                {quoteState === 'loading'
+                  ? '计算中…'
+                  : quoteState === 'unavailable'
+                    ? '该组合暂不可报价，请调整配置。'
+                    : quoteState === 'error'
+                      ? '报价服务暂时不可用，请稍后重试。'
+                      : '选定左侧配置，报价即时出现。'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-3.5 flex items-baseline justify-between">
+        <span className="text-[11.5px] text-dim">
+          图版 · 价格按当前配置实时推导，下单时单价定格。<sup className="text-wine-ink">※</sup>
+        </span>
+        <span className="font-mono text-[10px] tracking-[.12em] text-dim">PLATE Q1</span>
+      </div>
+      <div className="mt-4 max-w-[300px] border-t border-ink pt-2">
+        <p className="text-[10.5px] leading-[1.9] text-dim">※ — 报价为打印输出价格；寄送与其他需求在委托确认时商定。</p>
+      </div>
+    </MagSec>
   )
 }
