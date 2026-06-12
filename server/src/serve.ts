@@ -9,6 +9,7 @@ const cookieSecure = process.env['SPOOL_COOKIE_SECURE'] !== '0'
 
 const db = openDb(dbPath)
 migrate(db)
+// R5: 上传目录取 SPOOL_UPLOAD_DIR（默认 ~/.local/share/spool/uploads，files-routes 内解析）
 const app = buildApp(db, { cookieSecure })
 
 app

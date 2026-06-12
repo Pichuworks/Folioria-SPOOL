@@ -19,7 +19,7 @@ import {
 
 // ---------- 序列化白名单（D5/§6）：下单域响应仅含售价侧字段，cost/profit/margin 不进 schema ----------
 
-const ORDER_ITEM_SCHEMA = {
+export const ORDER_ITEM_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -42,7 +42,7 @@ const ORDER_ITEM_SCHEMA = {
   },
 }
 
-const ORDER_SCHEMA = {
+export const ORDER_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -87,13 +87,13 @@ const ORDER_SCHEMA = {
 
 const ORDER_LIST_SCHEMA = { type: 'array', items: ORDER_SCHEMA }
 
-const ERROR_SCHEMA = {
+export const ERROR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: { error: { type: 'string' }, message: { type: 'string' } },
 }
 
-interface DtoOptions {
+export interface DtoOptions {
   admin: boolean
   /** access_token 仅对 owner / by-token 调用方 / admin 回显 */
   includeToken: boolean
@@ -120,7 +120,7 @@ function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
   }
 }
 
-function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoOptions) {
+export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoOptions) {
   const items = getOrderItems(db, order.id)
   const base = {
     id: order.id,

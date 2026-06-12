@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie'
+import multipart from '@fastify/multipart'
 import rateLimit from '@fastify/rate-limit'
 import bcrypt from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
@@ -17,6 +18,7 @@ import { type DB } from './db.js'
 import { registerAlertsRoutes } from './alerts-routes.js'
 import { registerDashboardRoutes } from './dashboard-routes.js'
 import { registerEquipmentRoutes } from './equipment-routes.js'
+import { defaultUploadDir, registerFilesRoutes } from './files-routes.js'
 import { requireAdmin } from './guards.js'
 import { registerInventoryRoutes } from './inventory-routes.js'
 import { registerJobsRoutes } from './jobs-routes.js'
@@ -75,7 +77,13 @@ const ERROR_SCHEMA = {
 export interface AppOptions {
   /** S6: session cookie 的 Secure 属性。默认 true；仅明文 HTTP 调试时关（生产必须 TLS 前置） */
   cookieSecure?: boolean
+  /** R5: 上传隔离目录（默认 SPOOL_UPLOAD_DIR 或 ~/.local/share/spool/uploads） */
+  uploadDir?: string
+  /** R5: 单文件上限（默认 200MB；测试缩小） */
+  uploadMaxBytes?: number
 }
+
+export const UPLOAD_MAX_BYTES = 200 * 1024 * 1024
 
 /** 验证链接落在 web 哈希路由上（#/verify/:token），origin 由部署环境注入 */
 export const verificationLink = (token: string): string =>
@@ -89,6 +97,8 @@ async function sendVerificationEmail(_db: DB, to: string, token: string): Promis
 
 export function buildApp(db: DB, opts: AppOptions = {}): App {
   const cookieSecure = opts.cookieSecure ?? true
+  const uploadDir = opts.uploadDir ?? defaultUploadDir()
+  const uploadMaxBytes = opts.uploadMaxBytes ?? UPLOAD_MAX_BYTES
   // coerceTypes 必须关死：金额字段传 "100"/1.5 须 422，不允许静默转换（acceptance §7）
   const app = Fastify({ logger: false, ajv: { customOptions: { coerceTypes: false } } })
 
@@ -104,6 +114,8 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   })
 
   void app.register(cookie)
+  // R5: 单文件单次（订单 item 级上传）；超限由 adapter 抛 413
+  void app.register(multipart, { limits: { fileSize: uploadMaxBytes, files: 1 } })
   // PRD §6 限流：实例躲在 Cloudflare Tunnel 后，真实客户端 IP 在 CF-Connecting-IP
   void app.register(rateLimit, {
     global: false,
@@ -128,6 +140,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   registerEquipmentRoutes(app, db)
   registerJobsRoutes(app, db)
   registerOrdersRoutes(app, db)
+  registerFilesRoutes(app, db, uploadDir)
   registerAlertsRoutes(app, db)
   registerDashboardRoutes(app, db)
   registerSettingsRoutes(app, db)
