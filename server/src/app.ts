@@ -285,7 +285,7 @@ export function buildApp(db: DB): App {
             archived: { type: 'boolean' },
           },
         },
-        response: { 200: USER_DTO_SCHEMA, 404: ERROR_SCHEMA },
+        response: { 200: USER_DTO_SCHEMA, 404: ERROR_SCHEMA, 409: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -295,6 +295,15 @@ export function buildApp(db: DB): App {
         .prepare('SELECT id, email, name, role, must_change_password, archived FROM users WHERE id = ?')
         .get(id) as (SessionUser & { archived: number }) | undefined
       if (!existing) return reply.status(404).send({ error: 'not_found' })
+      // S1: 最后一个活跃 admin 不可归档/降格（防实例永久失管）
+      const losesAdmin =
+        (body.role !== undefined && body.role !== 'admin') || body.archived === true
+      if (existing.role === 'admin' && existing.archived === 0 && losesAdmin) {
+        const { n } = db
+          .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND archived = 0")
+          .get() as { n: number }
+        if (n <= 1) return reply.status(409).send({ error: 'last_admin' })
+      }
       db.prepare('UPDATE users SET role = ?, archived = ? WHERE id = ?').run(
         body.role ?? existing.role,
         body.archived === undefined ? existing.archived : body.archived ? 1 : 0,

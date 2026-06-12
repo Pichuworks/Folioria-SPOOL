@@ -206,6 +206,58 @@ describe('管理域用户管理（B1 账号供给）', () => {
     })
     expect(dup.statusCode).toBe(409)
   })
+
+  it('S1: 最后一个活跃 admin 不可归档/降格 → 409 last_admin', async () => {
+    const adminId = (db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN.email) as { id: string }).id
+
+    const demote = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/users/${adminId}`,
+      headers: { cookie: adminCookie },
+      payload: { role: 'member' },
+    })
+    expect(demote.statusCode).toBe(409)
+    expect((demote.json() as { error: string }).error).toBe('last_admin')
+
+    const archive = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/users/${adminId}`,
+      headers: { cookie: adminCookie },
+      payload: { archived: true },
+    })
+    expect(archive.statusCode).toBe(409)
+
+    // 已归档的 admin 不算活跃，不解除保护
+    const ghostId = createTestUser(db, { email: 'old-admin@folioria.jp', role: 'admin' })
+    db.prepare('UPDATE users SET archived = 1 WHERE id = ?').run(ghostId)
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: `/api/admin/users/${adminId}`,
+          headers: { cookie: adminCookie },
+          payload: { archived: true },
+        })
+      ).statusCode,
+    ).toBe(409)
+
+    // 第二个活跃 admin 出现后降格放行；非降格 PATCH（role 仍 admin）始终放行
+    createTestUser(db, { email: 'admin2@folioria.jp', role: 'admin' })
+    const keep = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/users/${adminId}`,
+      headers: { cookie: adminCookie },
+      payload: { role: 'admin' },
+    })
+    expect(keep.statusCode).toBe(200)
+    const ok = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/users/${adminId}`,
+      headers: { cookie: adminCookie },
+      payload: { role: 'member' },
+    })
+    expect(ok.statusCode).toBe(200)
+  })
 })
 
 describe('限流（PRD §6：/api/auth/* 按 IP，键取 CF-Connecting-IP）', () => {
