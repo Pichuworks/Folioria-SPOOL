@@ -157,25 +157,33 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       if (b.pricing_mode === 'ml' && b.ml_per_batch == null) {
         return reply.status(422).send({ error: 'ml_per_batch_required' })
       }
-      const { lastInsertRowid } = db
-        .prepare(
-          `INSERT INTO print_modes (name, printer_id, ink_type, pricing_mode, ink_price_c,
-                                    ml_per_batch, yield_sheets, ref_size, max_size, duplex, color_tag)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          b.name,
-          b.printer_id,
-          b.ink_type,
-          b.pricing_mode,
-          b.ink_price_c,
-          b.ml_per_batch ?? null,
-          b.yield_sheets,
-          b.ref_size,
-          b.max_size,
-          b.duplex ? 1 : 0,
-          b.color_tag ?? null,
-        )
+      let lastInsertRowid: number | bigint
+      try {
+        ;({ lastInsertRowid } = db
+          .prepare(
+            `INSERT INTO print_modes (name, printer_id, ink_type, pricing_mode, ink_price_c,
+                                      ml_per_batch, yield_sheets, ref_size, max_size, duplex, color_tag)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            b.name,
+            b.printer_id,
+            b.ink_type,
+            b.pricing_mode,
+            b.ink_price_c,
+            b.ml_per_batch ?? null,
+            b.yield_sheets,
+            b.ref_size,
+            b.max_size,
+            b.duplex ? 1 : 0,
+            b.color_tag ?? null,
+          ))
+      } catch (err) {
+        if (isConstraint(err, 'FOREIGN KEY')) {
+          return reply.status(409).send({ error: 'unknown_printer_or_size' })
+        }
+        throw err
+      }
       return reply
         .status(201)
         .send(db.prepare('SELECT * FROM print_modes WHERE id = ?').get(lastInsertRowid))
@@ -209,13 +217,20 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       if (merged['pricing_mode'] === 'ml' && merged['ml_per_batch'] == null) {
         return reply.status(422).send({ error: 'ml_per_batch_required' })
       }
-      db.prepare(
-        `UPDATE print_modes SET name=@name, printer_id=@printer_id, ink_type=@ink_type,
-           pricing_mode=@pricing_mode, ink_price_c=@ink_price_c, ml_per_batch=@ml_per_batch,
-           yield_sheets=@yield_sheets, ref_size=@ref_size, max_size=@max_size,
-           duplex=@duplex, color_tag=@color_tag, archived=@archived
-         WHERE id=@id`,
-      ).run(merged)
+      try {
+        db.prepare(
+          `UPDATE print_modes SET name=@name, printer_id=@printer_id, ink_type=@ink_type,
+             pricing_mode=@pricing_mode, ink_price_c=@ink_price_c, ml_per_batch=@ml_per_batch,
+             yield_sheets=@yield_sheets, ref_size=@ref_size, max_size=@max_size,
+             duplex=@duplex, color_tag=@color_tag, archived=@archived
+           WHERE id=@id`,
+        ).run(merged)
+      } catch (err) {
+        if (isConstraint(err, 'FOREIGN KEY')) {
+          return reply.status(409).send({ error: 'unknown_printer_or_size' })
+        }
+        throw err
+      }
       return db.prepare('SELECT * FROM print_modes WHERE id = ?').get(id)
     },
   )

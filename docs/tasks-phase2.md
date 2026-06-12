@@ -36,7 +36,7 @@
 - [x] S2 登录恒时比对：对不存在的邮箱也跑一次 bcrypt（消除用户枚举的计时侧信道）。server/src/auth.ts verifyLogin
 - [x] S3 admin 创建用户置 `must_change_password=1`（创建者知晓的初始密码不应永久有效）。server/src/app.ts
 - [x] S4 convert 校验 from/to 同 `paper_id`（跨纸种「裁切」→ 422 cross_paper；D1 只允许同纸不同尺寸折算）。server/src/inventory-routes.ts
-- [ ] S5 print_modes POST/PATCH 捕获 FK 错误 → 409/422（未知 printer_id/ref_size/max_size 现返回 500）。server/src/pricing-routes.ts
+- [x] S5 print_modes POST/PATCH 捕获 FK 错误 → 409 unknown_printer_or_size（原 500）。server/src/pricing-routes.ts
 - [ ] S6 cookie `secure` 配置化 + 部署文档强调 TLS 前置（当前 Tunnel 下恒 HTTPS 故 OK，明文 HTTP 直连会登录静默失败）。
 
 ## P2 Phase 1.5 缺口（建议在订单系统前补齐；PRD §8 点名但未建）

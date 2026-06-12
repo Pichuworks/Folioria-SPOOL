@@ -148,6 +148,38 @@ describe('定价四表 CRUD', () => {
     expect(quote.statusCode).toBe(404)
   })
 
+  it('S5: modes 未知 printer_id/ref_size/max_size → 409 unknown_printer_or_size（而非 500）', async () => {
+    const base = {
+      name: 'fk-probe',
+      printer_id: 1,
+      ink_type: 'toner',
+      pricing_mode: 'set',
+      ink_price_c: 100,
+      yield_sheets: 100,
+      ref_size: 'A4',
+      max_size: 'A4',
+    }
+    for (const broken of [{ printer_id: 999 }, { ref_size: 'Z9' }, { max_size: 'Z9' }]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/pricing/modes',
+        headers: { cookie: adminCookie },
+        payload: { ...base, ...broken },
+      })
+      expect(res.statusCode).toBe(409)
+      expect((res.json() as { error: string }).error).toBe('unknown_printer_or_size')
+    }
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: '/api/pricing/modes/1',
+      headers: { cookie: adminCookie },
+      payload: { printer_id: 999 },
+    })
+    expect(patched.statusCode).toBe(409)
+    expect((patched.json() as { error: string }).error).toBe('unknown_printer_or_size')
+  })
+
   it('改一次采购价，下游报价自动更新（推导模型核心性质）', async () => {
     const before = await app.inject({
       method: 'POST',
