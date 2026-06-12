@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
 import Calculator from './Calculator'
 import Dashboard from './Dashboard'
+import Home from './Home'
 
-const getView = (): 'dashboard' | 'calculator' =>
-  window.location.hash === '#/dashboard' ? 'dashboard' : 'calculator'
+type View = 'home' | 'dashboard' | 'calculator'
+
+const getView = (): View => {
+  if (window.location.hash === '#/dashboard') return 'dashboard'
+  if (window.location.hash === '#/calculator') return 'calculator'
+  return 'home'
+}
 
 export default function App() {
   const [view, setView] = useState(getView)
@@ -14,13 +20,17 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
+  if (view === 'home') return <Home />
+
   const tab = (active: boolean) =>
-    active ? 'font-medium text-emerald-900' : 'text-stone-500 hover:text-stone-800'
+    active ? 'font-medium text-wine-ink' : 'text-dim hover:text-ink'
 
   return (
-    <main className="min-h-screen bg-stone-50">
-      <nav className="flex gap-6 border-b border-stone-200 bg-white px-8 py-3 text-sm">
-        <span className="font-semibold text-emerald-900">S.P.O.O.L.</span>
+    <main className="min-h-screen bg-paper">
+      <nav className="flex gap-6 border-b border-line bg-card px-8 py-3 text-sm">
+        <a href="#/" className="font-semibold text-wine-ink">
+          Folioria
+        </a>
         <a href="#/calculator" className={tab(view === 'calculator')}>
           自助报价
         </a>

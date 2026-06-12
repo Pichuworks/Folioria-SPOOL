@@ -65,7 +65,11 @@
 - [ ] R6 支付状态记录（unpaid/deposit/paid）+ 报价有效期闭环（过期 quoted → confirm 拒绝 409）← §5
 - [ ] R7 Notifier 抽象层 + email adapter（Resend/SES 事务邮件商）
       ← 依赖 folioria.com 的 SPF/DKIM（域名已接好）；LINE Notify 已停服，文档不得引用
-- [ ] R8 下单域门面：`/` 首页 · `/quote` 公开配置器 · `/price-list` 价目表 · `/my/orders`
+- [ ] R8 下单域门面：`/quote` 公开配置器 · `/price-list` 价目表 · `/my/orders`
+  - [x] `/` 首页（2026-06-12）：视觉方案 = Asagaya 设计系统 modern·杂志版式 × eri 配色
+        （酒红 #800020 / 金 #D9A11E / 暖纸底，Noto Serif SC + EB Garamond，无渐变·1px 墨线）。
+        web/src/Home.tsx；#/ 缺省路由，Calculator 挪 #/calculator；价目区实时取
+        /api/calculator/options 起价，API 不可达时优雅降级。
 
 ## P4 Phase 3 远期（PRD 立项，不急）
 
