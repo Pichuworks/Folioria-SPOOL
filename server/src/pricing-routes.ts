@@ -125,6 +125,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     max_size: { type: 'string' },
     duplex: { type: 'boolean' },
     color_tag: { type: ['string', 'null'] },
+    color_class: { type: ['string', 'null'] }, // D25: 结构化色彩档（单页属性配置器筛选用）
   }
 
   app.post(
@@ -153,6 +154,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         max_size: string
         duplex?: boolean
         color_tag?: string | null
+        color_class?: string | null
       }
       if (b.pricing_mode === 'ml' && b.ml_per_batch == null) {
         return reply.status(422).send({ error: 'ml_per_batch_required' })
@@ -162,8 +164,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         ;({ lastInsertRowid } = db
           .prepare(
             `INSERT INTO print_modes (name, printer_id, ink_type, pricing_mode, ink_price_c,
-                                      ml_per_batch, yield_sheets, ref_size, max_size, duplex, color_tag)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                      ml_per_batch, yield_sheets, ref_size, max_size, duplex, color_tag, color_class)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             b.name,
@@ -177,6 +179,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
             b.max_size,
             b.duplex ? 1 : 0,
             b.color_tag ?? null,
+            b.color_class ?? null,
           ))
       } catch (err) {
         if (isConstraint(err, 'FOREIGN KEY')) {
@@ -222,7 +225,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
           `UPDATE print_modes SET name=@name, printer_id=@printer_id, ink_type=@ink_type,
              pricing_mode=@pricing_mode, ink_price_c=@ink_price_c, ml_per_batch=@ml_per_batch,
              yield_sheets=@yield_sheets, ref_size=@ref_size, max_size=@max_size,
-             duplex=@duplex, color_tag=@color_tag, archived=@archived
+             duplex=@duplex, color_tag=@color_tag, color_class=@color_class, archived=@archived
            WHERE id=@id`,
         ).run(merged)
       } catch (err) {

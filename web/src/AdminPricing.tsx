@@ -37,6 +37,7 @@ interface ModeDto {
   ref_size: string
   max_size: string
   duplex: number
+  color_class: string | null
   archived: number
 }
 
@@ -411,6 +412,7 @@ function ModeEditPanel({ mode, onDone }: { mode: ModeDto; onDone: () => void }) 
   const [name, setName] = useState(mode.name)
   const [inkPrice, setInkPrice] = useState(String(mode.ink_price_c))
   const [yieldSheets, setYieldSheets] = useState(String(mode.yield_sheets))
+  const [colorClass, setColorClass] = useState(mode.color_class ?? '')
   const [error, setError] = useState<string | null>(null)
 
   const submit = async (e: FormEvent) => {
@@ -425,6 +427,7 @@ function ModeEditPanel({ mode, onDone }: { mode: ModeDto; onDone: () => void }) 
       name: name.trim(),
       ink_price_c: price,
       yield_sheets: ys,
+      color_class: colorClass.trim() === '' ? null : colorClass.trim(),
     })
     if (res.ok) onDone()
     else setError('保存失败')
@@ -440,6 +443,9 @@ function ModeEditPanel({ mode, onDone }: { mode: ModeDto; onDone: () => void }) 
       </Field>
       <Field label={`产能（${mode.ref_size} 张/批）`}>
         <input type="number" min={1} required className={specInput} value={yieldSheets} onChange={(e) => setYieldSheets(e.target.value)} />
+      </Field>
+      <Field label="色彩档（属性配置器，如 bw/color/photo）">
+        <input type="text" className={specInput} value={colorClass} onChange={(e) => setColorClass(e.target.value)} />
       </Field>
       <PillBtn>保存</PillBtn>
       {error && <p className="w-full text-[12px] text-wine-ink">{error}</p>}
@@ -471,6 +477,7 @@ function ModesSection({
     ref_size: '',
     max_size: '',
     duplex: false,
+    color_class: '',
   })
   const [notice, setNotice] = useState<string | null>(null)
   const printerCode = useMemo(() => new Map(printers.map((p) => [p.id, p.code])), [printers])
@@ -488,6 +495,7 @@ function ModesSection({
       ref_size: form.ref_size,
       max_size: form.max_size,
       duplex: form.duplex,
+      color_class: form.color_class.trim() === '' ? null : form.color_class.trim(),
     }
     if (body.name === '' || !body.printer_id || body.ref_size === '' || body.max_size === '') return
     const res = await send('POST', '/api/pricing/modes', body)
@@ -545,6 +553,9 @@ function ModesSection({
           )}
           <Field label="产能（张/批）">
             <input type="number" min={1} required className={specInput} value={form.yield_sheets} onChange={set('yield_sheets')} />
+          </Field>
+          <Field label="色彩档（bw/color/photo…）">
+            <input type="text" className={specInput} value={form.color_class} onChange={set('color_class')} />
           </Field>
           <Field label="基准尺寸">
             <select className={specInput} value={form.ref_size} onChange={set('ref_size')}>

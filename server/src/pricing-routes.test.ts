@@ -180,6 +180,21 @@ describe('定价四表 CRUD', () => {
     expect((patched.json() as { error: string }).error).toBe('unknown_printer_or_size')
   })
 
+  it('D25: color_class 可经 PATCH 设定并回显（属性配置器色彩档）', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/pricing/modes/1',
+      headers: { cookie: adminCookie },
+      payload: { color_class: 'bw' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect((res.json() as { color_class: string }).color_class).toBe('bw')
+    const modes = (
+      await app.inject({ method: 'GET', url: '/api/pricing/modes', headers: { cookie: adminCookie } })
+    ).json() as Array<{ id: number; color_class: string | null }>
+    expect(modes.find((m) => m.id === 1)?.color_class).toBe('bw')
+  })
+
   it('改一次采购价，下游报价自动更新（推导模型核心性质）', async () => {
     const before = await app.inject({
       method: 'POST',
