@@ -114,9 +114,20 @@ export interface MeDto {
   email: string
   username: string | null
   name: string
+  contact_info: string | null
   role: 'customer' | 'member' | 'admin'
   must_change_password: boolean
   email_verified: boolean
+}
+
+/** 下单域账号资料编辑（称呼 / 联系方式）；成功刷新 me 缓存并广播 */
+export async function updateProfile(body: { name?: string; contact_info?: string | null }): Promise<MeDto | null> {
+  const res = await send<MeDto>('PATCH', '/api/auth/profile', body)
+  if (res.ok) {
+    meCache = res.data
+    fireAuthChanged()
+  }
+  return res.ok ? res.data : null
 }
 
 /** 登录态变化广播：App 导航条三态（guest/下单用户/admin）即时切换 */

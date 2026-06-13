@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
+import Account, { AccountMenu } from './Account'
 import AdminAlerts from './AdminAlerts'
 import AdminEquipment from './AdminEquipment'
 import AdminInventory from './AdminInventory'
@@ -19,6 +20,7 @@ import {
 } from './api'
 import Dashboard from './Dashboard'
 import Home from './Home'
+import Login from './Login'
 import MyOrders from './MyOrders'
 import OrderView from './OrderView'
 import PriceList from './PriceList'
@@ -87,6 +89,12 @@ function resolve(hash: string): Resolved | null {
   if (reset?.[1]) {
     return { title: '重置密码', folio: 'PASSWORD RESET', node: <ResetPassword token={reset[1]} />, navKey: null }
   }
+  if (hash === '#/account') {
+    return { title: '账号设置', folio: 'ACCOUNT', node: <Account />, navKey: null }
+  }
+  if (hash === '#/login') {
+    return { title: '登录', folio: 'SIGN IN', node: <Login />, navKey: null }
+  }
   return null // → Home
 }
 
@@ -134,11 +142,15 @@ export default function App() {
   const nav = (
     <>
       <a href="#/" className="whitespace-nowrap text-dim hover:text-ink">首页</a>
-      {Object.entries(STOREFRONT_ROUTES).map(([h, r]) => (
-        <a key={h} href={h} className={tab(h === resolved.navKey)}>
-          {h === '#/my/orders' && !me ? '登录 / 注册' : r.nav}
-        </a>
-      ))}
+      {Object.entries(STOREFRONT_ROUTES).map(([h, r]) => {
+        // 我的订单仅登录态出现在导航；guest 走右上角账号控件登录
+        if (h === '#/my/orders' && !me) return null
+        return (
+          <a key={h} href={h} className={tab(h === resolved.navKey)}>
+            {r.nav}
+          </a>
+        )
+      })}
       {isAdmin && (
         <>
           <span aria-hidden="true" className="hidden h-4 w-px bg-line md:block" />
@@ -149,6 +161,8 @@ export default function App() {
           ))}
         </>
       )}
+      <span aria-hidden="true" className="hidden h-4 w-px bg-line md:block" />
+      <AccountMenu me={me ?? null} />
     </>
   )
 

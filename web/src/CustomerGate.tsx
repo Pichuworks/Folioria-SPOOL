@@ -7,7 +7,6 @@ import {
   getMeCache,
   getPublicConfigCache,
   login,
-  logout,
   register,
   type MeDto,
 } from './api'
@@ -241,17 +240,6 @@ export default function CustomerGate({ children }: { children: (me: MeDto) => Re
 
   return (
     <div>
-      <div className="flex justify-end pt-5">
-        <button
-          type="button"
-          className="font-mono text-[10.5px] tracking-[.14em] text-dim hover:text-ink"
-          onClick={() => {
-            void logout().then(() => setMe(null))
-          }}
-        >
-          {me.name} · 登出 →
-        </button>
-      </div>
       <VerifyBanner me={me} />
       {children(me)}
     </div>

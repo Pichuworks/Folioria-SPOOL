@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AccountMenu } from './Account'
 import { fetchOptions, getOptionsCache, type MeDto, type OptionsDto } from './api'
 import { Leader, MagSec, PillLink, Shell } from './spec'
 
@@ -88,17 +89,8 @@ export default function Home({ me }: { me: MeDto | null }) {
           <a href="#price" className={anchor}>价格</a>
           <a href="#flow" className={anchor}>流程</a>
           <a href="#/price-list" className={anchor}>价目表</a>
-          {me === null ? (
-            <a href="#/my/orders" className={anchor}>登录 / 注册</a>
-          ) : me.role === 'admin' ? (
-            <>
-              <a href="#/my/orders" className={anchor}>我的订单</a>
-              <a href="#/dashboard" className="whitespace-nowrap font-medium text-wine-ink hover:opacity-80">管理台</a>
-            </>
-          ) : (
-            <a href="#/my/orders" className={anchor}>我的订单</a>
-          )}
           <PillLink href="#/quote" kind="primary">自助报价</PillLink>
+          <AccountMenu me={me} />
         </>
       }
     >

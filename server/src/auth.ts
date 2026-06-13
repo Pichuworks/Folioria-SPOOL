@@ -11,6 +11,7 @@ export interface SessionUser {
   email: string
   username: string | null
   name: string
+  contact_info: string | null
   role: 'customer' | 'member' | 'admin'
   must_change_password: number
   email_verified_at: string | null
@@ -37,7 +38,7 @@ export function createSession(db: DB, userId: string): string {
 export function userByToken(db: DB, token: string): SessionUser | null {
   const row = db
     .prepare(
-      `SELECT u.id, u.email, u.username, u.name, u.role, u.must_change_password, u.email_verified_at
+      `SELECT u.id, u.email, u.username, u.name, u.contact_info, u.role, u.must_change_password, u.email_verified_at
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND u.archived = 0`,
     )
@@ -91,7 +92,7 @@ export function verifyLogin(db: DB, identifier: string, password: string): Sessi
   // D18: 单一标识符——含 '@' 即邮箱口径，否则用户名口径；两者皆 NOCASE（email 列本就 NOCASE）
   const row = db
     .prepare(
-      `SELECT id, email, username, name, role, must_change_password, email_verified_at, password_hash
+      `SELECT id, email, username, name, contact_info, role, must_change_password, email_verified_at, password_hash
        FROM users WHERE (email = ? OR username = ? COLLATE NOCASE) AND archived = 0`,
     )
     .get(identifier, identifier) as (SessionUser & { password_hash: string }) | undefined

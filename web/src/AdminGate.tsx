@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { changePassword, fetchMe, getMeCache, login, logout, type MeDto } from './api'
+import { changePassword, fetchMe, getMeCache, login, type MeDto } from './api'
 import { Field, PillBtn, specInput } from './spec'
 
 function AuthCard({ tag, title, children }: { tag: string; title: string; children: ReactNode }) {
@@ -86,20 +86,5 @@ export default function AdminGate({ children }: { children: (me: MeDto) => React
     return <p className="pt-13 text-[14px] text-dim">本页仅管理域可见。</p>
   }
 
-  return (
-    <div>
-      <div className="flex justify-end pt-5">
-        <button
-          type="button"
-          className="font-mono text-[10.5px] tracking-[.14em] text-dim hover:text-ink"
-          onClick={() => {
-            void logout().then(() => setMe(null))
-          }}
-        >
-          CONSOLE · {me.name} · 登出 →
-        </button>
-      </div>
-      {children(me)}
-    </div>
-  )
+  return <div>{children(me)}</div>
 }

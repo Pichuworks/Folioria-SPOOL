@@ -48,6 +48,7 @@ interface UserDto {
   email: string
   username: string | null
   name: string
+  contact_info: string | null
   role: string
   must_change_password: boolean
   email_verified: boolean
@@ -58,6 +59,7 @@ const userDto = (u: SessionUser): UserDto => ({
   email: u.email,
   username: u.username,
   name: u.name,
+  contact_info: u.contact_info,
   role: u.role,
   must_change_password: u.must_change_password !== 0,
   email_verified: u.email_verified_at != null,
@@ -71,6 +73,7 @@ const USER_DTO_SCHEMA = {
     email: { type: 'string' },
     username: { type: ['string', 'null'] },
     name: { type: 'string' },
+    contact_info: { type: ['string', 'null'] },
     role: { type: 'string' },
     must_change_password: { type: 'boolean' },
     email_verified: { type: 'boolean' },
@@ -413,6 +416,42 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
     async (req, reply) => {
       if (!req.user) return reply.status(401).send({ error: 'unauthorized' })
       return userDto(req.user)
+    },
+  )
+
+  // 下单域账号资料编辑（称呼 / 联系方式）；email/username 不在此改（登录/通知主键）
+  app.patch(
+    '/api/auth/profile',
+    {
+      config: { rateLimit: { max: 20, timeWindow: '5 minutes' } },
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+            contact_info: { type: ['string', 'null'], maxLength: 200 },
+          },
+        },
+        response: { 200: USER_DTO_SCHEMA, 401: ERROR_SCHEMA },
+      },
+    },
+    async (req, reply) => {
+      if (!req.user) return reply.status(401).send({ error: 'unauthorized' })
+      const b = req.body as { name?: string; contact_info?: string | null }
+      const u = req.user
+      db.prepare('UPDATE users SET name = ?, contact_info = ? WHERE id = ?').run(
+        b.name ?? u.name,
+        'contact_info' in b ? (b.contact_info ?? null) : u.contact_info,
+        u.id,
+      )
+      const fresh = db
+        .prepare(
+          'SELECT id, email, username, name, contact_info, role, must_change_password, email_verified_at FROM users WHERE id = ?',
+        )
+        .get(u.id) as SessionUser
+      return userDto(fresh)
     },
   )
 

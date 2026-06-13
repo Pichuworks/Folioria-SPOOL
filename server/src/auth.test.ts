@@ -540,6 +540,31 @@ describe('§7 schema 校验边界', () => {
   })
 })
 
+describe('账号资料 PATCH /api/auth/profile', () => {
+  it('改称呼/联系方式落库并回显；guest 401', async () => {
+    createTestUser(db, { email: 'p@cust.example', name: '旧名' })
+    const { cookie } = await login('p@cust.example', 'test-password')
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/profile',
+      headers: { cookie },
+      payload: { name: '新名', contact_info: 'LINE: neko' },
+    })
+    expect(res.statusCode).toBe(200)
+    const dto = res.json() as { name: string; contact_info: string | null }
+    expect(dto.name).toBe('新名')
+    expect(dto.contact_info).toBe('LINE: neko')
+    const row = db.prepare('SELECT name, contact_info FROM users WHERE email = ?').get('p@cust.example') as {
+      name: string
+      contact_info: string | null
+    }
+    expect(row).toEqual({ name: '新名', contact_info: 'LINE: neko' })
+    expect(
+      (await app.inject({ method: 'PATCH', url: '/api/auth/profile', payload: { name: 'x' } })).statusCode,
+    ).toBe(401)
+  })
+})
+
 describe('D19 忘记密码 / 重置', () => {
   it('forgot 对存在账号建 token、对未知账号不建（皆 204 不泄露存在性）', async () => {
     const uid = createTestUser(db, { email: 'reset@cust.example' })
