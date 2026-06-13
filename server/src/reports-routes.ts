@@ -23,15 +23,20 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
       const m = db
         .prepare(
           `SELECT COUNT(*) AS jobs_done,
-                  COALESCE(SUM(pages_consumed), 0) AS pages,
-                  COALESCE(SUM(CASE WHEN quoted_price IS NOT NULL THEN 1 ELSE 0 END), 0) AS ext_jobs,
-                  COALESCE(SUM(CASE WHEN quoted_price IS NOT NULL THEN quoted_price END), 0) AS ext_revenue,
-                  COALESCE(SUM(CASE WHEN quoted_price IS NOT NULL THEN total_cost END), 0) AS ext_cost,
-                  COALESCE(SUM(CASE WHEN quoted_price IS NOT NULL THEN profit END), 0) AS ext_profit,
-                  COALESCE(SUM(CASE WHEN quoted_price IS NULL THEN 1 ELSE 0 END), 0) AS int_jobs,
-                  COALESCE(SUM(CASE WHEN quoted_price IS NULL THEN total_cost END), 0) AS int_cost,
-                  COALESCE(SUM(CASE WHEN quoted_price IS NULL THEN pages_consumed END), 0) AS int_pages
-           FROM jobs WHERE status = 'done' AND substr(completed_at, 1, 7) = ?`,
+                  COALESCE(SUM(j.pages_consumed), 0) AS pages,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN 1 ELSE 0 END), 0) AS ext_jobs,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.quoted_price END), 0) AS ext_revenue,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.total_cost END), 0) AS ext_cost,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.profit END), 0) AS ext_profit,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN 1 ELSE 0 END), 0) AS int_jobs,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN j.total_cost END), 0) AS int_cost,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN j.pages_consumed END), 0) AS int_pages,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND o.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS writeoff_jobs,
+                  COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND o.status = 'cancelled' THEN j.total_cost END), 0) AS writeoff_cost
+           FROM jobs j
+           LEFT JOIN order_items oi ON oi.id = j.order_item_id
+           LEFT JOIN orders o ON o.id = oi.order_id
+           WHERE j.status = 'done' AND substr(j.completed_at, 1, 7) = ?`,
         )
         .get(month) as {
         jobs_done: number
@@ -43,6 +48,8 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
         int_jobs: number
         int_cost: number
         int_pages: number
+        writeoff_jobs: number
+        writeoff_cost: number
       }
       const currency = baseCurrency(db)
       return {
@@ -63,6 +70,11 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
           cost: m.int_cost,
           pages: m.int_pages,
           cost_display: formatMoney(money(m.int_cost), currency),
+        },
+        writeoff: {
+          jobs: m.writeoff_jobs,
+          cost: m.writeoff_cost,
+          cost_display: formatMoney(money(m.writeoff_cost), currency),
         },
       }
     },

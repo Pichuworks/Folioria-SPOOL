@@ -209,10 +209,31 @@ export function syncFileState(db: DB, orderId: string): { status: OrderStatus; c
   return { status: next, changed: true }
 }
 
+/** Integer-only pro-rata: share_i = floor(discount × line_total_i ÷ subtotal), remainder to last. */
+function distributeDiscount(discount: number, subtotal: number, lineTotals: readonly number[]): number[] {
+  if (discount <= 0 || subtotal <= 0 || lineTotals.length === 0) {
+    return lineTotals.map(() => 0)
+  }
+  const shares: number[] = []
+  let allocated = 0
+  for (let i = 0; i < lineTotals.length; i++) {
+    if (i === lineTotals.length - 1) {
+      shares.push(discount - allocated)
+    } else {
+      const num = discount * lineTotals[i]!
+      const rem = num % subtotal
+      const share = (num - rem) / subtotal
+      shares.push(share)
+      allocated += share
+    }
+  }
+  return shares
+}
+
 /**
  * R1/R6 confirm：仅 file_approved 且未过 quote_valid_until（过期 409，须重新报价）。
- * 单事务：逐 item 生成 Job(queued, quoted_price=line_total) 并回写 order_items.job_id。
- * done 落账仍走既有 completeJob，不在此处。
+ * 单事务：逐 item 生成 Job(queued) 并回写 order_items.job_id。
+ * 折扣按行比例整数分摊进 quoted_price，Σ(quoted_price) === total 守恒。
  */
 export function confirmOrder(db: DB, orderId: string): void {
   const order = getOrder(db, orderId)
@@ -224,6 +245,7 @@ export function confirmOrder(db: DB, orderId: string): void {
   if (nowIso > order.quote_valid_until) throw new OrderError(409, 'quote_expired')
 
   const items = getOrderItems(db, orderId)
+  const shares = distributeDiscount(order.discount, order.subtotal, items.map((it) => it.line_total))
   db.transaction(() => {
     const insertJob = db.prepare(
       `INSERT INTO jobs (id, order_item_id, requester_id, title, mode_id, paper_id, size_key,
@@ -231,7 +253,8 @@ export function confirmOrder(db: DB, orderId: string): void {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
     )
     const backfill = db.prepare('UPDATE order_items SET job_id = ? WHERE id = ?')
-    for (const item of items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]!
       const jobId = randomUUID()
       insertJob.run(
         jobId,
@@ -242,8 +265,7 @@ export function confirmOrder(db: DB, orderId: string): void {
         item.paper_id,
         item.size_key,
         item.quantity,
-        // 金额层快照：行小计（lineTotal 产物）即该作业的应收价
-        item.line_total,
+        item.line_total - shares[i]!,
         item.file_url,
         nowIso,
       )

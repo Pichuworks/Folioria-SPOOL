@@ -107,12 +107,47 @@ describe('F2 monthly（内部消耗单列）', () => {
     expect(body.internal.cost_display).toBe('¥80')
   })
 
+  it('cancelled 订单下的 done 作业不计入 ext_revenue，单列 writeoff', async () => {
+    insertDoneJob({ quoted: 500, cost: 200, profit: 300, pages: 100, completedAt: '2026-06-05T10:00:00Z' })
+
+    const orderId = randomUUID()
+    const itemId = randomUUID()
+    db.prepare(
+      `INSERT INTO orders (id, order_number, access_token, customer_id, subtotal, discount, total,
+                           status, quote_valid_until, created_at, completed_at)
+       VALUES (?, 'FOL-2026-9999', ?, ?, 200, 0, 200, 'cancelled',
+               '2099-01-01T00:00:00Z', '2026-06-01T00:00:00Z', '2026-06-04T00:00:00Z')`,
+    ).run(orderId, randomUUID(), adminId)
+    db.prepare(
+      `INSERT INTO order_items (id, order_id, mode_id, paper_id, size_key, quantity, unit_price_c, line_total)
+       VALUES (?, ?, 1, 1, 'A4', 100, 20, 200)`,
+    ).run(itemId, orderId)
+    db.prepare(
+      `INSERT INTO jobs (id, order_item_id, requester_id, title, mode_id, paper_id, size_key, quantity,
+                         pages_consumed, total_cost, quoted_price, profit, status, created_at, completed_at)
+       VALUES (?, ?, ?, 'writeoff-job', 1, 1, 'A4', 100, 80, 50, 200, 150, 'done', ?, ?)`,
+    ).run(randomUUID(), itemId, adminId, '2026-06-03T00:00:00Z', '2026-06-03T00:00:00Z')
+
+    const res = await get('/api/reports/monthly?month=2026-06')
+    expect(res.statusCode).toBe(200)
+    const body = res.json() as {
+      jobs_done: number
+      external: { jobs: number; revenue: number; cost: number; profit: number }
+      writeoff: { jobs: number; cost: number; cost_display: string }
+    }
+    expect(body.jobs_done).toBe(2)
+    expect(body.external).toMatchObject({ jobs: 1, revenue: 500, cost: 200, profit: 300 })
+    expect(body.writeoff).toMatchObject({ jobs: 1, cost: 50 })
+    expect(body.writeoff.cost_display).toBe('¥50')
+  })
+
   it('空月份全零（不报错）', async () => {
     const res = await get('/api/reports/monthly?month=2031-01')
     expect(res.statusCode).toBe(200)
-    const body = res.json() as { jobs_done: number; external: { revenue: number } }
+    const body = res.json() as { jobs_done: number; external: { revenue: number }; writeoff: { jobs: number; cost: number } }
     expect(body.jobs_done).toBe(0)
     expect(body.external.revenue).toBe(0)
+    expect(body.writeoff).toMatchObject({ jobs: 0, cost: 0 })
   })
 })
 

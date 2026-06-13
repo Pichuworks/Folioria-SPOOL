@@ -531,7 +531,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       const { discount } = req.body as { discount: number }
       const order = getOrder(db, id)
       if (!order) return reply.status(404).send({ error: 'not_found' })
-      if (order.status === 'delivered' || order.status === 'cancelled') {
+      if (!['quoted', 'file_pending', 'file_approved'].includes(order.status)) {
         return reply.status(409).send({ error: `not_editable_from_${order.status}` })
       }
       if (discount > order.subtotal) {

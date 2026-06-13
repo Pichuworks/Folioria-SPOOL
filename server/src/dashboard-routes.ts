@@ -53,12 +53,15 @@ export function registerDashboardRoutes(app: FastifyInstance, db: DB): void {
     const m = db
       .prepare(
         `SELECT COUNT(*) AS jobs_done,
-                COALESCE(SUM(CASE WHEN quoted_price IS NOT NULL THEN quoted_price END), 0) AS revenue,
-                COALESCE(SUM(CASE WHEN quoted_price IS NOT NULL THEN total_cost END), 0) AS external_cost,
-                COALESCE(SUM(CASE WHEN quoted_price IS NULL THEN total_cost END), 0) AS internal_cost,
-                COALESCE(SUM(profit), 0) AS profit,
-                COALESCE(SUM(pages_consumed), 0) AS pages
-         FROM jobs WHERE status = 'done' AND substr(completed_at, 1, 7) = ?`,
+                COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.quoted_price END), 0) AS revenue,
+                COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.total_cost END), 0) AS external_cost,
+                COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN j.total_cost END), 0) AS internal_cost,
+                COALESCE(SUM(CASE WHEN COALESCE(o.status,'') != 'cancelled' THEN j.profit END), 0) AS profit,
+                COALESCE(SUM(j.pages_consumed), 0) AS pages
+         FROM jobs j
+         LEFT JOIN order_items oi ON oi.id = j.order_item_id
+         LEFT JOIN orders o ON o.id = oi.order_id
+         WHERE j.status = 'done' AND substr(j.completed_at, 1, 7) = ?`,
       )
       .get(month) as {
       jobs_done: number

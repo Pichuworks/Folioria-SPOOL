@@ -518,6 +518,64 @@ describe('R6 收款与折扣（§5/C7）', () => {
     expect(dto.total_display).toBe('¥100')
   })
 
+  it('折扣分摊：confirm 时 Σ(quoted_price) === total 守恒', async () => {
+    const adminCookie = await login('staff@folioria.jp')
+    const cookie = await login('a@cust.example')
+    const order = await placeOrder(cookie) // subtotal=104 (A4=14, A3=90)
+    stuffFiles(order.id)
+    await reviewAll(adminCookie, order, 'approved')
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/orders/${order.id}/discount`,
+      headers: { cookie: adminCookie },
+      payload: { discount: 4 },
+    })
+
+    const confirmed = await app.inject({
+      method: 'PATCH',
+      url: `/api/orders/${order.id}/status`,
+      headers: { cookie: adminCookie },
+      payload: { status: 'confirmed' },
+    })
+    expect(confirmed.statusCode).toBe(200)
+
+    const jobs = db
+      .prepare(
+        `SELECT quoted_price FROM jobs
+         WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)
+         ORDER BY rowid`,
+      )
+      .all(order.id) as Array<{ quoted_price: number }>
+    expect(jobs.length).toBe(2)
+    // floor(4×14/104)=0, remainder 4 → shares [0, 4]
+    expect(jobs[0]?.quoted_price).toBe(14)
+    expect(jobs[1]?.quoted_price).toBe(86)
+    expect(jobs.reduce((s, j) => s + j.quoted_price, 0)).toBe(100)
+  })
+
+  it('折扣锁定：confirmed 后 PATCH discount → 409', async () => {
+    const adminCookie = await login('staff@folioria.jp')
+    const cookie = await login('a@cust.example')
+    const order = await placeOrder(cookie, [A4_ITEM])
+    stuffFiles(order.id)
+    await reviewAll(adminCookie, order, 'approved')
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/orders/${order.id}/status`,
+      headers: { cookie: adminCookie },
+      payload: { status: 'confirmed' },
+    })
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/orders/${order.id}/discount`,
+      headers: { cookie: adminCookie },
+      payload: { discount: 1 },
+    })
+    expect(res.statusCode).toBe(409)
+  })
+
   it('payment: deposit/paid 落 paid_amount/method/paid_at；unpaid 清零', async () => {
     const adminCookie = await login('staff@folioria.jp')
     const cookie = await login('a@cust.example')
