@@ -5,6 +5,19 @@ import { type DB } from './db.js'
 
 export const SEED_PATH = fileURLToPath(new URL('../../data/seed.json', import.meta.url))
 
+/**
+ * ③⑤/D25: 客户色彩档由模式名派生（K 君定调）。文档=黑白彩色皆可；照片分三品质档(按机器)。
+ * 不改冻结的 seed.json——在导入器里赋值。同逻辑见 migration 0009（既有实例回填）。
+ */
+export function classifyColorClass(name: string): string {
+  if (name.includes('文档')) return 'bw,color'
+  if (name.includes('黑白')) return 'bw'
+  if (name.includes('照片')) return 'photo-value' // 性价比
+  if (name.includes('G580')) return 'photo-premium' // 高质量
+  if (name.includes('P708')) return 'photo-art' // 艺术微喷
+  return 'color' // 彩文/彩色/彩图/OKI 彩色
+}
+
 interface SeedData {
   settings: {
     min_margin_bp: number
@@ -96,8 +109,8 @@ export function importSeed(db: DB, seedPath: string = SEED_PATH): void {
 
     const insertMode = db.prepare(
       `INSERT INTO print_modes (id, name, printer_id, ink_type, pricing_mode, ink_price_c,
-                                ml_per_batch, yield_sheets, ref_size, max_size, duplex, color_tag)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                ml_per_batch, yield_sheets, ref_size, max_size, duplex, color_tag, color_class)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     for (const m of seed.print_modes) {
       insertMode.run(
@@ -113,6 +126,7 @@ export function importSeed(db: DB, seedPath: string = SEED_PATH): void {
         m.max_size,
         m.duplex ? 1 : 0,
         m.color_tag,
+        classifyColorClass(m.name),
       )
     }
 

@@ -416,3 +416,58 @@ describe('管理域成本速查', () => {
     expect(a?.['flag']).toBe('below_margin')
   })
 })
+
+describe('③⑤ /api/calculator/products（客户产品视图）', () => {
+  it('color_class 由 seed 导入器派生（K 君映射）', () => {
+    const cc = Object.fromEntries(
+      (db.prepare('SELECT id, color_class FROM print_modes').all() as Array<{ id: number; color_class: string }>).map(
+        (m) => [m.id, m.color_class],
+      ),
+    )
+    expect(cc[1]).toBe('bw') // C850 黑白单
+    expect(cc[6]).toBe('color') // C850 彩图单（非 photo）
+    expect(cc[7]).toBe('photo-art') // P708 原装
+    expect(cc[9]).toBe('photo-premium') // G580
+    expect(cc[10]).toBe('photo-value') // L15168 照片
+    expect(cc[11]).toBe('bw,color') // L15168 文档单
+  })
+
+  it('产品按 色彩档×技术×纸×尺寸×双面 折叠；含正售价；不泄露机器名/成本', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/calculator/products' })
+    expect(res.statusCode).toBe(200)
+    const body = res.json() as {
+      products: Array<{ category: string; tech: string; sell_c: number; mode_id: number; duplex: boolean }>
+      papers: unknown[]
+      sizes: unknown[]
+    }
+    expect(body.products.length).toBeGreaterThan(50)
+    const cats = new Set(body.products.map((p) => p.category))
+    expect(cats.has('bw')).toBe(true)
+    expect(cats.has('color')).toBe(true)
+    expect([...cats].some((c) => c.startsWith('photo'))).toBe(true)
+    expect(body.products.every((p) => p.sell_c > 0)).toBe(true)
+    // §6 双域：不得泄露 cost/profit/margin，也不得出现机器型号名
+    expect(collectForbiddenKeys(body)).toEqual([])
+    const s = JSON.stringify(body)
+    expect(s.includes('C850')).toBe(false)
+    expect(s.includes('P708')).toBe(false)
+    expect(s.includes('OKI')).toBe(false)
+  })
+
+  it('member 取内部价口径', async () => {
+    db.prepare(
+      `UPDATE combo_prices SET internal_sell_c = 5
+       WHERE size_key = 'A4' AND combo_id = (SELECT id FROM combos WHERE mode_id = 1 AND paper_id = 1)`,
+    ).run()
+    // 内部价覆盖：member 看到的 bw×该纸×A4 产品价 ≤ 对外
+    const pub = (await app.inject({ method: 'GET', url: '/api/calculator/products' })).json() as {
+      products: Array<{ category: string; paper_id: number; size_key: string; sell_c: number }>
+    }
+    const mem = (
+      await app.inject({ method: 'GET', url: '/api/calculator/products', headers: { cookie: memberCookie } })
+    ).json() as { products: Array<{ category: string; paper_id: number; size_key: string; sell_c: number }> }
+    const pick = (b: { products: Array<{ category: string; paper_id: number; size_key: string; sell_c: number }> }) =>
+      b.products.find((p) => p.category === 'bw' && p.paper_id === 1 && p.size_key === 'A4')?.sell_c
+    expect(pick(mem)!).toBeLessThanOrEqual(pick(pub)!)
+  })
+})

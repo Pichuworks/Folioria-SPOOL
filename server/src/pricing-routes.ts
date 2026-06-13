@@ -3,7 +3,7 @@ import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
 import { formatMoney, formatMoneyC, lineTotal } from './money.js'
-import { listQuotable, quote } from './pricing.js'
+import { listProducts, listQuotable, quote } from './pricing.js'
 
 const MONEY_C = { type: 'integer', minimum: 0 }
 const ID_PARAM = {
@@ -628,6 +628,72 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         ).map((m) => ({ ...m, duplex: m.duplex !== 0 })),
         papers: db.prepare('SELECT id, name FROM papers WHERE archived = 0 ORDER BY id').all(),
         options: [...grouped.values()],
+      }
+    },
+  )
+
+  // ③⑤ 客户产品视图：按属性折叠的目录（机器对客户不可见，仅 sell 侧字段，下单域可读）
+  app.get(
+    '/api/calculator/products',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              currency: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  code: { type: 'string' },
+                  symbol: { type: 'string' },
+                  decimal_places: { type: 'integer' },
+                },
+              },
+              papers: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'integer' }, name: { type: 'string' } } } },
+              sizes: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { key: { type: 'string' }, label: { type: 'string' }, sort: { type: 'integer' } } } },
+              products: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    category: { type: 'string' },
+                    tech: { type: 'string' },
+                    paper_id: { type: 'integer' },
+                    size_key: { type: 'string' },
+                    duplex: { type: 'boolean' },
+                    mode_id: { type: 'integer' },
+                    sell_c: { type: 'integer' },
+                    display: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const currency = baseCurrency(db)
+      const internal = req.user?.role === 'member'
+      const products = listProducts(db, { internal }).map((p) => ({
+        category: p.category,
+        tech: p.tech,
+        paper_id: p.paper_id,
+        size_key: p.size_key,
+        duplex: p.duplex !== 0,
+        mode_id: p.mode_id,
+        sell_c: p.sell_c as number,
+        display: formatMoneyC(p.sell_c, currency),
+      }))
+      return {
+        currency,
+        papers: db.prepare('SELECT id, name FROM papers WHERE archived = 0 ORDER BY id').all(),
+        sizes: db.prepare('SELECT key, label, sort FROM sizes ORDER BY sort').all(),
+        products,
       }
     },
   )

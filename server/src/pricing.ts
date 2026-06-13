@@ -197,6 +197,67 @@ export function listQuotable(db: DB, opts?: QuoteOptions): Quote[] {
   return quotes
 }
 
+export interface Product {
+  category: string // bw | color | photo-value | photo-premium | photo-art
+  tech: string // laser | inkjet（照片档客户不选，由品质档决定）
+  paper_id: number
+  size_key: string
+  duplex: number
+  sell_c: MoneyC
+  mode_id: number // 该产品最便宜的可做模式（下单绑定 + admin 可改派）
+}
+
+/**
+ * ③⑤ 客户产品视图：把可报价 (mode,paper,size) 按「色彩档 × 技术 × 纸 × 尺寸 × 单双面」折叠，
+ * 取最低售价 + 对应最便宜模式（机器对客户不可见）。color_class 多值（如 'bw,color'）= 同时归多档。
+ * combos/价不变 → §2.5 stored 基线(187/43)不动，这是叠加的展示层。
+ */
+export function listProducts(db: DB, opts?: QuoteOptions): Product[] {
+  const rows = db
+    .prepare(
+      `SELECT c.mode_id, c.paper_id, s.key AS size_key, m.duplex,
+              COALESCE(m.color_class, 'color') AS color_class, pr.type AS tech
+       FROM combos c
+       JOIN print_modes m ON m.id = c.mode_id AND m.archived = 0
+       JOIN printers pr ON pr.id = m.printer_id AND pr.archived = 0
+       JOIN papers p ON p.id = c.paper_id AND p.archived = 0
+       JOIN sizes mx ON mx.key = m.max_size
+       JOIN sizes s ON s.area <= mx.area
+       JOIN paper_size_costs psc ON psc.paper_id = c.paper_id AND psc.size_key = s.key
+       WHERE c.archived = 0`,
+    )
+    .all() as Array<{
+    mode_id: number
+    paper_id: number
+    size_key: string
+    duplex: number
+    color_class: string
+    tech: string
+  }>
+
+  const map = new Map<string, Product>()
+  for (const r of rows) {
+    const q = quote(db, r.mode_id, r.paper_id, r.size_key, opts)
+    if (!q) continue
+    for (const category of r.color_class.split(',')) {
+      const key = [category, r.tech, r.paper_id, r.size_key, r.duplex].join('|')
+      const cur = map.get(key)
+      if (!cur || (q.sell_c as number) < (cur.sell_c as number)) {
+        map.set(key, {
+          category,
+          tech: r.tech,
+          paper_id: r.paper_id,
+          size_key: r.size_key,
+          duplex: r.duplex,
+          sell_c: q.sell_c,
+          mode_id: r.mode_id,
+        })
+      }
+    }
+  }
+  return [...map.values()]
+}
+
 /** 折旧摊薄（§2.3）：round(equipment_cost_c ÷ (dep_months × month_volume))。不计入报价 total_c，T12 成本快照用 */
 export function overheadC(db: DB, printerId: number): MoneyC {
   const printer = db
