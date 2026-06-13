@@ -3,7 +3,7 @@ import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
-import { availability, canTransition, completeJob, JobError } from './jobs.js'
+import { availability, canTransition, completeJob, JobError, recommendMachines } from './jobs.js'
 import { formatMoney, formatMoneyC, lineTotal, money, moneyC, type Currency } from './money.js'
 import { deriveUnitCost, overheadC } from './pricing.js'
 
@@ -172,6 +172,71 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
         availability: avail,
         availability_warning: avail.available < b.quantity,
       })
+    },
+  )
+
+  // ③⑤ 机器推荐：给定纸×尺寸（可选单/双面），列出能做的机台按 在线→成本→负载 排序
+  app.get(
+    '/api/jobs/recommend',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['paper_id', 'size_key'],
+          additionalProperties: false,
+          properties: {
+            paper_id: { type: 'string' },
+            size_key: { type: 'string' },
+            duplex: { type: 'string', enum: ['0', '1'] },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const q = req.query as { paper_id: string; size_key: string; duplex?: string }
+      const recs = recommendMachines(
+        db,
+        Number(q.paper_id),
+        q.size_key,
+        q.duplex === undefined ? undefined : q.duplex === '1',
+      )
+      const currency = baseCurrency(db)
+      return recs.map((r) => ({ ...r, unit_cost_display: formatMoneyC(moneyC(r.unit_cost_c), currency) }))
+    },
+  )
+
+  // ③⑤ 改派：把作业换到另一台能做的机器（done/cancelled 不可改）；成本快照仍在 done 时按实际机器定格
+  app.patch(
+    '/api/jobs/:id/mode',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+        body: {
+          type: 'object',
+          required: ['mode_id'],
+          additionalProperties: false,
+          properties: { mode_id: { type: 'integer', minimum: 1 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string }
+      const { mode_id } = req.body as { mode_id: number }
+      const job = db.prepare('SELECT status, paper_id, size_key FROM jobs WHERE id = ?').get(id) as
+        | { status: string; paper_id: number; size_key: string }
+        | undefined
+      if (!job) return reply.status(404).send({ error: 'job_not_found' })
+      if (job.status === 'done' || job.status === 'cancelled') {
+        return reply.status(409).send({ error: `not_reassignable_from_${job.status}` })
+      }
+      // 新机器须能做该 纸×尺寸（尺寸≤max_size ∧ 有纸口径）
+      if (!deriveUnitCost(db, mode_id, job.paper_id, job.size_key)) {
+        return reply.status(409).send({ error: 'mode_incapable' })
+      }
+      db.prepare('UPDATE jobs SET mode_id = ? WHERE id = ?').run(mode_id, id)
+      return db.prepare('SELECT * FROM jobs WHERE id = ?').get(id)
     },
   )
 

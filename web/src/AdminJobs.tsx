@@ -4,13 +4,16 @@ import {
   completeJob,
   createJob,
   fetchJobPreview,
+  fetchJobRecommend,
   fetchJobs,
   fetchOptions,
   getJobsCache,
   getOptionsCache,
   patchJobStatus,
+  reassignJobMode,
   type JobDto,
   type JobPreviewDto,
+  type MachineRecDto,
   type OptionsDto,
 } from './api'
 import { Field, Leader, MagSec, PillBtn, SpecRow, specInput } from './spec'
@@ -70,8 +73,51 @@ function DonePanel({ job, onDone }: { job: JobDto; onDone: () => void }) {
   )
 }
 
+function ReassignPanel({ job, onChanged }: { job: JobDto; onChanged: () => void }) {
+  const [recs, setRecs] = useState<MachineRecDto[] | null>(null)
+  useEffect(() => {
+    void fetchJobRecommend(job.paper_id, job.size_key).then(setRecs)
+  }, [job.paper_id, job.size_key])
+  const pick = async (modeId: number) => {
+    if (await reassignJobMode(job.id, modeId)) onChanged()
+  }
+  const tone = (s: string) =>
+    s === 'online' ? 'text-ink' : s === 'offline' || s === 'maintenance' ? 'text-warn' : 'text-dim'
+  return (
+    <div className="mt-2 border border-line bg-deep/40 p-3">
+      <div className="mb-2 font-mono text-[10px] tracking-[.12em] text-dim">RECOMMEND · 在线优先 / 成本升序 / 负载</div>
+      {!recs ? (
+        <p className="text-[12px] text-dim">加载中…</p>
+      ) : recs.length === 0 ? (
+        <p className="text-[12px] text-dim">无可用机台</p>
+      ) : (
+        recs.map((r) => (
+          <div key={r.mode_id} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[6px] last:border-b-0">
+            <span className="text-[13px] text-ink">{r.mode_name}</span>
+            <span className={`font-mono text-[10px] tracking-[.1em] ${tone(r.printer_status)}`}>
+              {r.printer_status.toUpperCase()}
+            </span>
+            <span className="font-mono text-[11px] text-dim">
+              成本 {r.unit_cost_display}/张 · 队列 {r.queue_pages}P
+            </span>
+            <Leader />
+            {r.mode_id === job.mode_id ? (
+              <span className="font-mono text-[10px] tracking-[.1em] text-wine-ink">当前</span>
+            ) : (
+              <button type="button" className="font-mono text-[11px] text-wine-ink hover:opacity-70" onClick={() => void pick(r.mode_id)}>
+                改派此机 →
+              </button>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 function JobRow({ job, onChanged }: { job: JobDto; onChanged: () => void }) {
   const [doneOpen, setDoneOpen] = useState(false)
+  const [reassignOpen, setReassignOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const transition = async (status: 'queued' | 'printing' | 'cancelled') => {
@@ -124,6 +170,9 @@ function JobRow({ job, onChanged }: { job: JobDto; onChanged: () => void }) {
                 完成…
               </button>
             )}
+            <button type="button" className={`${actionBtn} text-dim`} onClick={() => setReassignOpen((v) => !v)}>
+              改派…
+            </button>
             {act('取消', 'cancelled', 'text-dim')}
           </span>
         )}
@@ -134,6 +183,15 @@ function JobRow({ job, onChanged }: { job: JobDto; onChanged: () => void }) {
           job={job}
           onDone={() => {
             setDoneOpen(false)
+            onChanged()
+          }}
+        />
+      )}
+      {reassignOpen && job.status !== 'done' && job.status !== 'cancelled' && (
+        <ReassignPanel
+          job={job}
+          onChanged={() => {
+            setReassignOpen(false)
             onChanged()
           }}
         />

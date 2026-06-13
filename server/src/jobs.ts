@@ -72,6 +72,78 @@ export function availability(db: DB, paperId: number, sizeKey: string): Availabi
   }
 }
 
+export interface MachineRec {
+  mode_id: number
+  mode_name: string
+  printer_id: number
+  printer_code: string
+  printer_status: string
+  unit_cost_c: number
+  queue_pages: number
+}
+
+const STATUS_RANK: Record<string, number> = { online: 0, standby: 1, maintenance: 2, offline: 3 }
+
+/**
+ * 机器推荐（③⑤）：给定 纸×尺寸（可选单/双面），列出所有「能做」的 mode/printer，
+ * 按 在线优先 → 单张参考成本(含 overhead)升序 → 队列负载升序 排序。
+ * 「能做」= deriveUnitCost 非空（尺寸≤max_size ∧ 有纸口径）。成本仅作参考，落账仍用实际机器。
+ */
+export function recommendMachines(
+  db: DB,
+  paperId: number,
+  sizeKey: string,
+  duplex?: boolean,
+): MachineRec[] {
+  const modes = db
+    .prepare(
+      `SELECT m.id, m.name, m.printer_id, m.duplex, p.code AS printer_code, p.status AS printer_status
+       FROM print_modes m JOIN printers p ON p.id = m.printer_id
+       WHERE m.archived = 0 AND p.archived = 0`,
+    )
+    .all() as Array<{
+    id: number
+    name: string
+    printer_id: number
+    duplex: number
+    printer_code: string
+    printer_status: string
+  }>
+
+  const recs: MachineRec[] = []
+  for (const m of modes) {
+    if (duplex !== undefined && m.duplex !== (duplex ? 1 : 0)) continue
+    const cost = deriveUnitCost(db, m.id, paperId, sizeKey)
+    if (!cost) continue
+    const overhead = overheadC(db, m.printer_id)
+    const queue = (
+      db
+        .prepare(
+          `SELECT COALESCE(SUM(quantity), 0) n FROM jobs
+           WHERE mode_id IN (SELECT id FROM print_modes WHERE printer_id = ?)
+             AND status IN ('queued', 'printing')`,
+        )
+        .get(m.printer_id) as { n: number }
+    ).n
+    recs.push({
+      mode_id: m.id,
+      mode_name: m.name,
+      printer_id: m.printer_id,
+      printer_code: m.printer_code,
+      printer_status: m.printer_status,
+      unit_cost_c: cost.total_c + overhead,
+      queue_pages: queue,
+    })
+  }
+  recs.sort(
+    (a, b) =>
+      (STATUS_RANK[a.printer_status] ?? 4) - (STATUS_RANK[b.printer_status] ?? 4) ||
+      a.unit_cost_c - b.unit_cost_c ||
+      a.queue_pages - b.queue_pages,
+  )
+  return recs
+}
+
 export interface CompleteJobInput {
   wasteQuantity: number
   pagesConsumed?: number | undefined

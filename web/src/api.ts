@@ -387,6 +387,30 @@ export async function patchJobStatus(
   return res.ok
 }
 
+export interface MachineRecDto {
+  mode_id: number
+  mode_name: string
+  printer_id: number
+  printer_code: string
+  printer_status: string
+  unit_cost_c: number
+  queue_pages: number
+  unit_cost_display: string
+}
+
+/** ③⑤ 机器推荐：能做该 纸×尺寸 的机台按 在线→成本→负载 排序 */
+export async function fetchJobRecommend(paperId: number, sizeKey: string): Promise<MachineRecDto[]> {
+  const res = await send<MachineRecDto[]>(
+    'GET',
+    `/api/jobs/recommend?paper_id=${paperId}&size_key=${encodeURIComponent(sizeKey)}`,
+  )
+  return res.ok ? res.data : []
+}
+
+/** ③⑤ 改派作业机台 */
+export const reassignJobMode = async (id: string, modeId: number): Promise<boolean> =>
+  (await send('PATCH', `/api/jobs/${id}/mode`, { mode_id: modeId })).ok
+
 export async function completeJob(
   id: string,
   body: { waste_quantity: number; pages_consumed?: number },

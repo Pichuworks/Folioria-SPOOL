@@ -366,3 +366,43 @@ describe('作业其他', () => {
     expect((dup.json() as { error: string }).error).toBe('order_item_already_has_job')
   })
 })
+
+describe('③⑤ 机器推荐 / 改派', () => {
+  const rank = (s: string) => ({ online: 0, standby: 1, maintenance: 2, offline: 3 })[s] ?? 4
+  const recommend = (qs: string) =>
+    app.inject({ method: 'GET', url: `/api/jobs/recommend?${qs}`, headers: { cookie: adminCookie } })
+
+  it('recommend：列出多台能做 paper1/A4 的机台，在线优先、同状态内成本升序', async () => {
+    const res = await recommend('paper_id=1&size_key=A4')
+    expect(res.statusCode).toBe(200)
+    const recs = res.json() as Array<{ mode_id: number; printer_status: string; unit_cost_c: number }>
+    expect(recs.length).toBeGreaterThan(1)
+    for (let i = 1; i < recs.length; i++) {
+      expect(rank(recs[i]!.printer_status)).toBeGreaterThanOrEqual(rank(recs[i - 1]!.printer_status))
+      if (recs[i]!.printer_status === recs[i - 1]!.printer_status) {
+        expect(recs[i]!.unit_cost_c).toBeGreaterThanOrEqual(recs[i - 1]!.unit_cost_c)
+      }
+    }
+  })
+
+  it('改派：换到另一台能做的机器→200；未知机器→409；done 后→409', async () => {
+    const jobId = await makeJob(10)
+    const recs = (await recommend('paper_id=1&size_key=A4')).json() as Array<{ mode_id: number }>
+    const other = recs.find((r) => r.mode_id !== 1)
+    expect(other).toBeTruthy()
+
+    const ok = await patch(`/api/jobs/${jobId}/mode`, { mode_id: other!.mode_id })
+    expect(ok.statusCode).toBe(200)
+    expect((db.prepare('SELECT mode_id FROM jobs WHERE id = ?').get(jobId) as { mode_id: number }).mode_id).toBe(
+      other!.mode_id,
+    )
+
+    const bad = await patch(`/api/jobs/${jobId}/mode`, { mode_id: 999 })
+    expect(bad.statusCode).toBe(409)
+    expect((bad.json() as { error: string }).error).toBe('mode_incapable')
+
+    await patch(`/api/jobs/${jobId}`, { status: 'queued' })
+    await post(`/api/jobs/${jobId}/done`, {})
+    expect((await patch(`/api/jobs/${jobId}/mode`, { mode_id: 1 })).statusCode).toBe(409)
+  })
+})
