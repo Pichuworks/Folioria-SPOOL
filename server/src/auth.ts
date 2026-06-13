@@ -4,6 +4,7 @@ import { type DB } from './db.js'
 
 export const SESSION_TTL_DAYS = 30
 export const VERIFICATION_TTL_HOURS = 48
+export const PASSWORD_RESET_TTL_HOURS = 2
 
 export interface SessionUser {
   id: string
@@ -99,6 +100,48 @@ export function verifyLogin(db: DB, identifier: string, password: string): Sessi
   const { password_hash: _drop, ...user } = row
   void _drop
   return user
+}
+
+/** D19: 找用户以发重置邮件（用户名或邮箱，皆 NOCASE）；不存在返回 null（调用方不得据此泄露存在性） */
+export function findUserForReset(db: DB, identifier: string): { id: string; email: string } | null {
+  const row = db
+    .prepare(
+      `SELECT id, email FROM users WHERE (email = ? OR username = ? COLLATE NOCASE) AND archived = 0`,
+    )
+    .get(identifier, identifier) as { id: string; email: string } | undefined
+  return row ?? null
+}
+
+/** D19: 签发密码重置 token——仅存哈希，返回明文经邮件外送一次 */
+export function issuePasswordReset(db: DB, userId: string): string {
+  const token = randomBytes(32).toString('base64url')
+  db.prepare(
+    'INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)',
+  ).run(hashToken(token), userId, new Date(Date.now() + PASSWORD_RESET_TTL_HOURS * 3_600_000).toISOString())
+  return token
+}
+
+/** D19: 一次性消费重置 token，置新密码、清首登标志、撤销该用户全部会话与其它未消费 token。无效/过期/已用 → false */
+export function resetPassword(db: DB, token: string, newPassword: string): boolean {
+  const now = new Date().toISOString()
+  const row = db
+    .prepare(
+      `SELECT user_id FROM password_reset_tokens
+       WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?`,
+    )
+    .get(hashToken(token), now) as { user_id: string } | undefined
+  if (!row) return false
+  const hash = bcrypt.hashSync(newPassword, 12)
+  db.transaction(() => {
+    db.prepare('UPDATE password_reset_tokens SET consumed_at = ? WHERE token_hash = ?').run(now, hashToken(token))
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hash, row.user_id)
+    // 恢复场景：撤销全部会话（含攻击者可能持有的）与该用户其它未消费 reset token
+    db.prepare('UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(now, row.user_id)
+    db.prepare(
+      'UPDATE password_reset_tokens SET consumed_at = ? WHERE user_id = ? AND consumed_at IS NULL',
+    ).run(now, row.user_id)
+  })()
+  return true
 }
 
 /** 改密成功清 must_change_password（D11）并吊销该用户其他 session */

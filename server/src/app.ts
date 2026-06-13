@@ -7,7 +7,10 @@ import Fastify, { type FastifyError, type FastifyInstance } from 'fastify'
 import {
   changePassword,
   createSession,
+  findUserForReset,
   issueEmailVerification,
+  issuePasswordReset,
+  resetPassword,
   revokeSession,
   userByToken,
   verifyEmail,
@@ -273,6 +276,60 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       const { token } = req.body as { token: string }
       // 无效/过期/已消费一律 404，不泄露 token 存在性
       if (!verifyEmail(db, token)) return reply.status(404).send({ error: 'invalid_or_expired_token' })
+      return reply.status(204).send()
+    },
+  )
+
+  // D19: 忘记密码——请求重置。无论账号是否存在一律 204（不泄露存在性）；存在则发重置邮件
+  app.post(
+    '/api/auth/forgot-password',
+    {
+      config: { rateLimit: { max: 5, timeWindow: '5 minutes' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['identifier'],
+          additionalProperties: false,
+          properties: { identifier: { type: 'string', minLength: 3, maxLength: 254 } },
+        },
+        response: { 204: { type: 'null' } },
+      },
+    },
+    async (req, reply) => {
+      const { identifier } = req.body as { identifier: string }
+      const user = findUserForReset(db, identifier)
+      if (user) {
+        const token = issuePasswordReset(db, user.id)
+        // 分发永不抛错（无 key → skipped 落 notification_log）
+        await notifyAddress(db, 'password_reset', user.email, templates.passwordReset(token))
+      }
+      return reply.status(204).send()
+    },
+  )
+
+  // D19: 重置密码——一次性 token。无效/过期/已用一律 404（不泄露 token 存在性）
+  app.post(
+    '/api/auth/reset-password',
+    {
+      config: { rateLimit: { max: 10, timeWindow: '5 minutes' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['token', 'new_password'],
+          additionalProperties: false,
+          properties: {
+            token: { type: 'string', minLength: 1, maxLength: 200 },
+            new_password: { type: 'string', minLength: 8, maxLength: 200 },
+          },
+        },
+        response: { 204: { type: 'null' }, 404: ERROR_SCHEMA },
+      },
+    },
+    async (req, reply) => {
+      const { token, new_password } = req.body as { token: string; new_password: string }
+      if (!resetPassword(db, token, new_password)) {
+        return reply.status(404).send({ error: 'invalid_or_expired_token' })
+      }
       return reply.status(204).send()
     },
   )

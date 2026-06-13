@@ -148,6 +148,25 @@ export async function logout(): Promise<void> {
   fireAuthChanged()
 }
 
+/** D19: 请求重置——无论账号是否存在都 204，前台一律提示「若存在已发送」 */
+export async function forgotPassword(identifier: string): Promise<void> {
+  await fetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identifier }),
+  })
+}
+
+/** D19: 用 token 设新密码；成功 204 → true，无效/过期 404 → false */
+export async function resetPassword(token: string, newPassword: string): Promise<boolean> {
+  const res = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  })
+  return res.ok
+}
+
 export async function changePassword(oldPassword: string, newPassword: string): Promise<boolean> {
   const res = await fetch('/api/auth/change-password', {
     method: 'POST',

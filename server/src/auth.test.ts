@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs'
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApp, SESSION_COOKIE, type App } from './app.js'
-import { issueEmailVerification, verifyLogin } from './auth.js'
+import { issueEmailVerification, issuePasswordReset, verifyLogin } from './auth.js'
 import { type DB } from './db.js'
 import { spoolInit } from './init.js'
 import { collectForbiddenKeys, createTestUser, makeTestDb } from './test-helpers.js'
@@ -537,6 +537,92 @@ describe('§7 schema 校验边界', () => {
       payload: { email: 'a@b.c', password: 123 },
     })
     expect(wrongType.statusCode).toBe(422)
+  })
+})
+
+describe('D19 忘记密码 / 重置', () => {
+  it('forgot 对存在账号建 token、对未知账号不建（皆 204 不泄露存在性）', async () => {
+    const uid = createTestUser(db, { email: 'reset@cust.example' })
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/forgot-password',
+          payload: { identifier: 'reset@cust.example' },
+        })
+      ).statusCode,
+    ).toBe(204)
+    expect(
+      (db.prepare('SELECT COUNT(*) n FROM password_reset_tokens WHERE user_id = ?').get(uid) as { n: number }).n,
+    ).toBe(1)
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/forgot-password',
+          payload: { identifier: 'ghost@nope.example' },
+        })
+      ).statusCode,
+    ).toBe(204)
+    // 未知账号不建 token
+    expect((db.prepare('SELECT COUNT(*) n FROM password_reset_tokens').get() as { n: number }).n).toBe(1)
+  })
+
+  it('reset：有效 token 改密、吊销旧会话、新密码可登录；token 一次性 + 坏 token 404', async () => {
+    const uid = createTestUser(db, { email: 'reset2@cust.example', password: 'old-password-1' })
+    const { cookie } = await login('reset2@cust.example', 'old-password-1')
+    expect((await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } })).statusCode).toBe(200)
+
+    const token = issuePasswordReset(db, uid)
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/reset-password',
+          payload: { token, new_password: 'brand-new-pass-9' },
+        })
+      ).statusCode,
+    ).toBe(204)
+    // 旧会话被吊销
+    expect((await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } })).statusCode).toBe(401)
+    // 新密码可登录、旧密码失败
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { identifier: 'reset2@cust.example', password: 'brand-new-pass-9' },
+        })
+      ).statusCode,
+    ).toBe(200)
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { identifier: 'reset2@cust.example', password: 'old-password-1' },
+        })
+      ).statusCode,
+    ).toBe(401)
+    // token 一次性 + 坏 token → 404
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/reset-password',
+          payload: { token, new_password: 'another-pass-9' },
+        })
+      ).statusCode,
+    ).toBe(404)
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/reset-password',
+          payload: { token: 'garbage-token', new_password: 'another-pass-9' },
+        })
+      ).statusCode,
+    ).toBe(404)
   })
 })
 

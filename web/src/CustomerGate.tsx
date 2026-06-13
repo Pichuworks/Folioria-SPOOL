@@ -3,6 +3,7 @@ import {
   changePassword,
   fetchMe,
   fetchPublicConfig,
+  forgotPassword,
   getMeCache,
   getPublicConfigCache,
   login,
@@ -34,17 +35,23 @@ const REGISTER_ERROR_TEXT: Record<string, string> = {
 }
 
 function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login')
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [forgotSent, setForgotSent] = useState(false)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    if (mode === 'forgot') {
+      await forgotPassword(email) // email 字段此态即标识符
+      setForgotSent(true)
+      return
+    }
     if (mode === 'login') {
       // email 字段在登录态即「用户名或邮箱」标识符
       const me = await login(email, password)
@@ -69,9 +76,37 @@ function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
       ? 'border-b-2 border-wine pb-1 text-[14px] font-medium text-wine-ink'
       : 'pb-1 text-[14px] text-dim hover:text-ink'
 
-  const switchMode = (m: 'login' | 'register') => {
+  const switchMode = (m: 'login' | 'register' | 'forgot') => {
     setMode(m)
     setError(null)
+    setForgotSent(false)
+  }
+
+  if (mode === 'forgot') {
+    return (
+      <AuthCard tag="ATELIER" title="重置密码">
+        {forgotSent ? (
+          <div className="space-y-4">
+            <p className="text-[13px] leading-[1.85] text-ink">
+              若该用户名/邮箱对应的账号存在，重置链接已发送至其邮箱。请在 2 小时内打开链接设置新密码。
+            </p>
+            <button type="button" className="text-[12.5px] text-dim hover:text-ink" onClick={() => switchMode('login')}>
+              ← 返回登录
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={(e) => void submit(e)} className="space-y-4">
+            <Field label="用户名或邮箱">
+              <input type="text" required className={specInput} value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+            <PillBtn full>发送重置链接</PillBtn>
+            <button type="button" className="text-[12.5px] text-dim hover:text-ink" onClick={() => switchMode('login')}>
+              ← 返回登录
+            </button>
+          </form>
+        )}
+      </AuthCard>
+    )
   }
 
   return (
@@ -127,6 +162,15 @@ function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
         {error && <p className="text-[13px] text-wine-ink">{error}</p>}
         <PillBtn full>{mode === 'login' ? '登录' : '注册并登录'}</PillBtn>
       </form>
+      {mode === 'login' && (
+        <button
+          type="button"
+          className="mt-4 text-[12.5px] text-dim hover:text-ink"
+          onClick={() => switchMode('forgot')}
+        >
+          忘记密码？
+        </button>
+      )}
       {mode === 'register' && (
         <p className="mt-4 text-[11.5px] leading-[1.8] text-dim">
           注册后将向邮箱发送验证链接；完成验证方可在线下单。

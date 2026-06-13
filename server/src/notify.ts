@@ -26,6 +26,7 @@ export interface NotificationChannel {
 
 export type NotifyEvent =
   | 'email_verification'
+  | 'password_reset'
   | 'order_file_pending'
   | 'order_file_rejected'
   | 'order_confirmed'
@@ -139,11 +140,20 @@ export async function notifyAdmins(db: DB, event: NotifyEvent, msg: Notification
 export const verificationLink = (token: string): string =>
   `${process.env['SPOOL_PUBLIC_ORIGIN'] ?? 'http://localhost:5173'}/#/verify/${token}`
 
+export const resetLink = (token: string): string =>
+  `${process.env['SPOOL_PUBLIC_ORIGIN'] ?? 'http://localhost:5173'}/#/reset/${token}`
+
 export const templates = {
   emailVerification(token: string): NotificationMessage {
     return {
       subject: 'Folioria · 邮箱验证',
       text: `感谢注册 Folioria 印刷工坊。\n\n请在 48 小时内打开以下链接完成邮箱验证（验证后方可在线下单）：\n${verificationLink(token)}\n\n若非本人操作，忽略本邮件即可。`,
+    }
+  },
+  passwordReset(token: string): NotificationMessage {
+    return {
+      subject: 'Folioria · 重置密码',
+      text: `我们收到了重置该账号密码的请求。\n\n请在 2 小时内打开以下链接设置新密码：\n${resetLink(token)}\n\n若非本人操作，忽略本邮件即可，密码不会变更。`,
     }
   },
   orderFilePending(orderNumber: string): NotificationMessage {

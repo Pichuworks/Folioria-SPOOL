@@ -14,6 +14,7 @@ import MyOrders from './MyOrders'
 import OrderView from './OrderView'
 import PriceList from './PriceList'
 import Quote from './Quote'
+import ResetPassword from './ResetPassword'
 import { Shell } from './spec'
 import VerifyEmail from './VerifyEmail'
 
@@ -70,6 +71,10 @@ function resolve(hash: string): Resolved | null {
   const verify = /^#\/verify\/([A-Za-z0-9_-]+)$/.exec(hash)
   if (verify?.[1]) {
     return { title: '邮箱验证', folio: 'EMAIL VERIFICATION', node: <VerifyEmail token={verify[1]} />, navKey: null }
+  }
+  const reset = /^#\/reset\/([A-Za-z0-9_-]+)$/.exec(hash)
+  if (reset?.[1]) {
+    return { title: '重置密码', folio: 'PASSWORD RESET', node: <ResetPassword token={reset[1]} />, navKey: null }
   }
   return null // → Home
 }
