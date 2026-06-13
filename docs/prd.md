@@ -397,6 +397,8 @@ feat / fix / refactor / style / data / docs / test / chore
 | D18 | 用户名登录 | users.username 可选第二登录标识（0005 migration，部分唯一索引 COLLATE NOCASE on column）；email 仍为通知/验证主干与必填唯一键。登录 body 改 identifier（用户名或邮箱，保留 email 别名向后兼容），verifyLogin 以 `email=? OR username=? COLLATE NOCASE` 解析；username 格式 ^[a-z0-9_]{3,30}$（禁 '@'/空格保持解析无歧义）；重名 409 username_taken（与 email_exists 同为既有枚举面，不新增更敏感口径） |
 | D19 | 忘记密码 | 独立 password_reset_tokens 表（0006 migration，不复用验证 token——信任级别不同）；仅存 sha256、2h、一次性。POST /api/auth/forgot-password 无论账号是否存在一律 204（不泄露存在性），存在则发 password_reset 邮件。POST /api/auth/reset-password 无效/过期/已用一律 404；成功置新密码、清 must_change_password、撤销该用户全部会话与其它未消费 reset token。前台 #/reset/:token + 登录页「忘记密码」入口 |
 | D20 | Web 初始化向导 | POST /api/setup 包住 CLI 同款 spoolInit（id=1 守卫即「仅未初始化可达」真锁，重复 409 already_initialized）；body 基准货币/首位 admin（+可选 seed 导入），向导自设密码故置 must_change_password=0 并自动登录。无 schema 变更（GET /api/public-config 的 initialized 供前台首屏判定，未初始化即强制 #/setup 盖过路由）。CLI spool init 仍为无头部署路径，先写者赢 |
+| D21 | 页计数口径（待 K 君确认） | jobs.pages_consumed / printers.total_pages / per_page 耗材 current_usage_pages 一律按 **impression（面）** 计：双面作业每张 = 2 面，故 completeJob 默认 `pages = (quantity+waste) × (duplex?2:1)` 正确。与成本侧解耦——成本走 ink_c（yield_sheets 已含双面减半），计数走面数，两套口径各自自洽。acceptance §3.1 仅覆盖单面(203 面 1:1)，双面口径据此裁定，实现不变 |
+| D22 | 地板价成本基数（待 K 君确认） | 自动地板价 ceil 的成本基数 = **仅直接材料 ink_c+paper_c**（不含 overhead），故 §2.2/§2.5 基线（74→225…）不变；overhead 仅在 done 成本快照计入 total_cost。结论：「永不击穿 67%」是对**直接材料**的毛利保证，overhead 作为另一层成本会侵蚀该毛利垫，账面实际毛利可低于 67% —— 此为有意设计（改地板会牵动全量回归基线），非 bug，实现不变 |
 
 ---
 
