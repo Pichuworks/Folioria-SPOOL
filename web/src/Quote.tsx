@@ -3,14 +3,15 @@ import {
   createGuestOrder,
   createOrder,
   fetchMe,
-  fetchOptions,
+  fetchProducts,
   fetchPublicConfig,
   fetchQuote,
   getMeCache,
-  getOptionsCache,
+  getProductsCache,
   getPublicConfigCache,
   type MeDto,
-  type OptionsDto,
+  type ProductDto,
+  type ProductsDto,
   type QuoteDto,
 } from './api'
 import { VerifyBanner } from './CustomerGate'
@@ -18,6 +19,16 @@ import CustomerGate from './CustomerGate'
 import { Field, Leader, MagSec, specInput } from './spec'
 
 type QuoteState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
+
+const CAT_LABEL: Record<string, string> = {
+  bw: '黑白',
+  color: '彩色',
+  'photo-value': '照片·性价比',
+  'photo-premium': '照片·高质量',
+  'photo-art': '照片·艺术微喷',
+}
+const TECH_LABEL: Record<string, string> = { laser: '激光', inkjet: '喷墨' }
+const GRADE_LABEL: Record<string, string> = { 'photo-value': '性价比', 'photo-premium': '高质量', 'photo-art': '艺术微喷' }
 
 /** 登录门过门回跳：在 effect 中回写状态，避免渲染期 setState */
 function GateReturn({ me, onReady }: { me: MeDto; onReady: (m: MeDto) => void }) {
@@ -37,11 +48,14 @@ interface CartLine {
   line_total_display: string
 }
 
-/** R8 #/quote：公开配置器 + 多行购物车；提交即下单（登录/注册门 + 邮箱验证门） */
+/** ③⑤ #/quote：按属性（类别/纸/尺寸/双面/技术 或 照片品质档）选,机器对客户不可见 */
 export default function Quote() {
-  const [options, setOptions] = useState<OptionsDto | null>(getOptionsCache)
+  const [data, setData] = useState<ProductsDto | null>(getProductsCache)
   const [error, setError] = useState<string | null>(null)
-  const [modeId, setModeId] = useState<number | null>(null)
+  const [category, setCategory] = useState<'bw' | 'color' | 'photo' | null>(null)
+  const [grade, setGrade] = useState<string | null>(null)
+  const [tech, setTech] = useState<string | null>(null)
+  const [duplex, setDuplex] = useState<boolean | null>(null)
   const [paperId, setPaperId] = useState<number | null>(null)
   const [sizeKey, setSizeKey] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(100)
@@ -59,39 +73,63 @@ export default function Quote() {
   const [guestName, setGuestName] = useState('')
 
   useEffect(() => {
-    fetchOptions()
-      .then(setOptions)
+    fetchProducts()
+      .then(setData)
       .catch(() => {
-        if (!getOptionsCache()) setError('价目数据加载失败')
+        if (!getProductsCache()) setError('价目数据加载失败')
       })
     fetchMe().then(setMe).catch(() => setMe(null))
     fetchPublicConfig().then((c) => setGuestOpen(c.guest_orders_open)).catch(() => {})
   }, [])
 
-  const papersForMode = useMemo(() => {
-    if (!options || modeId === null) return []
-    const ids = new Set(options.options.filter((o) => o.mode_id === modeId).map((o) => o.paper_id))
-    return options.papers.filter((p) => ids.has(p.id))
-  }, [options, modeId])
+  const products = useMemo(() => data?.products ?? [], [data])
+  const paperName = (id: number) => data?.papers.find((p) => p.id === id)?.name ?? `纸 ${id}`
+  const sizeLabel = (k: string) => data?.sizes.find((s) => s.key === k)?.label ?? k
 
-  const pricesForPair = useMemo(() => {
-    if (!options || modeId === null || paperId === null) return null
-    return options.options.find((o) => o.mode_id === modeId && o.paper_id === paperId)?.prices ?? null
-  }, [options, modeId, paperId])
+  const hasBw = products.some((p) => p.category === 'bw')
+  const hasColor = products.some((p) => p.category === 'color')
+  const photoGrades = useMemo(
+    () => [...new Set(products.filter((p) => p.category.startsWith('photo-')).map((p) => p.category))],
+    [products],
+  )
+
+  const effCat = category === 'photo' ? grade : category
+  const pool = useMemo(() => (effCat ? products.filter((p) => p.category === effCat) : []), [products, effCat])
+  const papers = useMemo(() => {
+    const ids = new Set(pool.map((p) => p.paper_id))
+    return (data?.papers ?? []).filter((p) => ids.has(p.id))
+  }, [pool, data])
+  const afterPaper = useMemo(() => pool.filter((p) => paperId == null || p.paper_id === paperId), [pool, paperId])
+  const sizes = useMemo(() => {
+    const keys = new Set(afterPaper.map((p) => p.size_key))
+    return (data?.sizes ?? []).filter((s) => keys.has(s.key)).sort((a, b) => a.sort - b.sort)
+  }, [afterPaper, data])
+  const afterSize = useMemo(
+    () => afterPaper.filter((p) => sizeKey == null || p.size_key === sizeKey),
+    [afterPaper, sizeKey],
+  )
+  const techs = useMemo(() => [...new Set(afterSize.map((p) => p.tech))], [afterSize])
+  const duplexes = useMemo(() => [...new Set(afterSize.map((p) => p.duplex))], [afterSize])
+
+  const resolved: ProductDto | null = useMemo(() => {
+    if (!effCat) return null
+    let c = afterSize
+    if (category !== 'photo') {
+      if (techs.length > 1) c = tech ? c.filter((p) => p.tech === tech) : []
+      if (duplexes.length > 1) c = duplex !== null ? c.filter((p) => p.duplex === duplex) : []
+    }
+    return c.length === 1 ? (c[0] as ProductDto) : null
+  }, [effCat, category, afterSize, techs, tech, duplexes, duplex])
 
   useEffect(() => {
     setQuote(null)
-    if (modeId === null || paperId === null || sizeKey === null || quantity < 1) {
-      setQuoteState('idle')
-      return
-    }
-    if (!pricesForPair || !(sizeKey in pricesForPair)) {
+    if (!resolved || quantity < 1) {
       setQuoteState('idle')
       return
     }
     setQuoteState('loading')
     const ctl = new AbortController()
-    fetchQuote({ mode_id: modeId, paper_id: paperId, size_key: sizeKey, quantity })
+    fetchQuote({ mode_id: resolved.mode_id, paper_id: resolved.paper_id, size_key: resolved.size_key, quantity })
       .then((q) => {
         if (ctl.signal.aborted) return
         setQuote(q)
@@ -101,21 +139,30 @@ export default function Quote() {
         if (!ctl.signal.aborted) setQuoteState('error')
       })
     return () => ctl.abort()
-  }, [modeId, paperId, sizeKey, quantity, pricesForPair])
+  }, [resolved, quantity])
+
+  const pickCategory = (c: 'bw' | 'color' | 'photo') => {
+    setCategory(c)
+    setGrade(null)
+    setTech(null)
+    setDuplex(null)
+    setPaperId(null)
+    setSizeKey(null)
+  }
 
   const addToCart = () => {
-    if (!quote || !options) return
-    const modeName = options.modes.find((m) => m.id === quote.mode_id)?.name ?? `模式 ${quote.mode_id}`
-    const paperName = options.papers.find((p) => p.id === quote.paper_id)?.name ?? `纸 ${quote.paper_id}`
-    const sizeLabel = options.sizes.find((s) => s.key === quote.size_key)?.label ?? quote.size_key
+    if (!quote || !resolved) return
+    const techPart = category !== 'photo' && resolved.tech ? ` · ${TECH_LABEL[resolved.tech] ?? resolved.tech}` : ''
+    const sidePart = category !== 'photo' ? (resolved.duplex ? ' · 双面' : ' · 单面') : ''
+    const label = `${CAT_LABEL[resolved.category] ?? resolved.category}${techPart} · ${paperName(resolved.paper_id)} · ${sizeLabel(resolved.size_key)}${sidePart}`
     setCart((prev) => [
       ...prev,
       {
-        mode_id: quote.mode_id,
-        paper_id: quote.paper_id,
-        size_key: quote.size_key,
+        mode_id: resolved.mode_id,
+        paper_id: resolved.paper_id,
+        size_key: resolved.size_key,
         quantity: quote.quantity,
-        label: `${modeName} × ${paperName} · ${sizeLabel}`,
+        label,
         unit_display: quote.unit_display,
         line_total_display: quote.line_total_display,
       },
@@ -139,7 +186,6 @@ export default function Quote() {
   const submit = async () => {
     if (cart.length === 0) return
     if (!me) {
-      // 未登录：开放访客下单则走访客通道（需邮箱+称呼），否则进登录门
       if (!guestOpen) {
         setNeedLogin(true)
         return
@@ -181,7 +227,7 @@ export default function Quote() {
   }
 
   if (error) return <p className="pt-13 text-[14px] text-wine-ink">{error}</p>
-  if (!options) return <p className="pt-13 text-[14px] text-dim">价目加载中…</p>
+  if (!data) return <p className="pt-13 text-[14px] text-dim">价目加载中…</p>
 
   if (needLogin && !me) {
     return (
@@ -190,7 +236,6 @@ export default function Quote() {
           <GateReturn
             me={gateMe}
             onReady={(m) => {
-              // 过门即返回购物车（cart 状态保留在本组件）
               setMe(m)
               setNeedLogin(false)
             }}
@@ -200,66 +245,122 @@ export default function Quote() {
     )
   }
 
+  const catBtn = (active: boolean) =>
+    `flex-1 rounded-full border px-3 py-2 text-[13.5px] transition-opacity ${
+      active ? 'border-wine bg-wine text-cream' : 'border-line text-dim hover:text-ink'
+    }`
+
   return (
-    <MagSec tag="下单" title="自助报价 · 在线下单" note="CONFIG → CART → ORDER">
+    <MagSec tag="下单" title="自助报价 · 在线下单" note="选内容 → 清单 → 下单">
       {me && <VerifyBanner me={me} />}
       <div className="mt-2 grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
-        {/* 左栏：配置器 */}
+        {/* 左栏：属性配置器 */}
         <div className="space-y-5 border-b border-ink p-7 md:border-b-0 md:border-r">
-          <div className="font-mono text-[10px] tracking-[.14em] text-dim">CONFIGURATION</div>
-          <Field label="打印模式">
-            <select
-              className={specInput}
-              value={modeId ?? ''}
-              onChange={(e) => {
-                setModeId(e.target.value === '' ? null : Number(e.target.value))
-                setPaperId(null)
-                setSizeKey(null)
-              }}
-            >
-              <option value="">— 选择 —</option>
-              {options.modes.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+          <div className="font-mono text-[10px] tracking-[.14em] text-dim">想打什么</div>
+
+          <Field label="类别">
+            <div className="flex gap-2">
+              {hasBw && (
+                <button type="button" className={catBtn(category === 'bw')} onClick={() => pickCategory('bw')}>
+                  黑白
+                </button>
+              )}
+              {hasColor && (
+                <button type="button" className={catBtn(category === 'color')} onClick={() => pickCategory('color')}>
+                  彩色
+                </button>
+              )}
+              {photoGrades.length > 0 && (
+                <button type="button" className={catBtn(category === 'photo')} onClick={() => pickCategory('photo')}>
+                  照片
+                </button>
+              )}
+            </div>
           </Field>
+
+          {category === 'photo' && (
+            <Field label="品质档">
+              <select
+                className={specInput}
+                value={grade ?? ''}
+                onChange={(e) => {
+                  setGrade(e.target.value === '' ? null : e.target.value)
+                  setPaperId(null)
+                  setSizeKey(null)
+                }}
+              >
+                <option value="">— 选择 —</option>
+                {photoGrades.map((g) => (
+                  <option key={g} value={g}>
+                    {GRADE_LABEL[g] ?? g}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+
           <Field label="纸张">
             <select
               className={specInput}
               value={paperId ?? ''}
-              disabled={modeId === null}
+              disabled={!effCat}
               onChange={(e) => {
                 setPaperId(e.target.value === '' ? null : Number(e.target.value))
                 setSizeKey(null)
               }}
             >
               <option value="">— 选择 —</option>
-              {papersForMode.map((p) => (
+              {papers.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
             </select>
           </Field>
+
           <Field label="尺寸">
             <select
               className={specInput}
               value={sizeKey ?? ''}
-              disabled={pricesForPair === null}
+              disabled={paperId === null}
               onChange={(e) => setSizeKey(e.target.value === '' ? null : e.target.value)}
             >
               <option value="">— 选择 —</option>
-              {options.sizes
-                .filter((s) => pricesForPair && s.key in pricesForPair)
-                .map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}（{pricesForPair?.[s.key]?.display}/张）
-                  </option>
-                ))}
+              {sizes.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
             </select>
           </Field>
+
+          {category !== 'photo' && category !== null && techs.length > 1 && (
+            <Field label="打印技术">
+              <select className={specInput} value={tech ?? ''} onChange={(e) => setTech(e.target.value || null)}>
+                <option value="">— 选择 —</option>
+                {techs.map((t) => (
+                  <option key={t} value={t}>
+                    {TECH_LABEL[t] ?? t}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          {category !== 'photo' && category !== null && duplexes.length > 1 && (
+            <Field label="单面 / 双面">
+              <select
+                className={specInput}
+                value={duplex === null ? '' : duplex ? '1' : '0'}
+                onChange={(e) => setDuplex(e.target.value === '' ? null : e.target.value === '1')}
+              >
+                <option value="">— 选择 —</option>
+                <option value="0">单面</option>
+                <option value="1">双面</option>
+              </select>
+            </Field>
+          )}
+
           <Field label="数量（张）">
             <input
               type="number"
@@ -286,7 +387,7 @@ export default function Quote() {
                     ? '该组合暂不可报价。'
                     : quoteState === 'error'
                       ? '报价服务暂时不可用。'
-                      : '选定配置后显示报价。'}
+                      : '选齐属性后显示报价。'}
               </p>
             )}
             <button
@@ -305,7 +406,7 @@ export default function Quote() {
           <div className="font-mono text-[10px] tracking-[.14em] text-dim">ORDER LINES · {cart.length}</div>
           {cart.length === 0 ? (
             <p className="flex-1 py-12 text-[13px] leading-[1.85] text-dim">
-              清单为空——左侧配置后「加入订单清单」，可多行混排不同工艺与纸张。
+              清单为空——左侧选定内容后「加入订单清单」，可多行混排不同类别与纸张。
             </p>
           ) : (
             <div className="mt-3 flex-1">

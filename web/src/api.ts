@@ -109,6 +109,32 @@ export async function fetchOptions(): Promise<OptionsDto> {
   return optionsCache
 }
 
+// ③⑤ 客户产品视图：按属性折叠的目录（机器不可见）
+export interface ProductDto {
+  category: string
+  tech: string
+  paper_id: number
+  size_key: string
+  duplex: boolean
+  mode_id: number
+  sell_c: number
+  display: string
+}
+export interface ProductsDto {
+  currency: CurrencyDto
+  papers: Array<{ id: number; name: string }>
+  sizes: Array<{ key: string; label: string; sort: number }>
+  products: ProductDto[]
+}
+let productsCache: ProductsDto | null = null
+export const getProductsCache = (): ProductsDto | null => productsCache
+export async function fetchProducts(): Promise<ProductsDto> {
+  const res = await fetch('/api/calculator/products')
+  if (!res.ok) throw new Error(`products failed: ${res.status}`)
+  productsCache = (await res.json()) as ProductsDto
+  return productsCache
+}
+
 export interface MeDto {
   id: string
   email: string
