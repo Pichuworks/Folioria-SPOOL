@@ -15,6 +15,7 @@ interface MonthlyDto {
     profit_display: string
   }
   internal: { jobs: number; pages: number; cost_display: string }
+  writeoff: { jobs: number; cost: number; cost_display: string }
 }
 
 interface UsageDto {
@@ -90,6 +91,11 @@ function ReportsBody() {
               <SpecRow label="内部作业" value={monthly.internal.jobs} />
               <SpecRow label="内部页数" value={`${monthly.internal.pages} 面`} />
               <SpecRow label="内部成本" value={monthly.internal.cost_display} strong />
+              <SpecRow
+                label="作废核销"
+                note="取消单已发生成本"
+                value={`${monthly.writeoff.jobs} 单 · ${monthly.writeoff.cost_display}`}
+              />
               <SpecRow label="全月合计" note="含内外" value={`${monthly.jobs_done} 单 · ${monthly.pages} 面`} />
             </div>
           </div>

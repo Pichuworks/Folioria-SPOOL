@@ -26,6 +26,15 @@ export function registerAlertsRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
+  // 通知投递留痕只读视图（admin）：暴露 sent/failed/skipped，让静默失败/跳过可见
+  app.get('/api/notifications', { preHandler: requireAdmin }, async () =>
+    db
+      .prepare(
+        'SELECT id, event, channel, recipient, status, error, sent_at FROM notification_log ORDER BY sent_at DESC LIMIT 200',
+      )
+      .all(),
+  )
+
   app.patch('/api/alerts/:id/acknowledge', { preHandler: requireAdmin }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const { changes } = db

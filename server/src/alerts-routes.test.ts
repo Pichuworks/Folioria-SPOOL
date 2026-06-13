@@ -44,6 +44,19 @@ describe('§4 提醒 API', () => {
     expect((open.json() as unknown[]).length).toBe(1)
   })
 
+  it('GET /api/notifications：admin 可读通知日志，guest 401', async () => {
+    db.prepare(
+      `INSERT INTO notification_log (id, event, channel, recipient, status, sent_at)
+       VALUES ('nl-1', 'order_ready', 'email', 'a@b.jp', 'skipped', '2026-06-12T00:00:00Z')`,
+    ).run()
+    expect((await app.inject({ method: 'GET', url: '/api/notifications' })).statusCode).toBe(401)
+    const ok = await app.inject({ method: 'GET', url: '/api/notifications', headers: { cookie: adminCookie } })
+    expect(ok.statusCode).toBe(200)
+    const rows = ok.json() as Array<{ status: string; recipient: string }>
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.status).toBe('skipped')
+  })
+
   it('acknowledge 记录操作者；resolve 后可再次产生同源提醒', async () => {
     seedAlert()
     const id = (db.prepare('SELECT id FROM alerts').get() as { id: string }).id

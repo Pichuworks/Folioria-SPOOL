@@ -30,6 +30,54 @@ export interface PriceEntryDto {
   display: string
 }
 
+// ---------- 报警收件箱 / 通知日志（管理域运维可见性，Tier 0）----------
+
+export interface AlertDto {
+  id: string
+  type: string
+  severity: 'info' | 'warning' | 'critical'
+  target_type: string
+  target_id: string
+  message: string
+  acknowledged: number
+  acknowledged_by: string | null
+  created_at: string
+  resolved_at: string | null
+}
+
+export async function fetchAlerts(all = false): Promise<AlertDto[]> {
+  const res = await send<AlertDto[]>('GET', `/api/alerts${all ? '?all=1' : ''}`)
+  return res.ok ? res.data : []
+}
+export const acknowledgeAlert = async (id: string): Promise<boolean> =>
+  (await send('PATCH', `/api/alerts/${id}/acknowledge`)).ok
+export const resolveAlertReq = async (id: string): Promise<boolean> =>
+  (await send('PATCH', `/api/alerts/${id}/resolve`)).ok
+
+export interface ScanResult {
+  low_stock: number
+  consumable_low: number
+  calibration_due: number
+}
+export async function scanAlerts(): Promise<ScanResult | null> {
+  const res = await send<ScanResult>('POST', '/api/alerts/scan', {})
+  return res.ok ? res.data : null
+}
+
+export interface NotificationLogDto {
+  id: string
+  event: string
+  channel: string
+  recipient: string
+  status: 'sent' | 'failed' | 'skipped'
+  error: string | null
+  sent_at: string
+}
+export async function fetchNotifications(): Promise<NotificationLogDto[]> {
+  const res = await send<NotificationLogDto[]>('GET', '/api/notifications')
+  return res.ok ? res.data : []
+}
+
 export interface OptionsDto {
   currency: CurrencyDto
   sizes: Array<{ key: string; label: string; sort: number }>
