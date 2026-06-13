@@ -124,6 +124,26 @@ describe('§3.1 done 落账（单事务）', () => {
     expect(job['completed_at']).not.toBeNull()
   })
 
+  it('§3.1 跨多库位扣减：大库位优先、末行吸收，consume/scrap 正确切分（C3）', async () => {
+    db.prepare('DELETE FROM paper_stocks').run()
+    db.prepare("INSERT INTO paper_stocks (id, paper_id, size_key, quantity) VALUES ('r-big', 1, 'A4', 120)").run()
+    db.prepare("INSERT INTO paper_stocks (id, paper_id, size_key, quantity) VALUES ('r-small', 1, 'A4', 90)").run()
+
+    const jobId = await makeJob(200, 14)
+    await patch(`/api/jobs/${jobId}`, { status: 'queued' })
+    expect((await post(`/api/jobs/${jobId}/done`, { waste_quantity: 3 })).statusCode).toBe(200)
+
+    // 203 张跨两行：大行 120→0、小行 90→7（合计 −203）
+    expect((db.prepare("SELECT quantity FROM paper_stocks WHERE id='r-big'").get() as { quantity: number }).quantity).toBe(0)
+    expect((db.prepare("SELECT quantity FROM paper_stocks WHERE id='r-small'").get() as { quantity: number }).quantity).toBe(7)
+    // consume 合计 −200、scrap 合计 −3（与单行口径守恒）
+    const sums = db
+      .prepare("SELECT action, SUM(quantity_delta) s FROM inventory_log WHERE related_job_id = ? GROUP BY action")
+      .all(jobId) as Array<{ action: string; s: number }>
+    expect(sums.find((x) => x.action === 'consume')?.s).toBe(-200)
+    expect(sums.find((x) => x.action === 'scrap')?.s).toBe(-3)
+  })
+
   it('事务中途失败 → 全部回滚，无半账（触发器强制 printer 更新失败）', async () => {
     const jobId = await makeJob(200)
     await patch(`/api/jobs/${jobId}`, { status: 'queued' })

@@ -110,14 +110,30 @@ export function completeJob(db: DB, jobId: string, input: CompleteJobInput): voi
   const totalCost = lineTotal(unitTotal, consumed)
   const profit = job.quoted_price == null ? null : job.quoted_price - totalCost
 
-  const stock = db
+  // §3.1 扣减须与 availability() 同口径（按 paper×size 汇总）：跨多库位确定性抽取，
+  // 大库位优先、最后一行吸收不足（账面可为负，不阻断）。物理抽取额按「先 consume(quantity) 后 scrap(waste)」切分到各行。
+  const stockRows = db
     .prepare(
       `SELECT id, quantity FROM paper_stocks
        WHERE paper_id = ? AND size_key = ? AND archived = 0
-       ORDER BY quantity DESC LIMIT 1`,
+       ORDER BY quantity DESC, id`,
     )
-    .get(job.paper_id, job.size_key) as { id: string; quantity: number } | undefined
-  if (!stock) throw new JobError(409, 'no_stock_record')
+    .all(job.paper_id, job.size_key) as Array<{ id: string; quantity: number }>
+  if (stockRows.length === 0) throw new JobError(409, 'no_stock_record')
+
+  const draws: Array<{ id: string; before: number; consume: number; scrap: number }> = []
+  let remaining = consumed
+  let consumeLeft = job.quantity
+  for (let i = 0; i < stockRows.length && remaining > 0; i++) {
+    const row = stockRows[i] as { id: string; quantity: number }
+    const isLast = i === stockRows.length - 1
+    const take = isLast ? remaining : Math.min(row.quantity, remaining)
+    if (take <= 0) continue
+    const consumePart = Math.min(take, consumeLeft)
+    consumeLeft -= consumePart
+    draws.push({ id: row.id, before: row.quantity, consume: consumePart, scrap: take - consumePart })
+    remaining -= take
+  }
 
   const now = new Date().toISOString()
   const insertLog = db.prepare(
@@ -127,20 +143,25 @@ export function completeJob(db: DB, jobId: string, input: CompleteJobInput): voi
   )
 
   db.transaction(() => {
-    db.prepare('UPDATE paper_stocks SET quantity = quantity - ? WHERE id = ?').run(consumed, stock.id)
-    insertLog.run(randomUUID(), stock.id, 'consume', -job.quantity, null, input.operatorId ?? null, jobId, now)
-    if (waste > 0) {
-      insertLog.run(randomUUID(), stock.id, 'scrap', -waste, '废品', input.operatorId ?? null, jobId, now)
-    }
-    // 实物打穿账面：不阻断（已发生的消耗必须入账），但立即拉响警报
-    if (stock.quantity - consumed < 0) {
-      raiseAlert(db, {
-        type: 'low_stock',
-        severity: 'critical',
-        target_type: 'paper_stock',
-        target_id: stock.id,
-        message: `作业 ${jobId} 落账后账面为负（${stock.quantity - consumed}），需盘点调整`,
-      })
+    for (const d of draws) {
+      const drawn = d.consume + d.scrap
+      db.prepare('UPDATE paper_stocks SET quantity = quantity - ? WHERE id = ?').run(drawn, d.id)
+      if (d.consume > 0) {
+        insertLog.run(randomUUID(), d.id, 'consume', -d.consume, null, input.operatorId ?? null, jobId, now)
+      }
+      if (d.scrap > 0) {
+        insertLog.run(randomUUID(), d.id, 'scrap', -d.scrap, '废品', input.operatorId ?? null, jobId, now)
+      }
+      // 实物打穿账面：不阻断（已发生的消耗必须入账），但该库位立即拉响警报
+      if (d.before - drawn < 0) {
+        raiseAlert(db, {
+          type: 'low_stock',
+          severity: 'critical',
+          target_type: 'paper_stock',
+          target_id: d.id,
+          message: `作业 ${jobId} 落账后库位 ${d.id} 账面为负（${d.before - drawn}），需盘点调整`,
+        })
+      }
     }
 
     const consumables = db
