@@ -135,6 +135,11 @@ export async function changePassword(oldPassword: string, newPassword: string): 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   })
+  // 改密成功即清首登标志，广播让导航三态/门即时解锁（D11）
+  if (res.ok && meCache) {
+    meCache = { ...meCache, must_change_password: false }
+    fireAuthChanged()
+  }
   return res.ok
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { fetchMe, getMeCache, login, logout, register, type MeDto } from './api'
+import { changePassword, fetchMe, getMeCache, login, logout, register, type MeDto } from './api'
 import { Field, PillBtn, specInput } from './spec'
 
 /** 下单域统一门：登录 / 注册（R4 开放注册）。过门后渲染 children；未验证邮箱给横幅提示 */
@@ -106,6 +106,34 @@ function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
   )
 }
 
+/** 首登强制改密（D11）：admin 供给的 customer/member 账号也走下单域门，必须能在此清标志 */
+function ChangePasswordForm({ onDone }: { onDone: () => void }) {
+  const [oldPw, setOldPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (await changePassword(oldPw, newPw)) onDone()
+    else setError('修改失败：请确认旧密码正确且新密码 ≥ 8 位')
+  }
+
+  return (
+    <AuthCard tag="ROTATION" title="首次登录须修改密码">
+      <form onSubmit={(e) => void submit(e)} className="space-y-4">
+        <Field label="当前密码">
+          <input type="password" required className={specInput} value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
+        </Field>
+        <Field label="新密码（≥8 位）">
+          <input type="password" required minLength={8} className={specInput} value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+        </Field>
+        {error && <p className="text-[13px] text-wine-ink">{error}</p>}
+        <PillBtn full>修改密码</PillBtn>
+      </form>
+    </AuthCard>
+  )
+}
+
 export function VerifyBanner({ me }: { me: MeDto }) {
   if (me.email_verified) return null
   return (
@@ -124,6 +152,9 @@ export default function CustomerGate({ children }: { children: (me: MeDto) => Re
 
   if (me === undefined) return <p className="pt-13 text-[14px] text-dim">加载中…</p>
   if (me === null) return <AuthForms onLogin={setMe} />
+  if (me.must_change_password) {
+    return <ChangePasswordForm onDone={() => setMe({ ...me, must_change_password: false })} />
+  }
 
   return (
     <div>
