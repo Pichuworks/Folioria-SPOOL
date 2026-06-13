@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { buildApp, type App } from './app.js'
 import { type DB } from './db.js'
 import { spoolInit } from './init.js'
 import { importSeed } from './seed.js'
@@ -61,5 +62,47 @@ describe('spool init（B1：初始 admin + 基准货币）', () => {
     spoolInit(db, OPTS)
     importSeed(db)
     expect((db.prepare('SELECT COUNT(*) n FROM sizes').get() as { n: number }).n).toBe(6)
+  })
+})
+
+describe('POST /api/setup（Web 初始化向导）', () => {
+  let db: DB
+  let app: App
+  beforeEach(() => {
+    db = makeTestDb()
+    app = buildApp(db)
+  })
+  afterEach(async () => {
+    await app.close()
+    db.close()
+  })
+
+  it('未初始化→建实例+自动登录(admin,不强制改密,导入 seed)，重复→409', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/setup',
+      payload: { base_currency: 'JPY', admin_email: 'boss@folioria.jp', admin_name: '老板', admin_password: 'a-strong-pass-1', seed: true },
+    })
+    expect(res.statusCode).toBe(201)
+    const me = res.json() as { role: string; must_change_password: boolean }
+    expect(me.role).toBe('admin')
+    expect(me.must_change_password).toBe(false)
+    expect(String(res.headers['set-cookie'])).toContain('spool_session=')
+    expect((db.prepare('SELECT COUNT(*) n FROM sizes').get() as { n: number }).n).toBe(6)
+    const cfg = await app.inject({ method: 'GET', url: '/api/public-config' })
+    expect((cfg.json() as { initialized: boolean }).initialized).toBe(true)
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/setup',
+      payload: { base_currency: 'USD', admin_email: 'x@y.jp', admin_name: 'X', admin_password: 'another-pass-1' },
+    })
+    expect(again.statusCode).toBe(409)
+  })
+
+  it('未知货币 / 邮箱无@ / 弱口令 → 422', async () => {
+    const setup = (payload: Record<string, unknown>) => app.inject({ method: 'POST', url: '/api/setup', payload })
+    expect((await setup({ base_currency: 'EUR', admin_email: 'a@b.jp', admin_name: 'A', admin_password: 'a-strong-pass-1' })).statusCode).toBe(422)
+    expect((await setup({ base_currency: 'JPY', admin_email: 'no-at', admin_name: 'A', admin_password: 'a-strong-pass-1' })).statusCode).toBe(422)
+    expect((await setup({ base_currency: 'JPY', admin_email: 'a@b.jp', admin_name: 'A', admin_password: 'short' })).statusCode).toBe(422)
   })
 })

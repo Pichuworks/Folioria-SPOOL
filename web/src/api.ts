@@ -131,6 +131,22 @@ export async function register(body: {
   return { me: res.data, error: null }
 }
 
+/** 首次运行向导：初始化实例并自动登录为首位 admin */
+export async function setupInstance(body: {
+  base_currency: string
+  admin_email: string
+  admin_name: string
+  admin_password: string
+  seed?: boolean
+}): Promise<{ me: MeDto | null; error: string | null }> {
+  const res = await send<MeDto & { error?: string }>('POST', '/api/setup', body)
+  if (!res.ok) return { me: null, error: (res.data as { error?: string })?.error ?? `http_${res.status}` }
+  meCache = res.data
+  if (publicConfigCache) publicConfigCache = { ...publicConfigCache, initialized: true }
+  fireAuthChanged()
+  return { me: res.data, error: null }
+}
+
 export async function verifyEmailToken(token: string): Promise<boolean> {
   const res = await fetch('/api/auth/verify-email', {
     method: 'POST',

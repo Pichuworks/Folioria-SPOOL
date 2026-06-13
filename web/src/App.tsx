@@ -7,7 +7,15 @@ import AdminPricing from './AdminPricing'
 import AdminReports from './AdminReports'
 import AdminSettings from './AdminSettings'
 import AdminUsers from './AdminUsers'
-import { AUTH_EVENT, fetchMe, getMeCache, type MeDto } from './api'
+import {
+  AUTH_EVENT,
+  fetchMe,
+  fetchPublicConfig,
+  getMeCache,
+  getPublicConfigCache,
+  type MeDto,
+  type PublicConfigDto,
+} from './api'
 import Dashboard from './Dashboard'
 import Home from './Home'
 import MyOrders from './MyOrders'
@@ -15,6 +23,7 @@ import OrderView from './OrderView'
 import PriceList from './PriceList'
 import Quote from './Quote'
 import ResetPassword from './ResetPassword'
+import Setup from './Setup'
 import { Shell } from './spec'
 import VerifyEmail from './VerifyEmail'
 
@@ -82,6 +91,7 @@ function resolve(hash: string): Resolved | null {
 export default function App() {
   const [hash, setHash] = useState(() => window.location.hash || '#/')
   const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
+  const [config, setConfig] = useState<PublicConfigDto | undefined>(getPublicConfigCache)
 
   useEffect(() => {
     const onHash = () => setHash(window.location.hash || '#/')
@@ -89,11 +99,27 @@ export default function App() {
     window.addEventListener('hashchange', onHash)
     window.addEventListener(AUTH_EVENT, onAuth)
     fetchMe().then(setMe).catch(() => setMe(null))
+    fetchPublicConfig().then(setConfig).catch(() => {})
     return () => {
       window.removeEventListener('hashchange', onHash)
       window.removeEventListener(AUTH_EVENT, onAuth)
     }
   }, [])
+
+  // 首次运行（无 system_config）→ 强制初始化向导，盖过一切路由
+  if (config && !config.initialized) {
+    return (
+      <Shell center="FIRST RUN" nav={<span className="font-mono text-[10.5px] tracking-[.14em] text-dim">SETUP</span>}>
+        <Setup
+          onDone={(m) => {
+            setMe(m)
+            setConfig({ ...config, initialized: true })
+            window.location.hash = '#/dashboard'
+          }}
+        />
+      </Shell>
+    )
+  }
 
   const resolved = resolve(hash)
   if (!resolved) return <Home me={me ?? null} />

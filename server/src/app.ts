@@ -18,6 +18,8 @@ import {
   type SessionUser,
 } from './auth.js'
 import { type DB } from './db.js'
+import { spoolInit } from './init.js'
+import { importSeed } from './seed.js'
 import { registerAlertsRoutes } from './alerts-routes.js'
 import { registerDashboardRoutes } from './dashboard-routes.js'
 import { registerEquipmentRoutes } from './equipment-routes.js'
@@ -143,6 +145,67 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   registerDashboardRoutes(app, db)
   registerSettingsRoutes(app, db)
   registerReportsRoutes(app, db)
+
+  // ---------- 首次运行: Web 初始化向导（包住 CLI 同款 spoolInit，幂等自锁） ----------
+
+  app.post(
+    '/api/setup',
+    {
+      config: { rateLimit: { max: 5, timeWindow: '5 minutes' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['base_currency', 'admin_email', 'admin_name', 'admin_password'],
+          additionalProperties: false,
+          properties: {
+            base_currency: { type: 'string', minLength: 3, maxLength: 3 },
+            admin_email: { type: 'string', minLength: 3, maxLength: 254 },
+            admin_name: { type: 'string', minLength: 1, maxLength: 80 },
+            admin_password: { type: 'string', minLength: 8, maxLength: 200 },
+            seed: { type: 'boolean' },
+          },
+        },
+        response: { 201: USER_DTO_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body as {
+        base_currency: string
+        admin_email: string
+        admin_name: string
+        admin_password: string
+        seed?: boolean
+      }
+      try {
+        // spoolInit 内含 id=1 守卫（已初始化抛错），是「仅未初始化可达」的真锁
+        spoolInit(db, {
+          baseCurrency: b.base_currency.toUpperCase(),
+          adminEmail: b.admin_email,
+          adminName: b.admin_name,
+          adminPassword: b.admin_password,
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes('already initialized')) return reply.status(409).send({ error: 'already_initialized' })
+        if (msg.includes('unknown currency')) return reply.status(422).send({ error: 'unknown_currency' })
+        if (msg.includes('invalid admin email')) return reply.status(422).send({ error: 'invalid_email' })
+        if (msg.includes('password must be')) return reply.status(422).send({ error: 'weak_password' })
+        throw err
+      }
+      if (b.seed) importSeed(db)
+      // 向导里 admin 自设密码，无需再强制改密（CLI 自动生成密码才需要）
+      db.prepare('UPDATE users SET must_change_password = 0 WHERE email = ?').run(b.admin_email)
+      const row = db.prepare('SELECT id FROM users WHERE email = ?').get(b.admin_email) as { id: string }
+      const session = createSession(db, row.id)
+      void reply.setCookie(SESSION_COOKIE, session, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: cookieSecure,
+        path: '/',
+      })
+      return reply.status(201).send(userDto(userByToken(db, session) as SessionUser))
+    },
+  )
 
   // ---------- 下单域: auth ----------
 
