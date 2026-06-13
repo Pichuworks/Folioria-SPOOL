@@ -32,7 +32,7 @@ describe('spool init（B1：初始 admin + 基准货币）', () => {
     expect(cfg.initialized_at).toBeTruthy()
 
     const admin = db
-      .prepare('SELECT email, password_hash, role, must_change_password FROM users')
+      .prepare("SELECT email, password_hash, role, must_change_password FROM users WHERE role = 'admin'")
       .get() as {
       email: string
       password_hash: string

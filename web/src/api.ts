@@ -141,6 +141,7 @@ export interface PublicConfigDto {
   initialized: boolean
   require_email_verification: boolean
   registration_open: boolean
+  guest_orders_open: boolean
 }
 
 let publicConfigCache: PublicConfigDto | undefined
@@ -451,6 +452,7 @@ export interface OrderDto {
   completed_at: string | null
   notes: string | null
   items: OrderItemDto[]
+  is_guest?: boolean | undefined
   is_internal?: boolean | undefined
   customer?: { id: string; name: string; email: string; role: string } | undefined
 }
@@ -471,6 +473,19 @@ export const createOrder = (body: {
   contact_info?: string | null
   notes?: string | null
 }) => send<OrderDto & { error?: string }>('POST', '/api/orders', body)
+
+/** D23 免登录下单（需 guest_orders_open）；返回订单含 access_token */
+export const createGuestOrder = (body: {
+  items: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
+  email: string
+  name: string
+  contact_info?: string | null
+  notes?: string | null
+}) => send<OrderDto & { error?: string }>('POST', '/api/orders/guest', body)
+
+/** D23 已验证用户认领访客单 */
+export const claimOrder = (token: string) =>
+  send<OrderDto & { error?: string }>('POST', `/api/orders/by-token/${encodeURIComponent(token)}/claim`)
 
 export const fetchOrders = (status?: string) =>
   send<OrderDto[]>('GET', `/api/orders${status ? `?status=${status}` : ''}`)

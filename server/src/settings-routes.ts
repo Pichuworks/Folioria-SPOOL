@@ -8,6 +8,7 @@ interface ConfigRow {
   unify_pricing: number
   force_min_margin: number
   require_email_verification: number
+  guest_orders_open: number
   overhead_dep_months: number
   overhead_month_volume: number
   quote_valid_days: number
@@ -19,11 +20,12 @@ const toDto = (r: ConfigRow) => ({
   unify_pricing: r.unify_pricing !== 0,
   force_min_margin: r.force_min_margin !== 0,
   require_email_verification: r.require_email_verification !== 0,
+  guest_orders_open: r.guest_orders_open !== 0,
 })
 
 const SELECT_CONFIG = `SELECT base_currency, min_margin_bp, unify_pricing, force_min_margin,
-                              require_email_verification, overhead_dep_months, overhead_month_volume,
-                              quote_valid_days, initialized_at
+                              require_email_verification, guest_orders_open, overhead_dep_months,
+                              overhead_month_volume, quote_valid_days, initialized_at
                        FROM system_config WHERE id = 1`
 
 export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
@@ -41,6 +43,7 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
               initialized: { type: 'boolean' },
               require_email_verification: { type: 'boolean' },
               registration_open: { type: 'boolean' },
+              guest_orders_open: { type: 'boolean' },
             },
           },
         },
@@ -48,12 +51,17 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
     },
     async () => {
       const row = db
-        .prepare('SELECT require_email_verification, registration_open FROM system_config WHERE id = 1')
-        .get() as { require_email_verification: number; registration_open: number } | undefined
+        .prepare(
+          'SELECT require_email_verification, registration_open, guest_orders_open FROM system_config WHERE id = 1',
+        )
+        .get() as
+        | { require_email_verification: number; registration_open: number; guest_orders_open: number }
+        | undefined
       return {
         initialized: row != null,
         require_email_verification: (row?.require_email_verification ?? 0) !== 0,
         registration_open: (row?.registration_open ?? 1) !== 0,
+        guest_orders_open: (row?.guest_orders_open ?? 0) !== 0,
       }
     },
   )
@@ -80,6 +88,7 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
             unify_pricing: { type: 'boolean' },
             force_min_margin: { type: 'boolean' },
             require_email_verification: { type: 'boolean' },
+            guest_orders_open: { type: 'boolean' },
             overhead_dep_months: { type: 'integer', minimum: 1 },
             overhead_month_volume: { type: 'integer', minimum: 1 },
             quote_valid_days: { type: 'integer', minimum: 1 },
@@ -94,6 +103,7 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
         unify_pricing: boolean
         force_min_margin: boolean
         require_email_verification: boolean
+        guest_orders_open: boolean
         overhead_dep_months: number
         overhead_month_volume: number
         quote_valid_days: number
@@ -118,8 +128,8 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
 
       db.prepare(
         `UPDATE system_config SET base_currency = ?, min_margin_bp = ?, unify_pricing = ?,
-           force_min_margin = ?, require_email_verification = ?, overhead_dep_months = ?,
-           overhead_month_volume = ?, quote_valid_days = ?
+           force_min_margin = ?, require_email_verification = ?, guest_orders_open = ?,
+           overhead_dep_months = ?, overhead_month_volume = ?, quote_valid_days = ?
          WHERE id = 1`,
       ).run(
         b.base_currency ?? existing.base_currency,
@@ -131,6 +141,7 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
           : b.require_email_verification
             ? 1
             : 0,
+        b.guest_orders_open === undefined ? existing.guest_orders_open : b.guest_orders_open ? 1 : 0,
         b.overhead_dep_months ?? existing.overhead_dep_months,
         b.overhead_month_volume ?? existing.overhead_month_volume,
         b.quote_valid_days ?? existing.quote_valid_days,

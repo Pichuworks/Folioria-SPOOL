@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  claimOrder,
   fetchMe,
   fetchOrderByToken,
   getMeCache,
@@ -183,6 +184,23 @@ export default function OrderView({ token }: { token: string }) {
     else setActionErr(`取消失败（${(res.data as { error?: string })?.error ?? res.status}）`)
   }
 
+  const claim = async () => {
+    const res = await claimOrder(token)
+    if (res.ok) {
+      await refresh()
+      setActionErr(null)
+    } else {
+      const e = (res.data as { error?: string })?.error
+      setActionErr(
+        e === 'verify_email_to_claim'
+          ? '请先完成邮箱验证再认领。'
+          : e === 'email_mismatch'
+            ? '本订单留的邮箱与当前账号不一致，无法认领。'
+            : `认领失败（${e ?? res.status}）`,
+      )
+    }
+  }
+
   return (
     <MagSec tag="订单" title={order.order_number} note="ORDER DETAIL">
       <div className="flex flex-wrap items-center gap-3">
@@ -236,6 +254,18 @@ export default function OrderView({ token }: { token: string }) {
                   : '未付款'
             }
           />
+          {order.is_guest && me && (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => void claim()}
+                className="rounded-full border border-wine px-4 py-2 text-[13px] text-wine-ink hover:opacity-80"
+              >
+                认领此订单到我的账号
+              </button>
+              <p className="mt-1.5 text-[11px] leading-[1.7] text-dim">需当前账号邮箱与下单邮箱一致且已验证。</p>
+            </div>
+          )}
           {canCancel && (
             <div className="mt-5">
               <button
@@ -245,9 +275,9 @@ export default function OrderView({ token }: { token: string }) {
               >
                 取消订单
               </button>
-              {actionErr && <p className="mt-2 text-[12.5px] text-wine-ink">{actionErr}</p>}
             </div>
           )}
+          {actionErr && <p className="mt-2 text-[12.5px] text-wine-ink">{actionErr}</p>}
           <p className="mt-5 text-[11px] leading-[1.9] text-dim">
             本页链接含专属查询码，请妥善保存、勿外传。订单确认后如需变更请直接联系工坊。
           </p>

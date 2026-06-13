@@ -514,7 +514,9 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
     },
     async () => {
       const rows = db
-        .prepare('SELECT id, email, username, name, role, archived, created_at FROM users ORDER BY created_at')
+        .prepare(
+          "SELECT id, email, username, name, role, archived, created_at FROM users WHERE id != 'guest' ORDER BY created_at",
+        )
         .all() as Array<SessionUser & { archived: number; created_at: string }>
       return rows.map((r) => ({ ...r, archived: r.archived !== 0 }))
     },

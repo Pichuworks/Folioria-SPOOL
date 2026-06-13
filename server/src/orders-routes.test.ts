@@ -246,6 +246,70 @@ describe('R2 access_token 防枚举（§5/§6）', () => {
   })
 })
 
+describe('D23 访客下单 / 认领', () => {
+  const placeGuest = (email: string, name = '访客') =>
+    app.inject({ method: 'POST', url: '/api/orders/guest', payload: { items: [A4_ITEM], email, name } })
+
+  it('默认关：访客下单 403 guest_orders_closed', async () => {
+    const res = await placeGuest('walkin@x.example')
+    expect(res.statusCode).toBe(403)
+    expect((res.json() as { error: string }).error).toBe('guest_orders_closed')
+  })
+
+  it('开启后：访客下单 201（is_guest、token 可查、不泄露成本），admin 见访客身份', async () => {
+    db.prepare('UPDATE system_config SET guest_orders_open = 1 WHERE id = 1').run()
+    const res = await placeGuest('walkin@x.example', '路人甲')
+    expect(res.statusCode).toBe(201)
+    const o = res.json() as OrderDto & { is_guest?: boolean }
+    expect(o.is_guest).toBe(true)
+    expect(o.access_token).toBeTruthy()
+    const look = await app.inject({ method: 'GET', url: `/api/orders/by-token/${o.access_token}` })
+    expect(look.statusCode).toBe(200)
+    expect(collectForbiddenKeys(look.json())).toEqual([])
+
+    const adminCookie = await login('staff@folioria.jp')
+    const list = (
+      await app.inject({ method: 'GET', url: '/api/orders', headers: { cookie: adminCookie } })
+    ).json() as Array<OrderDto & { customer?: { email: string; role: string } }>
+    const guestOrder = list.find((x) => x.id === o.id)
+    expect(guestOrder?.customer?.role).toBe('guest')
+    expect(guestOrder?.customer?.email).toBe('walkin@x.example')
+  })
+
+  it('认领：邮箱一致且已验证→200 并入账；不一致 403；未验证 403；非访客单 409', async () => {
+    db.prepare('UPDATE system_config SET guest_orders_open = 1 WHERE id = 1').run()
+    const o = (await placeGuest('a@cust.example', '阿甲')).json() as OrderDto
+    const claimUrl = `/api/orders/by-token/${o.access_token}/claim`
+
+    const cookieB = await login('b@cust.example')
+    const mism = await app.inject({ method: 'POST', url: claimUrl, headers: { cookie: cookieB } })
+    expect(mism.statusCode).toBe(403)
+    expect((mism.json() as { error: string }).error).toBe('email_mismatch')
+
+    const o2 = (await placeGuest('raw@cust.example', '未验证')).json() as OrderDto
+    const cookieRaw = await login('raw@cust.example')
+    const unver = await app.inject({
+      method: 'POST',
+      url: `/api/orders/by-token/${o2.access_token}/claim`,
+      headers: { cookie: cookieRaw },
+    })
+    expect(unver.statusCode).toBe(403)
+    expect((unver.json() as { error: string }).error).toBe('verify_email_to_claim')
+
+    const cookieA = await login('a@cust.example')
+    const claimed = await app.inject({ method: 'POST', url: claimUrl, headers: { cookie: cookieA } })
+    expect(claimed.statusCode).toBe(200)
+    expect((claimed.json() as OrderDto & { is_guest?: boolean }).is_guest).toBe(false)
+    const aList = (
+      await app.inject({ method: 'GET', url: '/api/orders', headers: { cookie: cookieA } })
+    ).json() as OrderDto[]
+    expect(aList.some((x) => x.id === o.id)).toBe(true)
+
+    const again = await app.inject({ method: 'POST', url: claimUrl, headers: { cookie: cookieA } })
+    expect(again.statusCode).toBe(409)
+  })
+})
+
 describe('R1 状态机（§2.5 + 审稿定点）', () => {
   it('全部 item 有文件 → 自动 file_pending；全 approved → file_approved；任一 rejected → 回 file_pending', async () => {
     const adminCookie = await login('staff@folioria.jp')

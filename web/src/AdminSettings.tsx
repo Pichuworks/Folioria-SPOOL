@@ -9,6 +9,7 @@ interface SettingsDto {
   unify_pricing: boolean
   force_min_margin: boolean
   require_email_verification: boolean
+  guest_orders_open: boolean
   overhead_dep_months: number
   overhead_month_volume: number
   quote_valid_days: number
@@ -42,6 +43,7 @@ function SettingsBody() {
       unify_pricing: form.unify_pricing,
       force_min_margin: form.force_min_margin,
       require_email_verification: form.require_email_verification,
+      guest_orders_open: form.guest_orders_open,
       overhead_dep_months: form.overhead_dep_months,
       overhead_month_volume: form.overhead_month_volume,
       quote_valid_days: form.quote_valid_days,
@@ -109,6 +111,14 @@ function SettingsBody() {
               ⚠ 开启后，未配置邮件发送（SPOOL_RESEND_API_KEY）的实例将使新注册用户收不到验证链接而无法下单。
             </p>
           )}
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            <input
+              type="checkbox"
+              checked={form.guest_orders_open}
+              onChange={(e) => setForm((f) => (f ? { ...f, guest_orders_open: e.target.checked } : f))}
+            />
+            允许免登录（访客）下单（默认关）
+          </label>
           <PillBtn full>保存参数</PillBtn>
           {notice && <p className="text-[12.5px] text-wine-ink">{notice}</p>}
         </form>

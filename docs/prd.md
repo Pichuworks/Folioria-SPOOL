@@ -399,6 +399,7 @@ feat / fix / refactor / style / data / docs / test / chore
 | D20 | Web 初始化向导 | POST /api/setup 包住 CLI 同款 spoolInit（id=1 守卫即「仅未初始化可达」真锁，重复 409 already_initialized）；body 基准货币/首位 admin（+可选 seed 导入），向导自设密码故置 must_change_password=0 并自动登录。无 schema 变更（GET /api/public-config 的 initialized 供前台首屏判定，未初始化即强制 #/setup 盖过路由）。CLI spool init 仍为无头部署路径，先写者赢 |
 | D21 | 页计数口径（待 K 君确认） | jobs.pages_consumed / printers.total_pages / per_page 耗材 current_usage_pages 一律按 **impression（面）** 计：双面作业每张 = 2 面，故 completeJob 默认 `pages = (quantity+waste) × (duplex?2:1)` 正确。与成本侧解耦——成本走 ink_c（yield_sheets 已含双面减半），计数走面数，两套口径各自自洽。acceptance §3.1 仅覆盖单面(203 面 1:1)，双面口径据此裁定，实现不变 |
 | D22 | 地板价成本基数（待 K 君确认） | 自动地板价 ceil 的成本基数 = **仅直接材料 ink_c+paper_c**（不含 overhead），故 §2.2/§2.5 基线（74→225…）不变；overhead 仅在 done 成本快照计入 total_cost。结论：「永不击穿 67%」是对**直接材料**的毛利保证，overhead 作为另一层成本会侵蚀该毛利垫，账面实际毛利可低于 67% —— 此为有意设计（改地板会牵动全量回归基线），非 bug，实现不变 |
+| D23 | 免登录（访客）下单 | 放宽「订单须注册用户」的隐含前提，须独立裁决。orders.customer_id 仍 NOT NULL，访客单指向 0007 合成哨兵用户（id='guest'，archived=1，永不解析会话），orders 挂 guest_email/name/contact 留痕（避开 NOT-NULL→NULL 整表重建）。公开 POST /api/orders/guest（限流，复用 createOrder internal=false，仅回 access_token 链接），behind system_config.guest_orders_open（默认 0 显式 opt-in）。隐私一次性入口沿用随机 access_token（拒绝短码可枚举）。认领 POST /api/orders/by-token/:token/claim：须登录用户**邮箱已验证且 NOCASE == guest_email**（token 本身不足以改绑归属），通过则改绑 customer_id 并清 guest_*。访客单的 confirm/ready 通知走 guest_email 直发；orderDto admin 分支渲染 guest 身份而非哨兵 |
 
 ---
 

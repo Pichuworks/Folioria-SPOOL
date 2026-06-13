@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  createGuestOrder,
   createOrder,
   fetchMe,
   fetchOptions,
+  fetchPublicConfig,
   fetchQuote,
   getMeCache,
   getOptionsCache,
+  getPublicConfigCache,
   type MeDto,
   type OptionsDto,
   type QuoteDto,
@@ -52,6 +55,9 @@ export default function Quote() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [needLogin, setNeedLogin] = useState(false)
   const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
+  const [guestOpen, setGuestOpen] = useState(() => getPublicConfigCache()?.guest_orders_open ?? false)
+  const [guestEmail, setGuestEmail] = useState('')
+  const [guestName, setGuestName] = useState('')
 
   useEffect(() => {
     fetchOptions()
@@ -60,6 +66,7 @@ export default function Quote() {
         if (!getOptionsCache()) setError('价目数据加载失败')
       })
     fetchMe().then(setMe).catch(() => setMe(null))
+    fetchPublicConfig().then((c) => setGuestOpen(c.guest_orders_open)).catch(() => {})
   }, [])
 
   const papersForMode = useMemo(() => {
@@ -116,21 +123,53 @@ export default function Quote() {
     ])
   }
 
+  const items = () =>
+    cart.map(({ mode_id, paper_id, size_key, quantity: qty }) => ({ mode_id, paper_id, size_key, quantity: qty }))
+
+  const showError = (err: string | undefined, status: number) =>
+    setSubmitError(
+      err === 'email_unverified'
+        ? '邮箱尚未验证——请先打开注册邮件中的验证链接。'
+        : err === 'guest_orders_closed'
+          ? '当前未开放访客下单，请登录后提交。'
+          : err?.includes('not_quotable')
+            ? '清单中存在已失效的组合，请移除后重试。'
+            : `提交失败（${err ?? status}）`,
+    )
+
   const submit = async () => {
     if (cart.length === 0) return
     if (!me) {
-      setNeedLogin(true)
+      // 未登录：开放访客下单则走访客通道（需邮箱+称呼），否则进登录门
+      if (!guestOpen) {
+        setNeedLogin(true)
+        return
+      }
+      if (guestEmail.trim() === '' || guestName.trim() === '') {
+        setSubmitError('请填写邮箱与称呼以访客下单（或登录/注册后提交）。')
+        return
+      }
+      setSubmitting(true)
+      setSubmitError(null)
+      const gres = await createGuestOrder({
+        items: items(),
+        email: guestEmail.trim(),
+        name: guestName.trim(),
+        contact_info: contact.trim() === '' ? null : contact.trim(),
+        notes: notes.trim() === '' ? null : notes.trim(),
+      })
+      setSubmitting(false)
+      if (gres.ok) {
+        window.location.hash = `#/order/${gres.data.access_token}`
+        return
+      }
+      showError((gres.data as { error?: string })?.error, gres.status)
       return
     }
     setSubmitting(true)
     setSubmitError(null)
     const res = await createOrder({
-      items: cart.map(({ mode_id, paper_id, size_key, quantity: qty }) => ({
-        mode_id,
-        paper_id,
-        size_key,
-        quantity: qty,
-      })),
+      items: items(),
       contact_info: contact.trim() === '' ? null : contact.trim(),
       notes: notes.trim() === '' ? null : notes.trim(),
     })
@@ -139,14 +178,7 @@ export default function Quote() {
       window.location.hash = `#/order/${res.data.access_token}`
       return
     }
-    const err = (res.data as { error?: string })?.error
-    setSubmitError(
-      err === 'email_unverified'
-        ? '邮箱尚未验证——请先打开注册邮件中的验证链接。'
-        : err?.includes('not_quotable')
-          ? '清单中存在已失效的组合，请移除后重试。'
-          : `提交失败（${err ?? res.status}）`,
-    )
+    showError((res.data as { error?: string })?.error, res.status)
   }
 
   if (error) return <p className="pt-13 text-[14px] text-wine-ink">{error}</p>
@@ -302,6 +334,21 @@ export default function Quote() {
           )}
 
           <div className="mt-6 space-y-4 border-t-2 border-ink pt-5">
+            {!me && guestOpen && (
+              <>
+                <p className="text-[11.5px] leading-[1.7] text-dim">
+                  可免登录下单——提交后凭订单链接查看进度（请妥善保存）。也可
+                  <a href="#/login" className="text-wine-ink hover:opacity-70"> 登录/注册 </a>
+                  以便在「我的订单」统一管理。
+                </p>
+                <Field label="邮箱（接收订单状态通知）">
+                  <input type="email" className={specInput} value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} />
+                </Field>
+                <Field label="称呼">
+                  <input maxLength={80} className={specInput} value={guestName} onChange={(e) => setGuestName(e.target.value)} />
+                </Field>
+              </>
+            )}
             <Field label="联系方式（取件/寄送沟通用，可留空）">
               <input className={specInput} maxLength={200} value={contact} onChange={(e) => setContact(e.target.value)} />
             </Field>
@@ -315,7 +362,7 @@ export default function Quote() {
               onClick={() => void submit()}
               className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-wine bg-wine px-[18px] py-2.5 text-[14px] font-medium tracking-[.02em] text-cream shadow-e1 transition-opacity hover:opacity-90 disabled:border-line disabled:bg-deep disabled:text-dim"
             >
-              {submitting ? '提交中…' : me ? '提交订单 →' : '登录并提交订单 →'}
+              {submitting ? '提交中…' : me ? '提交订单 →' : guestOpen ? '以访客提交订单 →' : '登录并提交订单 →'}
             </button>
             <p className="text-[11px] leading-[1.8] text-dim">
               提交后单价定格（改价不影响已建订单）；随后逐行上传印刷文件，审稿通过并确认后排产。

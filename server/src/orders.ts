@@ -62,6 +62,16 @@ export interface OrderRow {
   due_date: string | null
   completed_at: string | null
   notes: string | null
+  guest_email: string | null
+  guest_name: string | null
+  guest_contact: string | null
+}
+
+/** D23: 已验证用户认领访客单（仅 guest_email 与本人邮箱一致时），改绑 customer_id 并清访客字段 */
+export function claimGuestOrder(db: DB, orderId: string, userId: string): void {
+  db.prepare(
+    'UPDATE orders SET customer_id = ?, guest_email = NULL, guest_name = NULL, guest_contact = NULL WHERE id = ?',
+  ).run(userId, orderId)
 }
 
 export interface OrderItemRow {
@@ -118,6 +128,9 @@ export interface NewOrderItem {
   quantity: number
 }
 
+/** 访客单的合成 customer_id（0007 哨兵用户，archived=1 永不登录） */
+export const GUEST_SENTINEL_ID = 'guest'
+
 export interface CreateOrderInput {
   customerId: string
   /** member/admin 视为内部需求：internal_sell_c 口径 + is_internal 标记（B1.1） */
@@ -125,6 +138,10 @@ export interface CreateOrderInput {
   items: NewOrderItem[]
   contactInfo?: string | null
   notes?: string | null
+  /** 访客单留痕（D23）：customerId 取哨兵，guest_* 落联系方式 */
+  guestEmail?: string | null
+  guestName?: string | null
+  guestContact?: string | null
 }
 
 /** R1/R3: 下单——unit_price_c 当场定格快照，line_total 唯一舍入点，subtotal 整数加法 */
@@ -149,8 +166,9 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
   db.transaction(() => {
     db.prepare(
       `INSERT INTO orders (id, order_number, access_token, customer_id, contact_info, is_internal,
-                           subtotal, discount, total, status, quote_valid_until, created_at, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'quoted', ?, ?, ?)`,
+                           subtotal, discount, total, status, quote_valid_until, created_at, notes,
+                           guest_email, guest_name, guest_contact)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'quoted', ?, ?, ?, ?, ?, ?)`,
     ).run(
       orderId,
       nextOrderNumber(db, now),
@@ -163,6 +181,9 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
       validUntil,
       nowIso,
       input.notes ?? null,
+      input.guestEmail ?? null,
+      input.guestName ?? null,
+      input.guestContact ?? null,
     )
     const insertItem = db.prepare(
       `INSERT INTO order_items (id, order_id, mode_id, paper_id, size_key, quantity,

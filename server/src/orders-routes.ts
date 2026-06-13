@@ -3,15 +3,17 @@ import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin, requireUser } from './guards.js'
 import { formatMoney, formatMoneyC, money, moneyC, type Currency } from './money.js'
-import { notifyUser, templates } from './notify.js'
+import { notifyAddress, notifyUser, templates } from './notify.js'
 import {
   adminCanTransition,
   cancelOrder,
+  claimGuestOrder,
   confirmOrder,
   createOrder,
   CUSTOMER_CANCELLABLE,
   getOrder,
   getOrderItems,
+  GUEST_SENTINEL_ID,
   OrderError,
   syncFileState,
   type OrderItemRow,
@@ -51,6 +53,7 @@ export const ORDER_SCHEMA = {
     order_number: { type: 'string' },
     status: { type: 'string' },
     access_token: { type: 'string' },
+    is_guest: { type: 'boolean' }, // 访客单（下单域可见，用于「认领」入口）
     is_internal: { type: 'boolean' }, // admin 视图专用
     customer: {
       // admin 视图专用
@@ -149,13 +152,18 @@ export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoO
     due_date: order.due_date,
     completed_at: order.completed_at,
     notes: order.notes,
+    is_guest: order.customer_id === GUEST_SENTINEL_ID,
     items: items.map((i) => itemDto(i, currency, opts)),
   }
   if (opts.includeToken) Object.assign(base, { access_token: order.access_token })
   if (opts.admin) {
-    const customer = db
-      .prepare('SELECT id, name, email, role FROM users WHERE id = ?')
-      .get(order.customer_id) as { id: string; name: string; email: string; role: string } | undefined
+    // 访客单展示 guest_* 身份（哨兵用户本身无意义）
+    const customer =
+      order.customer_id === GUEST_SENTINEL_ID
+        ? { id: 'guest', name: order.guest_name ?? '访客', email: order.guest_email ?? '', role: 'guest' }
+        : (db
+            .prepare('SELECT id, name, email, role FROM users WHERE id = ?')
+            .get(order.customer_id) as { id: string; name: string; email: string; role: string } | undefined)
     Object.assign(base, { is_internal: order.is_internal !== 0, customer })
   }
   return base
@@ -225,6 +233,109 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       return reply
         .status(201)
         .send(orderDto(db, order, baseCurrency(db), { admin: false, includeToken: true }))
+    },
+  )
+
+  // ---------- 下单域: 免登录（访客）下单（D23，behind guest_orders_open） ----------
+
+  app.post(
+    '/api/orders/guest',
+    {
+      config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['items', 'email', 'name'],
+          additionalProperties: false,
+          properties: {
+            items: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 50,
+              items: {
+                type: 'object',
+                required: ['mode_id', 'paper_id', 'size_key', 'quantity'],
+                additionalProperties: false,
+                properties: {
+                  mode_id: { type: 'integer', minimum: 1 },
+                  paper_id: { type: 'integer', minimum: 1 },
+                  size_key: { type: 'string', minLength: 1, maxLength: 20 },
+                  quantity: { type: 'integer', minimum: 1, maximum: 1000000 },
+                },
+              },
+            },
+            email: { type: 'string', minLength: 3, maxLength: 254, pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' },
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+            contact_info: { type: ['string', 'null'], maxLength: 200 },
+            notes: { type: ['string', 'null'], maxLength: 2000 },
+          },
+        },
+        response: { 201: ORDER_SCHEMA, 403: ERROR_SCHEMA, 422: ERROR_SCHEMA },
+      },
+    },
+    async (req, reply) => {
+      const open = db.prepare('SELECT guest_orders_open FROM system_config WHERE id = 1').get() as
+        | { guest_orders_open: number }
+        | undefined
+      if (!open || open.guest_orders_open === 0) {
+        return reply.status(403).send({ error: 'guest_orders_closed' })
+      }
+      const b = req.body as {
+        items: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
+        email: string
+        name: string
+        contact_info?: string | null
+        notes?: string | null
+      }
+      const orderId = createOrder(db, {
+        customerId: GUEST_SENTINEL_ID,
+        internal: false,
+        items: b.items,
+        contactInfo: b.contact_info ?? null,
+        notes: b.notes ?? null,
+        guestEmail: b.email,
+        guestName: b.name,
+        guestContact: b.contact_info ?? null,
+      })
+      const order = getOrder(db, orderId) as OrderRow
+      return reply
+        .status(201)
+        .send(orderDto(db, order, baseCurrency(db), { admin: false, includeToken: true }))
+    },
+  )
+
+  // D23: 已验证用户认领访客单（仅当本人已验证邮箱 == guest_email）；改绑后并入其历史
+  app.post(
+    '/api/orders/by-token/:token/claim',
+    {
+      preHandler: requireUser,
+      schema: {
+        params: {
+          type: 'object',
+          required: ['token'],
+          properties: { token: { type: 'string', minLength: 1, maxLength: 100 } },
+        },
+        response: { 200: ORDER_SCHEMA, 403: ERROR_SCHEMA, 404: ERROR_SCHEMA, 409: ERROR_SCHEMA },
+      },
+    },
+    async (req, reply) => {
+      const user = req.user as NonNullable<typeof req.user>
+      const { token } = req.params as { token: string }
+      const order = db.prepare('SELECT * FROM orders WHERE access_token = ?').get(token) as OrderRow | undefined
+      if (!order) return reply.status(404).send({ error: 'not_found' })
+      if (order.customer_id !== GUEST_SENTINEL_ID) {
+        return reply.status(409).send({ error: 'not_a_guest_order' })
+      }
+      // 认领安全边界：本人邮箱须已验证且与 guest_email 一致（token 本身不足以改绑归属）
+      if (user.email_verified_at == null) {
+        return reply.status(403).send({ error: 'verify_email_to_claim' })
+      }
+      if ((order.guest_email ?? '').toLowerCase() !== user.email.toLowerCase()) {
+        return reply.status(403).send({ error: 'email_mismatch' })
+      }
+      claimGuestOrder(db, order.id, user.id)
+      const updated = getOrder(db, order.id) as OrderRow
+      return orderDto(db, updated, baseCurrency(db), { admin: false, includeToken: true })
     },
   )
 
@@ -396,16 +507,19 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       }
       const updated = getOrder(db, id) as OrderRow
       const currency = baseCurrency(db)
-      // R7: confirm/ready 通知客户（分发永不抛错，状态流转不被通知阻塞）
+      // R7: confirm/ready 通知客户（分发永不抛错，状态流转不被通知阻塞）。
+      // 访客单走 guest_email 直发（哨兵用户 archived，notifyUser 不投递）
+      const notifyParty = async (event: 'order_confirmed' | 'order_ready', msg: ReturnType<typeof templates.orderReady>) => {
+        if (updated.guest_email) await notifyAddress(db, event, updated.guest_email, msg)
+        else await notifyUser(db, event, updated.customer_id, msg)
+      }
       if (status === 'confirmed') {
-        await notifyUser(
-          db,
+        await notifyParty(
           'order_confirmed',
-          updated.customer_id,
           templates.orderConfirmed(updated.order_number, formatMoney(money(updated.total), currency)),
         )
       } else if (status === 'ready') {
-        await notifyUser(db, 'order_ready', updated.customer_id, templates.orderReady(updated.order_number))
+        await notifyParty('order_ready', templates.orderReady(updated.order_number))
       }
       return orderDto(db, updated, currency, { admin, includeToken: true })
     },
