@@ -134,6 +134,11 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
         file_url?: string | null
         notes?: string | null
       }
+      // 防止对已绑作业的 order_item 二次建 job（否则报表重复计收入/毛利）
+      if (b.order_item_id != null) {
+        const dup = db.prepare('SELECT 1 FROM jobs WHERE order_item_id = ?').get(b.order_item_id)
+        if (dup) return reply.status(409).send({ error: 'order_item_already_has_job' })
+      }
       const id = randomUUID()
       try {
         db.prepare(

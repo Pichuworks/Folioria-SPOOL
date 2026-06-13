@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildApp, SESSION_COOKIE, type App } from './app.js'
 import { type DB } from './db.js'
@@ -323,5 +324,25 @@ describe('作业其他', () => {
     expect((await post(`/api/jobs/${jobId}/done`, {})).statusCode).toBe(409)
 
     expect((await app.inject({ method: 'GET', url: '/api/jobs' })).statusCode).toBe(401)
+  })
+
+  it('H8: order_item 已绑 job 时再建 → 409 order_item_already_has_job（防重复计收入）', async () => {
+    const now = new Date().toISOString()
+    const orderId = randomUUID()
+    const itemId = randomUUID()
+    const adminId = (db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get() as { id: string }).id
+    db.prepare(
+      `INSERT INTO orders (id, order_number, access_token, customer_id, quote_valid_until, created_at)
+       VALUES (?, 'FOL-2026-9001', ?, ?, ?, ?)`,
+    ).run(orderId, randomUUID(), adminId, now, now)
+    db.prepare(
+      `INSERT INTO order_items (id, order_id, mode_id, paper_id, size_key, quantity, unit_price_c, line_total)
+       VALUES (?, ?, 1, 1, 'A4', 10, 7, 1)`,
+    ).run(itemId, orderId)
+    const base = { title: 't', mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 10, order_item_id: itemId }
+    expect((await post('/api/jobs', base)).statusCode).toBe(201)
+    const dup = await post('/api/jobs', base)
+    expect(dup.statusCode).toBe(409)
+    expect((dup.json() as { error: string }).error).toBe('order_item_already_has_job')
   })
 })
