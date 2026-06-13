@@ -15,7 +15,7 @@ import {
 } from './api'
 import { VerifyBanner } from './CustomerGate'
 import CustomerGate from './CustomerGate'
-import { Field, Leader, MagSec, PillBtn, specInput } from './spec'
+import { Field, Leader, MagSec, specInput } from './spec'
 
 type QuoteState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
 
@@ -23,8 +23,7 @@ type QuoteState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
 function GateReturn({ me, onReady }: { me: MeDto; onReady: (m: MeDto) => void }) {
   useEffect(() => {
     onReady(me)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [me, onReady])
   return <p className="pt-13 text-[14px] text-dim">登录成功，返回订单清单…</p>
 }
 

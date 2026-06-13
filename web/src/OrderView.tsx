@@ -130,6 +130,7 @@ function ItemRow({
             <span className="text-[10.5px] text-dim">PDF / TIFF / PNG · ≤200MB</span>
           </>
         )}
+        {err && <span className="text-[12px] text-wine-ink">{err}</span>}
       </div>
     </div>
   )

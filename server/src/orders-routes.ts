@@ -14,7 +14,6 @@ import {
   getOrder,
   getOrderItems,
   GUEST_SENTINEL_ID,
-  OrderError,
   syncFileState,
   type OrderItemRow,
   type OrderRow,
