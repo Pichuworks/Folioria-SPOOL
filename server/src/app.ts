@@ -41,6 +41,7 @@ export type App = FastifyInstance
 interface UserDto {
   id: string
   email: string
+  username: string | null
   name: string
   role: string
   must_change_password: boolean
@@ -50,6 +51,7 @@ interface UserDto {
 const userDto = (u: SessionUser): UserDto => ({
   id: u.id,
   email: u.email,
+  username: u.username,
   name: u.name,
   role: u.role,
   must_change_password: u.must_change_password !== 0,
@@ -62,6 +64,7 @@ const USER_DTO_SCHEMA = {
   properties: {
     id: { type: 'string' },
     email: { type: 'string' },
+    username: { type: ['string', 'null'] },
     name: { type: 'string' },
     role: { type: 'string' },
     must_change_password: { type: 'boolean' },
@@ -147,19 +150,27 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       schema: {
         body: {
           type: 'object',
-          required: ['email', 'password'],
+          required: ['password'],
           additionalProperties: false,
           properties: {
-            email: { type: 'string', minLength: 3 },
+            // D18: identifier = 用户名或邮箱；保留 email 为向后兼容别名
+            identifier: { type: 'string', minLength: 3, maxLength: 254 },
+            email: { type: 'string', minLength: 3, maxLength: 254 },
             password: { type: 'string', minLength: 1 },
           },
         },
-        response: { 200: USER_DTO_SCHEMA, 401: ERROR_SCHEMA },
+        response: { 200: USER_DTO_SCHEMA, 401: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
-      const { email, password } = req.body as { email: string; password: string }
-      const user = verifyLogin(db, email, password)
+      const { identifier, email, password } = req.body as {
+        identifier?: string
+        email?: string
+        password: string
+      }
+      const who = identifier ?? email
+      if (!who) return reply.status(422).send({ error: 'identifier_required' })
+      const user = verifyLogin(db, who, password)
       if (!user) return reply.status(401).send({ error: 'invalid_credentials' })
       const token = createSession(db, user.id)
       void reply.setCookie(SESSION_COOKIE, token, {
@@ -185,6 +196,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
           additionalProperties: false,
           properties: {
             email: { type: 'string', minLength: 3, maxLength: 254, pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' },
+            username: { type: 'string', pattern: '^[a-z0-9_]{3,30}$' },
             name: { type: 'string', minLength: 1, maxLength: 80 },
             password: { type: 'string', minLength: 8, maxLength: 200 },
             contact_info: { type: ['string', 'null'], maxLength: 200 },
@@ -197,6 +209,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
     async (req, reply) => {
       const b = req.body as {
         email: string
+        username?: string
         name: string
         password: string
         contact_info?: string | null
@@ -214,10 +227,14 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       const id = randomUUID()
       try {
         db.prepare(
-          `INSERT INTO users (id, email, password_hash, name, role, contact_info, created_at)
-           VALUES (?, ?, ?, ?, 'customer', ?, ?)`,
-        ).run(id, b.email, bcrypt.hashSync(b.password, 12), b.name, b.contact_info ?? null, new Date().toISOString())
+          `INSERT INTO users (id, email, username, password_hash, name, role, contact_info, created_at)
+           VALUES (?, ?, ?, ?, ?, 'customer', ?, ?)`,
+        ).run(id, b.email, b.username ?? null, bcrypt.hashSync(b.password, 12), b.name, b.contact_info ?? null, new Date().toISOString())
       } catch (err) {
+        // 部分唯一索引冲突报「index 'uniq_users_username'」，列约束报「users.email」；以 username 子串判别
+        if (err instanceof Error && err.message.includes('username')) {
+          return reply.status(409).send({ error: 'username_taken' })
+        }
         if (err instanceof Error && err.message.includes('UNIQUE')) {
           return reply.status(409).send({ error: 'email_exists' })
         }
@@ -325,6 +342,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
               properties: {
                 id: { type: 'string' },
                 email: { type: 'string' },
+                username: { type: ['string', 'null'] },
                 name: { type: 'string' },
                 role: { type: 'string' },
                 archived: { type: 'boolean' },
@@ -337,7 +355,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
     },
     async () => {
       const rows = db
-        .prepare('SELECT id, email, name, role, archived, created_at FROM users ORDER BY created_at')
+        .prepare('SELECT id, email, username, name, role, archived, created_at FROM users ORDER BY created_at')
         .all() as Array<SessionUser & { archived: number; created_at: string }>
       return rows.map((r) => ({ ...r, archived: r.archived !== 0 }))
     },
@@ -354,6 +372,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
           additionalProperties: false,
           properties: {
             email: { type: 'string', minLength: 3 },
+            username: { type: 'string', pattern: '^[a-z0-9_]{3,30}$' },
             name: { type: 'string', minLength: 1 },
             password: { type: 'string', minLength: 8 },
             role: { type: 'string', enum: ['customer', 'member', 'admin'] },
@@ -363,16 +382,20 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       },
     },
     async (req, reply) => {
-      const body = req.body as { email: string; name: string; password: string; role: string }
+      const body = req.body as { email: string; username?: string; name: string; password: string; role: string }
       const id = randomUUID()
       try {
         // S3: 创建者知晓的初始密码不应永久有效 → 首登强制改密（D11 同初始 admin）。
         // D12: admin 手动供给的账号视为已验证（不走邮箱验证链路）
         db.prepare(
-          `INSERT INTO users (id, email, password_hash, name, role, must_change_password, email_verified_at, created_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
-        ).run(id, body.email, bcrypt.hashSync(body.password, 12), body.name, body.role, new Date().toISOString(), new Date().toISOString())
+          `INSERT INTO users (id, email, username, password_hash, name, role, must_change_password, email_verified_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        ).run(id, body.email, body.username ?? null, bcrypt.hashSync(body.password, 12), body.name, body.role, new Date().toISOString(), new Date().toISOString())
       } catch (err) {
+        // 部分唯一索引冲突报「index 'uniq_users_username'」，列约束报「users.email」；以 username 子串判别
+        if (err instanceof Error && err.message.includes('username')) {
+          return reply.status(409).send({ error: 'username_taken' })
+        }
         if (err instanceof Error && err.message.includes('UNIQUE')) {
           return reply.status(409).send({ error: 'email_exists' })
         }
@@ -381,6 +404,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       return reply.status(201).send({
         id,
         email: body.email,
+        username: body.username ?? null,
         name: body.name,
         role: body.role,
         must_change_password: true,

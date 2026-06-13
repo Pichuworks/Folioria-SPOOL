@@ -394,6 +394,7 @@ feat / fix / refactor / style / data / docs / test / chore
 | D15 | 文件存储 | SPOOL_UPLOAD_DIR（默认 ~/.local/share/spool/uploads，代码目录之外不可执行）+ randomUUID 存储名（原始文件名不落盘，路径穿越无面）；PDF/TIFF/PNG 扩展名+magic bytes 双查、≤200MB、超限/伪装不留半截文件；下载限 owner/admin，attachment + nosniff + octet-stream |
 | D16 | 通知落地 | NotificationChannel 接口 + Resend HTTP adapter（家庭宽带直发 SMTP 必进垃圾箱，否决）；无 SPOOL_RESEND_API_KEY → skipped 落 notification_log + console dev 输出，分发永不抛错不阻塞业务；事件 email_verification / order_file_pending(→全体活跃 admin) / order_file_rejected(→customer，审稿驳回须通知重传) / order_confirmed / order_ready(→customer，尊重 notify_channels/notify_addresses) |
 | D17 | 邮箱验证开关 | email 验证「是否必需」改为 system_config.require_email_verification 开关（0004 migration，默认 0=不要求）；为 1 时沿用 D12 的 403 email_unverified 下单门，为 0 时未验证亦可下单；验证邮件无论开关都照常下发（便于日后开启而不必补发 token）。公开 GET /api/public-config 暴露该标志（无成本字段，下单域可读）供前台条件提示。修订 D12 的无条件表述 |
+| D18 | 用户名登录 | users.username 可选第二登录标识（0005 migration，部分唯一索引 COLLATE NOCASE on column）；email 仍为通知/验证主干与必填唯一键。登录 body 改 identifier（用户名或邮箱，保留 email 别名向后兼容），verifyLogin 以 `email=? OR username=? COLLATE NOCASE` 解析；username 格式 ^[a-z0-9_]{3,30}$（禁 '@'/空格保持解析无歧义）；重名 409 username_taken（与 email_exists 同为既有枚举面，不新增更敏感口径） |
 
 ---
 

@@ -64,6 +64,7 @@ export async function fetchOptions(): Promise<OptionsDto> {
 export interface MeDto {
   id: string
   email: string
+  username: string | null
   name: string
   role: 'customer' | 'member' | 'admin'
   must_change_password: boolean
@@ -101,11 +102,12 @@ export async function fetchMe(): Promise<MeDto | null> {
   return meCache
 }
 
-export async function login(email: string, password: string): Promise<MeDto | null> {
+/** identifier = 用户名或邮箱（D18） */
+export async function login(identifier: string, password: string): Promise<MeDto | null> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier, password }),
   })
   if (res.status === 401) return null
   if (!res.ok) throw new Error(`login failed: ${res.status}`)
@@ -117,6 +119,7 @@ export async function login(email: string, password: string): Promise<MeDto | nu
 /** R4 下单域注册：成功即登录；403=注册关闭/邀请码错，409=邮箱已注册 */
 export async function register(body: {
   email: string
+  username?: string
   name: string
   password: string
   invite_code?: string

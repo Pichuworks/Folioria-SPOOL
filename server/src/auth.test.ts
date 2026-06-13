@@ -539,3 +539,47 @@ describe('§7 schema 校验边界', () => {
     expect(wrongType.statusCode).toBe(422)
   })
 })
+
+describe('D18 用户名登录', () => {
+  const REG = (body: Record<string, unknown>) =>
+    app.inject({ method: 'POST', url: '/api/auth/register', payload: body })
+
+  it('注册可设用户名，并可用用户名（大小写不敏感）登录', async () => {
+    const reg = await REG({ email: 'neko@cust.example', username: 'neko_print', name: '猫', password: 'a-good-password' })
+    expect(reg.statusCode).toBe(201)
+    expect((reg.json() as { username: string }).username).toBe('neko_print')
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { identifier: 'NEKO_PRINT', password: 'a-good-password' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect((res.json() as { email: string }).email).toBe('neko@cust.example')
+  })
+
+  it('用户名被占用 → 409 username_taken；NOCASE 索引拒绝异样大小写重名', async () => {
+    expect(
+      (await REG({ email: 'a1@cust.example', username: 'shared', name: 'A', password: 'a-good-password' })).statusCode,
+    ).toBe(201)
+    const dup = await REG({ email: 'a2@cust.example', username: 'shared', name: 'B', password: 'a-good-password' })
+    expect(dup.statusCode).toBe(409)
+    expect((dup.json() as { error: string }).error).toBe('username_taken')
+    // 索引 COLLATE NOCASE 在列上生效：直插异样大小写也冲突
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO users (id, email, username, password_hash, name, role, created_at) VALUES ('u-caps','caps@x.jp','SHARED','h','C','customer','2026-06-10T00:00:00Z')",
+        )
+        .run(),
+    ).toThrow(/UNIQUE/)
+  })
+
+  it('用户名格式非法（空格 / 过短）→ 422', async () => {
+    expect(
+      (await REG({ email: 'b@cust.example', username: 'Has Space', name: 'B', password: 'a-good-password' })).statusCode,
+    ).toBe(422)
+    expect(
+      (await REG({ email: 'c@cust.example', username: 'ab', name: 'C', password: 'a-good-password' })).statusCode,
+    ).toBe(422)
+  })
+})

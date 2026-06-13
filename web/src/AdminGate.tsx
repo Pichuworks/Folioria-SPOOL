@@ -29,8 +29,8 @@ function LoginForm({ onLogin }: { onLogin: (me: MeDto) => void }) {
   return (
     <AuthCard tag="STAFF" title="管理域登录">
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
-        <Field label="邮箱">
-          <input type="email" required className={specInput} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Field label="用户名或邮箱">
+          <input type="text" required className={specInput} value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="密码">
           <input type="password" required className={specInput} value={password} onChange={(e) => setPassword(e.target.value)} />

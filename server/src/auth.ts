@@ -8,6 +8,7 @@ export const VERIFICATION_TTL_HOURS = 48
 export interface SessionUser {
   id: string
   email: string
+  username: string | null
   name: string
   role: 'customer' | 'member' | 'admin'
   must_change_password: number
@@ -35,7 +36,7 @@ export function createSession(db: DB, userId: string): string {
 export function userByToken(db: DB, token: string): SessionUser | null {
   const row = db
     .prepare(
-      `SELECT u.id, u.email, u.name, u.role, u.must_change_password, u.email_verified_at
+      `SELECT u.id, u.email, u.username, u.name, u.role, u.must_change_password, u.email_verified_at
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND u.archived = 0`,
     )
@@ -85,13 +86,14 @@ export function revokeSession(db: DB, token: string): void {
 // S2: 未知邮箱也比对一次的哑 hash（cost 12，与真实账号一致）；预生成常量避免启动期现算
 const DUMMY_HASH = '$2b$12$USNoAd.LkznkSolTZdR9eOblhwfg.1kZ.ppLhoyc2Vk4dmMvhn7Ca'
 
-export function verifyLogin(db: DB, email: string, password: string): SessionUser | null {
+export function verifyLogin(db: DB, identifier: string, password: string): SessionUser | null {
+  // D18: 单一标识符——含 '@' 即邮箱口径，否则用户名口径；两者皆 NOCASE（email 列本就 NOCASE）
   const row = db
     .prepare(
-      `SELECT id, email, name, role, must_change_password, email_verified_at, password_hash
-       FROM users WHERE email = ? AND archived = 0`,
+      `SELECT id, email, username, name, role, must_change_password, email_verified_at, password_hash
+       FROM users WHERE (email = ? OR username = ? COLLATE NOCASE) AND archived = 0`,
     )
-    .get(email) as (SessionUser & { password_hash: string }) | undefined
+    .get(identifier, identifier) as (SessionUser & { password_hash: string }) | undefined
   const ok = bcrypt.compareSync(password, row?.password_hash ?? DUMMY_HASH)
   if (!row || !ok) return null
   const { password_hash: _drop, ...user } = row

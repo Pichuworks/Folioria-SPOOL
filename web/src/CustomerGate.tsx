@@ -28,6 +28,7 @@ function AuthCard({ tag, title, children }: { tag: string; title: string; childr
 
 const REGISTER_ERROR_TEXT: Record<string, string> = {
   email_exists: '该邮箱已注册，请直接登录。',
+  username_taken: '该用户名已被占用，请换一个。',
   registration_closed: '当前未开放注册，请联系工坊。',
   invalid_invite_code: '邀请码不正确。',
 }
@@ -35,6 +36,7 @@ const REGISTER_ERROR_TEXT: Record<string, string> = {
 function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [inviteCode, setInviteCode] = useState('')
@@ -44,15 +46,17 @@ function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
     e.preventDefault()
     setError(null)
     if (mode === 'login') {
+      // email 字段在登录态即「用户名或邮箱」标识符
       const me = await login(email, password)
       if (me) onLogin(me)
-      else setError('邮箱或密码错误')
+      else setError('用户名/邮箱或密码错误')
     } else {
-      const body: { email: string; name: string; password: string; invite_code?: string } = {
+      const body: { email: string; username?: string; name: string; password: string; invite_code?: string } = {
         email,
         name,
         password,
       }
+      if (username.trim() !== '') body.username = username.trim()
       if (inviteCode.trim() !== '') body.invite_code = inviteCode.trim()
       const { me, error: err } = await register(body)
       if (me) onLogin(me)
@@ -81,13 +85,29 @@ function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
         </button>
       </div>
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
-        <Field label="邮箱">
-          <input type="email" required className={specInput} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Field label={mode === 'login' ? '用户名或邮箱' : '邮箱'}>
+          <input
+            type={mode === 'login' ? 'text' : 'email'}
+            required
+            className={specInput}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </Field>
         {mode === 'register' && (
-          <Field label="称呼">
-            <input required maxLength={80} className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
+          <>
+            <Field label="用户名（可选，3–30 位小写字母/数字/下划线）">
+              <input
+                className={specInput}
+                value={username}
+                pattern="[a-z0-9_]{3,30}"
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </Field>
+            <Field label="称呼">
+              <input required maxLength={80} className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
+            </Field>
+          </>
         )}
         <Field label={mode === 'register' ? '密码（≥8 位）' : '密码'}>
           <input
