@@ -22,10 +22,10 @@ describe('migration runner', () => {
   })
 
   it('migrate 应用全部 migration 后 user_version=最新，重复执行幂等', () => {
-    expect(migrate(db)).toBe(3)
-    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(migrate(db)).toBe(4)
+    expect(db.pragma('user_version', { simple: true })).toBe(4)
     expect(migrate(db)).toBe(0)
-    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(db.pragma('user_version', { simple: true })).toBe(4)
   })
 
   it('外键每连接开启', () => {

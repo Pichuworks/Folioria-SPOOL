@@ -7,6 +7,7 @@ interface ConfigRow {
   min_margin_bp: number
   unify_pricing: number
   force_min_margin: number
+  require_email_verification: number
   overhead_dep_months: number
   overhead_month_volume: number
   quote_valid_days: number
@@ -17,13 +18,46 @@ const toDto = (r: ConfigRow) => ({
   ...r,
   unify_pricing: r.unify_pricing !== 0,
   force_min_margin: r.force_min_margin !== 0,
+  require_email_verification: r.require_email_verification !== 0,
 })
 
 const SELECT_CONFIG = `SELECT base_currency, min_margin_bp, unify_pricing, force_min_margin,
-                              overhead_dep_months, overhead_month_volume, quote_valid_days, initialized_at
+                              require_email_verification, overhead_dep_months, overhead_month_volume,
+                              quote_valid_days, initialized_at
                        FROM system_config WHERE id = 1`
 
 export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
+  // 公开实例标志（无成本/利润字段，下单域可读）：首页/门/向导用
+  app.get(
+    '/api/public-config',
+    {
+      config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              initialized: { type: 'boolean' },
+              require_email_verification: { type: 'boolean' },
+              registration_open: { type: 'boolean' },
+            },
+          },
+        },
+      },
+    },
+    async () => {
+      const row = db
+        .prepare('SELECT require_email_verification, registration_open FROM system_config WHERE id = 1')
+        .get() as { require_email_verification: number; registration_open: number } | undefined
+      return {
+        initialized: row != null,
+        require_email_verification: (row?.require_email_verification ?? 0) !== 0,
+        registration_open: (row?.registration_open ?? 1) !== 0,
+      }
+    },
+  )
+
   app.get('/api/settings', { preHandler: requireAdmin }, async () => {
     const row = db.prepare(SELECT_CONFIG).get() as ConfigRow | undefined
     if (!row) throw new Error('settings: system_config missing (run spool init)')
@@ -45,6 +79,7 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
             min_margin_bp: { type: 'integer', minimum: 0, maximum: 9999 },
             unify_pricing: { type: 'boolean' },
             force_min_margin: { type: 'boolean' },
+            require_email_verification: { type: 'boolean' },
             overhead_dep_months: { type: 'integer', minimum: 1 },
             overhead_month_volume: { type: 'integer', minimum: 1 },
             quote_valid_days: { type: 'integer', minimum: 1 },
@@ -58,6 +93,7 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
         min_margin_bp: number
         unify_pricing: boolean
         force_min_margin: boolean
+        require_email_verification: boolean
         overhead_dep_months: number
         overhead_month_volume: number
         quote_valid_days: number
@@ -82,13 +118,19 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
 
       db.prepare(
         `UPDATE system_config SET base_currency = ?, min_margin_bp = ?, unify_pricing = ?,
-           force_min_margin = ?, overhead_dep_months = ?, overhead_month_volume = ?, quote_valid_days = ?
+           force_min_margin = ?, require_email_verification = ?, overhead_dep_months = ?,
+           overhead_month_volume = ?, quote_valid_days = ?
          WHERE id = 1`,
       ).run(
         b.base_currency ?? existing.base_currency,
         b.min_margin_bp ?? existing.min_margin_bp,
         b.unify_pricing === undefined ? existing.unify_pricing : b.unify_pricing ? 1 : 0,
         b.force_min_margin === undefined ? existing.force_min_margin : b.force_min_margin ? 1 : 0,
+        b.require_email_verification === undefined
+          ? existing.require_email_verification
+          : b.require_email_verification
+            ? 1
+            : 0,
         b.overhead_dep_months ?? existing.overhead_dep_months,
         b.overhead_month_volume ?? existing.overhead_month_volume,
         b.quote_valid_days ?? existing.quote_valid_days,

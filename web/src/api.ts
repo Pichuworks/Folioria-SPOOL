@@ -77,6 +77,22 @@ const fireAuthChanged = () => window.dispatchEvent(new Event(AUTH_EVENT))
 let meCache: MeDto | null | undefined = undefined
 export const getMeCache = (): MeDto | null | undefined => meCache
 
+export interface PublicConfigDto {
+  initialized: boolean
+  require_email_verification: boolean
+  registration_open: boolean
+}
+
+let publicConfigCache: PublicConfigDto | undefined
+export const getPublicConfigCache = (): PublicConfigDto | undefined => publicConfigCache
+
+export async function fetchPublicConfig(): Promise<PublicConfigDto> {
+  const res = await fetch('/api/public-config')
+  if (!res.ok) throw new Error(`public-config failed: ${res.status}`)
+  publicConfigCache = (await res.json()) as PublicConfigDto
+  return publicConfigCache
+}
+
 export async function fetchMe(): Promise<MeDto | null> {
   const res = await fetch('/api/auth/me')
   if (res.status === 401) return (meCache = null)

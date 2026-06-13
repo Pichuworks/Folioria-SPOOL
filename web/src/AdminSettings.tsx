@@ -8,6 +8,7 @@ interface SettingsDto {
   min_margin_bp: number
   unify_pricing: boolean
   force_min_margin: boolean
+  require_email_verification: boolean
   overhead_dep_months: number
   overhead_month_volume: number
   quote_valid_days: number
@@ -40,6 +41,7 @@ function SettingsBody() {
       min_margin_bp: form.min_margin_bp,
       unify_pricing: form.unify_pricing,
       force_min_margin: form.force_min_margin,
+      require_email_verification: form.require_email_verification,
       overhead_dep_months: form.overhead_dep_months,
       overhead_month_volume: form.overhead_month_volume,
       quote_valid_days: form.quote_valid_days,
@@ -92,6 +94,21 @@ function SettingsBody() {
             />
             强制毛利下限（开启时手动价被抬至地板价并标记 forced）
           </label>
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            <input
+              type="checkbox"
+              checked={form.require_email_verification}
+              onChange={(e) =>
+                setForm((f) => (f ? { ...f, require_email_verification: e.target.checked } : f))
+              }
+            />
+            要求邮箱验证后方可下单（默认关）
+          </label>
+          {form.require_email_verification && (
+            <p className="text-[11.5px] leading-[1.7] text-wine-ink">
+              ⚠ 开启后，未配置邮件发送（SPOOL_RESEND_API_KEY）的实例将使新注册用户收不到验证链接而无法下单。
+            </p>
+          )}
           <PillBtn full>保存参数</PillBtn>
           {notice && <p className="text-[12.5px] text-wine-ink">{notice}</p>}
         </form>

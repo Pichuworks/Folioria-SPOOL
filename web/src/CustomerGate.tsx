@@ -1,5 +1,15 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { changePassword, fetchMe, getMeCache, login, logout, register, type MeDto } from './api'
+import {
+  changePassword,
+  fetchMe,
+  fetchPublicConfig,
+  getMeCache,
+  getPublicConfigCache,
+  login,
+  logout,
+  register,
+  type MeDto,
+} from './api'
 import { Field, PillBtn, specInput } from './spec'
 
 /** 下单域统一门：登录 / 注册（R4 开放注册）。过门后渲染 children；未验证邮箱给横幅提示 */
@@ -135,7 +145,16 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
 }
 
 export function VerifyBanner({ me }: { me: MeDto }) {
-  if (me.email_verified) return null
+  // D17: 仅当实例「要求邮箱验证」时才提示（默认关则不打扰可直接下单的用户）
+  const [required, setRequired] = useState<boolean | null>(
+    () => getPublicConfigCache()?.require_email_verification ?? null,
+  )
+  useEffect(() => {
+    fetchPublicConfig()
+      .then((c) => setRequired(c.require_email_verification))
+      .catch(() => {})
+  }, [])
+  if (me.email_verified || required !== true) return null
   return (
     <div className="mt-5 border border-wine bg-wine-dim/20 px-4 py-3 text-[13px] text-wine-ink">
       邮箱尚未验证——请打开注册邮件中的验证链接后再下单（浏览与报价不受影响）。

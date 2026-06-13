@@ -58,6 +58,7 @@ describe('F1 GET /api/settings', () => {
     expect(body['overhead_dep_months']).toBe(36)
     expect(body['overhead_month_volume']).toBe(2000)
     expect(body['quote_valid_days']).toBe(14)
+    expect(body['require_email_verification']).toBe(false) // 默认关
   })
 })
 
@@ -93,6 +94,16 @@ describe('F1 PATCH /api/settings', () => {
       force_min_margin: number
     }
     expect(row.force_min_margin).toBe(1)
+  })
+
+  it('D17 require_email_verification 布尔开关落库为 0/1', async () => {
+    const res = await patch({ require_email_verification: true })
+    expect(res.statusCode).toBe(200)
+    expect((res.json() as { require_email_verification: boolean }).require_email_verification).toBe(true)
+    const row = db.prepare('SELECT require_email_verification FROM system_config WHERE id = 1').get() as {
+      require_email_verification: number
+    }
+    expect(row.require_email_verification).toBe(1)
   })
 
   it('§7 边界：min_margin_bp=10000（地板价除零）/ 1.5 / "100" / 空 body → 422', async () => {

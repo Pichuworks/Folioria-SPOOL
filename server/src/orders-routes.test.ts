@@ -175,17 +175,29 @@ describe('R3 下单与金额（§1.2/§1.3 唯一舍入点 + 快照）', () => {
     expect(fraction.statusCode).toBe(422)
   })
 
-  it('R4: 未验证邮箱可登录但下单 403 email_unverified；guest 401', async () => {
+  it('R4/D17: 验证开关默认关→未验证可下单 201；开启后→403；guest 401', async () => {
     const cookie = await login('raw@cust.example')
-    const res = await app.inject({
+    // 默认 require_email_verification=0：未验证邮箱也可下单
+    const open = await app.inject({
       method: 'POST',
       url: '/api/orders',
       headers: { cookie },
       payload: { items: [A4_ITEM] },
     })
-    expect(res.statusCode).toBe(403)
-    expect((res.json() as { error: string }).error).toBe('email_unverified')
+    expect(open.statusCode).toBe(201)
 
+    // 开启要求验证后：未验证 → 403 email_unverified
+    db.prepare('UPDATE system_config SET require_email_verification = 1 WHERE id = 1').run()
+    const blocked = await app.inject({
+      method: 'POST',
+      url: '/api/orders',
+      headers: { cookie },
+      payload: { items: [A4_ITEM] },
+    })
+    expect(blocked.statusCode).toBe(403)
+    expect((blocked.json() as { error: string }).error).toBe('email_unverified')
+
+    // guest 无 cookie → 401（先于验证门）
     expect(
       (await app.inject({ method: 'POST', url: '/api/orders', payload: { items: [A4_ITEM] } })).statusCode,
     ).toBe(401)

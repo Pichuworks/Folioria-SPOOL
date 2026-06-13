@@ -200,8 +200,11 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
     },
     async (req, reply) => {
       const user = req.user as NonNullable<typeof req.user>
-      // R4: 未验证邮箱可登录但不可下单
-      if (user.email_verified_at == null) {
+      // D17: 仅当实例开启「要求邮箱验证」时,未验证邮箱才禁止下单(默认关)
+      const cfg = db
+        .prepare('SELECT require_email_verification FROM system_config WHERE id = 1')
+        .get() as { require_email_verification: number }
+      if (cfg.require_email_verification === 1 && user.email_verified_at == null) {
         return reply.status(403).send({ error: 'email_unverified' })
       }
       const b = req.body as {
