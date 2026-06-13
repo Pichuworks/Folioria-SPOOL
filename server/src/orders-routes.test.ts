@@ -264,6 +264,12 @@ describe('R1 状态机（§2.5 + 审稿定点）', () => {
     expect(afterReject.status).toBe('file_pending')
     expect(afterReject.items[1]?.file_status).toBe('rejected')
     expect(afterReject.items[1]?.file_note).toBe('出血不足 3mm')
+    // 驳回须通知客户（否则订单无声卡死）：notification_log 落一条 order_file_rejected
+    const rej = db
+      .prepare("SELECT recipient FROM notification_log WHERE event = 'order_file_rejected'")
+      .all() as Array<{ recipient: string }>
+    expect(rej).toHaveLength(1)
+    expect(rej[0]?.recipient).toBe('a@cust.example')
 
     // 重审通过 → file_approved
     const approved = await app.inject({
@@ -611,6 +617,23 @@ describe('R6 收款与折扣（§5/C7）', () => {
     const u = unpaid.json() as OrderDto & { paid_at: string | null }
     expect(u.paid_amount).toBe(0)
     expect(u.paid_at).toBeNull()
+  })
+
+  it('H2: 超付 / 状态与金额不一致 → 422（钱不可超付，状态须自洽）', async () => {
+    const adminCookie = await login('staff@folioria.jp')
+    const cookie = await login('a@cust.example')
+    const order = await placeOrder(cookie, [A4_ITEM]) // total 14
+    const pay = (payload: Record<string, unknown>) =>
+      app.inject({ method: 'PATCH', url: `/api/orders/${order.id}/payment`, headers: { cookie: adminCookie }, payload })
+
+    expect((await pay({ payment_status: 'paid', paid_amount: 15 })).statusCode).toBe(422) // 超付
+    expect((await pay({ payment_status: 'paid', paid_amount: 7 })).statusCode).toBe(422) // paid 须等于 total
+    expect((await pay({ payment_status: 'deposit', paid_amount: 14 })).statusCode).toBe(422) // deposit 须 < total
+    expect((await pay({ payment_status: 'deposit', paid_amount: 0 })).statusCode).toBe(422) // deposit 须 > 0
+    // 标记 paid 不给金额 → 自动结清为 total
+    const paid = await pay({ payment_status: 'paid' })
+    expect(paid.statusCode).toBe(200)
+    expect((paid.json() as OrderDto).paid_amount).toBe(14)
   })
 
   it('金额字段传 1.5 / "100" → 422（§7 边界，paid_amount）', async () => {

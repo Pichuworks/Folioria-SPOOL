@@ -453,6 +453,15 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       )
       syncFileState(db, id)
       const updated = getOrder(db, id) as OrderRow
+      // 驳回须通知客户重传（否则订单无声卡在 file_pending）；分发永不抛错
+      if (b.file_status === 'rejected') {
+        await notifyUser(
+          db,
+          'order_file_rejected',
+          updated.customer_id,
+          templates.orderFileRejected(updated.order_number, b.file_note ?? null),
+        )
+      }
       return orderDto(db, updated, baseCurrency(db), { admin: true, includeToken: true })
     },
   )
@@ -479,7 +488,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
             payment_method: { type: ['string', 'null'], maxLength: 50 },
           },
         },
-        response: { 200: ORDER_SCHEMA, 404: ERROR_SCHEMA },
+        response: { 200: ORDER_SCHEMA, 404: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -491,12 +500,27 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       }
       const order = getOrder(db, id)
       if (!order) return reply.status(404).send({ error: 'not_found' })
+      // 目标 paid_amount 并做上限/一致性校验：钱不可超付，状态须与金额自洽
+      const total = order.total
+      const newPaid =
+        b.payment_status === 'unpaid'
+          ? 0
+          : b.payment_status === 'paid'
+            ? (b.paid_amount ?? total) // 标记结清而未给金额 → 默认等于 total
+            : (b.paid_amount ?? order.paid_amount)
+      if (newPaid > total) return reply.status(422).send({ error: 'paid_exceeds_total' })
+      if (b.payment_status === 'paid' && newPaid !== total) {
+        return reply.status(422).send({ error: 'paid_amount_must_equal_total' })
+      }
+      if (b.payment_status === 'deposit' && !(newPaid > 0 && newPaid < total)) {
+        return reply.status(422).send({ error: 'deposit_out_of_range' })
+      }
       const paidAt = b.payment_status === 'unpaid' ? null : (order.paid_at ?? new Date().toISOString())
       db.prepare(
         'UPDATE orders SET payment_status = ?, paid_amount = ?, payment_method = ?, paid_at = ? WHERE id = ?',
       ).run(
         b.payment_status,
-        b.payment_status === 'unpaid' ? 0 : (b.paid_amount ?? order.paid_amount),
+        newPaid,
         'payment_method' in b ? (b.payment_method ?? null) : order.payment_method,
         paidAt,
         id,

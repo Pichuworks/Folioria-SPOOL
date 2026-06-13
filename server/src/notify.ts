@@ -24,7 +24,12 @@ export interface NotificationChannel {
   send(to: string, msg: NotificationMessage): Promise<NotificationResult>
 }
 
-export type NotifyEvent = 'email_verification' | 'order_file_pending' | 'order_confirmed' | 'order_ready'
+export type NotifyEvent =
+  | 'email_verification'
+  | 'order_file_pending'
+  | 'order_file_rejected'
+  | 'order_confirmed'
+  | 'order_ready'
 
 export function emailChannel(): NotificationChannel {
   return {
@@ -145,6 +150,14 @@ export const templates = {
     return {
       subject: `S.P.O.O.L. · 订单 ${orderNumber} 待审稿`,
       text: `订单 ${orderNumber} 的文件已传齐，等待审稿。\n请在管理台 /admin/orders 处理。`,
+    }
+  },
+  orderFileRejected(orderNumber: string, fileNote: string | null): NotificationMessage {
+    return {
+      subject: `Folioria · 订单 ${orderNumber} 文件需重传`,
+      text: `您的订单 ${orderNumber} 中有文件未通过审稿，需要修改后重新上传。${
+        fileNote ? `\n审稿意见：${fileNote}` : ''
+      }\n请打开订单查询链接逐行查看并重传。`,
     }
   },
   orderConfirmed(orderNumber: string, totalDisplay: string): NotificationMessage {
