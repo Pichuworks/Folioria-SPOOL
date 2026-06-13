@@ -534,6 +534,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   app.get(
     '/api/calculator/options',
     {
+      // 公开端点：每次重算全目录报价矩阵，须限流防刮取/打满
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: {
         response: {
           200: {
