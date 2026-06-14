@@ -137,6 +137,9 @@ export interface OrderBookComponentRow {
   sheets_per_book: number
   unit_sell_c: number
   job_id: string | null
+  file_url: string | null
+  file_status: 'pending' | 'approved' | 'rejected'
+  file_note: string | null
   paper_name: string
   size_label: string
 }
@@ -328,8 +331,8 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
 }
 
 /**
- * 审稿环节自动流转（R1 定点）：
- *   quoted        → 全部 item 有文件 → file_pending
+ * 审稿环节自动流转（R1 定点 + D31）：单页 item 与书组件同入一个文件池——
+ *   quoted        → 全部可上传行（item + 书组件）有文件 → file_pending
  *   file_pending  ⇄ file_approved：全部 approved → file_approved；任一非 approved → file_pending
  * 返回流转后状态与是否变化（通知钩子用）
  */
@@ -339,18 +342,31 @@ export function syncFileState(db: DB, orderId: string): { status: OrderStatus; c
   if (!['quoted', 'file_pending', 'file_approved'].includes(order.status)) {
     return { status: order.status, changed: false }
   }
-  const counts = db
+  const itemCounts = db
     .prepare(
       `SELECT COUNT(*) AS n,
               SUM(CASE WHEN file_url IS NOT NULL THEN 1 ELSE 0 END) AS filed,
               SUM(CASE WHEN file_status = 'approved' THEN 1 ELSE 0 END) AS approved
        FROM order_items WHERE order_id = ?`,
     )
-    .get(orderId) as { n: number; filed: number; approved: number }
+    .get(orderId) as { n: number; filed: number | null; approved: number | null }
+  const compCounts = db
+    .prepare(
+      `SELECT COUNT(*) AS n,
+              SUM(CASE WHEN obc.file_url IS NOT NULL THEN 1 ELSE 0 END) AS filed,
+              SUM(CASE WHEN obc.file_status = 'approved' THEN 1 ELSE 0 END) AS approved
+       FROM order_book_components obc
+       JOIN order_books ob ON ob.id = obc.order_book_id
+       WHERE ob.order_id = ?`,
+    )
+    .get(orderId) as { n: number; filed: number | null; approved: number | null }
+  const n = itemCounts.n + compCounts.n
+  const filed = (itemCounts.filed ?? 0) + (compCounts.filed ?? 0)
+  const approved = (itemCounts.approved ?? 0) + (compCounts.approved ?? 0)
 
   let next: OrderStatus = order.status
-  if (counts.n > 0 && counts.filed === counts.n) {
-    next = counts.approved === counts.n ? 'file_approved' : 'file_pending'
+  if (n > 0 && filed === n) {
+    next = approved === n ? 'file_approved' : 'file_pending'
   } else if (order.status !== 'quoted') {
     // 不应发生（上传后文件不删除），防御性维持现状
     next = order.status
@@ -413,8 +429,9 @@ function splitByWeight(total: number, weights: readonly number[]): number[] {
 const ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
 
 /**
- * R1/R6 + D27 confirm：未过 quote_valid_until（过期 409，须重新报价）。
- * 含单页 item 的单须 file_approved（审稿过）；纯书单（无 item，本阶段无组件文件门）可从 quoted 直接确认。
+ * R1/R6 + D27/D31 confirm：未过 quote_valid_until（过期 409，须重新报价）。
+ * 凡有可上传行（单页 item 或书组件）即须 file_approved（审稿过）——书单与单页 item 同口径，
+ * 不再有「纯书单从 quoted 直接确认」的无文件门特例。退化单（无任何可上传行）才允许 quoted 起确认。
  * 单事务：逐 item 生成 Job(queued) 回写 order_items.job_id；逐书行按组件拆 Job(queued) 回写
  * order_book_components.job_id（工艺已落 order_book_finishings 作记录）。
  * 折扣按全部行（item + 书行）比例整数分摊；书行营收再按组件材料贡献整数分摊进各组件 quoted_price，
@@ -425,9 +442,10 @@ export function confirmOrder(db: DB, orderId: string): void {
   if (!order) throw new OrderError(404, 'not_found')
   const items = getOrderItems(db, orderId)
   const books = getOrderBooks(db, orderId)
-  // 单页 item 须经审稿（file_approved）；纯书单无文件门，pre-confirm 任一态可确认
+  // 可上传行数 = 单页 item + 全部书组件；>0 须 file_approved（审稿过）
+  const fileableLines = items.length + books.reduce((s, b) => s + b.components.length, 0)
   const confirmable =
-    items.length > 0 ? ['file_approved'] : ['quoted', 'file_pending', 'file_approved']
+    fileableLines > 0 ? ['file_approved'] : ['quoted', 'file_pending', 'file_approved']
   if (!confirmable.includes(order.status)) {
     throw new OrderError(409, `not_confirmable_from_${order.status}`)
   }

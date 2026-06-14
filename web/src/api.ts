@@ -548,6 +548,9 @@ export interface OrderBookComponentDto {
   sheets_per_book: number
   unit_sell_c: number
   unit_display: string
+  has_file: boolean
+  file_status: 'pending' | 'approved' | 'rejected'
+  file_note: string | null
   mode_id?: number
   job_id?: string | null
 }
@@ -666,6 +669,18 @@ export const reviewOrderItem = (orderId: string, itemId: string, verdict: 'appro
     file_note: note ?? null,
   })
 
+// D31 书组件文件上传/审稿（与单页 item 同口径）
+export const reviewOrderBookComponent = (
+  orderId: string,
+  compId: string,
+  verdict: 'approved' | 'rejected',
+  note?: string,
+) =>
+  send<OrderDto>('PATCH', `/api/orders/${orderId}/book-components/${compId}/file-review`, {
+    file_status: verdict,
+    file_note: note ?? null,
+  })
+
 // D28 收款流水（append-only；paid_amount/payment_status 为其投影）
 export interface PaymentDto {
   id: string
@@ -705,6 +720,26 @@ export async function uploadOrderItemFile(
 
 export const orderItemFileUrl = (orderId: string, itemId: string): string =>
   `/api/orders/${orderId}/items/${itemId}/file`
+
+export async function uploadOrderBookComponentFile(
+  orderId: string,
+  compId: string,
+  file: File,
+): Promise<{ ok: boolean; status: number; data: OrderDto | { error?: string } }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`/api/orders/${orderId}/book-components/${compId}/file`, { method: 'POST', body: form })
+  let data: unknown = null
+  try {
+    data = await res.json()
+  } catch {
+    // 无 body
+  }
+  return { ok: res.ok, status: res.status, data: data as OrderDto | { error?: string } }
+}
+
+export const orderBookComponentFileUrl = (orderId: string, compId: string): string =>
+  `/api/orders/${orderId}/book-components/${compId}/file`
 
 // C1 一键再下单：跨视图传递预填的单页行（module 级缓冲，hash 切换不重载）
 export interface ReorderItem {

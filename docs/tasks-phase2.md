@@ -159,7 +159,7 @@
       AdminGate 保留 admin 角色门（非 admin →「本页仅管理域可见」）；登录/首登改密/忘记密码同一表单。不动 auth API。
 
 ### Track B · 书子系统 production 收尾
-- [ ] PB1 书组件文件上传/审稿（migration 0014：order_book_components +file_url/file_status/file_note；附录A D31）：
+- [x] PB1 书组件文件上传/审稿（migration 0014：order_book_components +file_url/file_status/file_note；附录A D31）：
       files-routes 扩 order_book_components 级上传（复用 R5 白名单+magic bytes+隔离存储+randomUUID）；per-component
       审稿；含书行订单 confirm 须「全部书组件有文件且 approved」；纯书单与单页 item 同口径有文件门。OrderView/AdminOrders 渲染。
 - [ ] PB2 书行再下单（migration 0015：order_book_components +source_component_id → book_components.id；附录A D32）：

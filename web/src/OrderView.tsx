@@ -4,11 +4,13 @@ import {
   fetchMe,
   fetchOrderByToken,
   getMeCache,
+  orderBookComponentFileUrl,
   ORDER_STATUS_LABEL,
   orderItemFileUrl,
   patchOrderStatus,
   send,
   setReorder,
+  uploadOrderBookComponentFile,
   uploadOrderItemFile,
   type MeDto,
   type OrderDto,
@@ -65,8 +67,99 @@ function Timeline({ order }: { order: OrderDto }) {
   )
 }
 
-/** D27 书行展示（下单域：仅售价侧；机器对客户不可见） */
-function BookLine({ book }: { book: NonNullable<OrderDto['books']>[number] }) {
+/** D31 书组件文件行：状态 + owner 上传/下载（与 ItemRow 同口径，每个组件单独审稿） */
+function BookCompFile({
+  order,
+  comp,
+  canUpload,
+  isOwner,
+  onChanged,
+}: {
+  order: OrderDto
+  comp: NonNullable<OrderDto['books']>[number]['components'][number]
+  canUpload: boolean
+  isOwner: boolean
+  onChanged: (o: OrderDto) => void
+}) {
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const pick = async (file: File) => {
+    setBusy(true)
+    setErr(null)
+    const res = await uploadOrderBookComponentFile(order.id, comp.id, file)
+    setBusy(false)
+    if (res.ok) onChanged(res.data as OrderDto)
+    else {
+      const code = (res.data as { error?: string })?.error ?? String(res.status)
+      setErr(UPLOAD_ERROR_TEXT[code] ?? `上传失败（${code}）`)
+    }
+  }
+
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-9 text-[11.5px]">
+      {comp.has_file ? (
+        <>
+          <span
+            className={`font-mono text-[10px] tracking-[.1em] ${
+              comp.file_status === 'approved' ? 'text-ink' : comp.file_status === 'rejected' ? 'text-warn' : 'text-dim'
+            }`}
+          >
+            {FILE_STATUS_LABEL[comp.file_status]}
+          </span>
+          {comp.file_note && <span className="text-warn">审稿意见：{comp.file_note}</span>}
+          {isOwner && (
+            <a className="text-dim underline hover:text-ink" href={orderBookComponentFileUrl(order.id, comp.id)}>
+              下载
+            </a>
+          )}
+        </>
+      ) : (
+        <span className="font-mono text-[10px] tracking-[.1em] text-dim">未上传文件</span>
+      )}
+      {canUpload && (
+        <>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".pdf,.png,.tif,.tiff"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void pick(f)
+              e.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => fileInput.current?.click()}
+            className="rounded-full border border-wine px-2.5 py-0.5 text-[11px] text-wine-ink hover:opacity-80 disabled:opacity-50"
+          >
+            {busy ? '上传中…' : comp.has_file ? '重新上传' : '上传文件'}
+          </button>
+        </>
+      )}
+      {err && <span className="text-[11.5px] text-wine-ink">{err}</span>}
+    </div>
+  )
+}
+
+/** D27 书行展示（下单域：仅售价侧；机器对客户不可见）。D31 每组件加文件上传/审稿状态 */
+function BookLine({
+  book,
+  order,
+  canUpload,
+  isOwner,
+  onChanged,
+}: {
+  book: NonNullable<OrderDto['books']>[number]
+  order: OrderDto
+  canUpload: boolean
+  isOwner: boolean
+  onChanged: (o: OrderDto) => void
+}) {
   return (
     <div className="border-b border-line py-3 last:border-b-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -79,13 +172,16 @@ function BookLine({ book }: { book: NonNullable<OrderDto['books']>[number] }) {
       </div>
       <div className="mt-1 pl-4">
         {book.components.map((c) => (
-          <div key={c.id} className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-dim">
-            <span className="min-w-9 text-ink">{BOOK_ROLE_LABEL[c.role] ?? c.role}</span>
-            <span>
-              {c.paper_name} · {c.size_label}
-              {c.duplex ? ' · 双面' : ''}
-            </span>
-            <span className="font-mono">· {c.sheets_per_book} 张/本</span>
+          <div key={c.id}>
+            <div className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-dim">
+              <span className="min-w-9 text-ink">{BOOK_ROLE_LABEL[c.role] ?? c.role}</span>
+              <span>
+                {c.paper_name} · {c.size_label}
+                {c.duplex ? ' · 双面' : ''}
+              </span>
+              <span className="font-mono">· {c.sheets_per_book} 张/本</span>
+            </div>
+            <BookCompFile order={order} comp={c} canUpload={canUpload} isOwner={isOwner} onChanged={onChanged} />
           </div>
         ))}
         {book.finishings.length > 0 && (
@@ -330,7 +426,14 @@ export default function OrderView({ token }: { token: string }) {
             <div className="mt-6">
               <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">册子 · {order.books.length}</div>
               {order.books.map((b) => (
-                <BookLine key={b.id} book={b} />
+                <BookLine
+                  key={b.id}
+                  book={b}
+                  order={order}
+                  canUpload={canUpload}
+                  isOwner={isOwner}
+                  onChanged={(o) => setOrder({ ...o, access_token: order.access_token })}
+                />
               ))}
             </div>
           )}

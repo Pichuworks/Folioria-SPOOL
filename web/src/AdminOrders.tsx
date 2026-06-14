@@ -2,12 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import {
   fetchOrders,
+  orderBookComponentFileUrl,
   ORDER_STATUS_LABEL,
   orderItemFileUrl,
   patchOrderDiscount,
   patchOrderStatus,
   recordPayment,
+  reviewOrderBookComponent,
   reviewOrderItem,
+  type OrderBookComponentDto,
+  type OrderBookDto,
   type OrderDto,
   type OrderItemDto,
 } from './api'
@@ -111,6 +115,97 @@ function ReviewRow({
         )}
         {err && <span className="text-wine-ink">{err}</span>}
       </div>
+    </div>
+  )
+}
+
+const BOOK_ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
+
+/** D31 书组件审稿行：与 ReviewRow 同口径，逐组件 approve/reject */
+function BookComponentReviewRow({
+  order,
+  comp,
+  onUpdated,
+}: {
+  order: OrderDto
+  comp: OrderBookComponentDto
+  onUpdated: (o: OrderDto) => void
+}) {
+  const [note, setNote] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+  const reviewable = comp.has_file && ['quoted', 'file_pending', 'file_approved'].includes(order.status)
+
+  const review = async (verdict: 'approved' | 'rejected') => {
+    setErr(null)
+    const res = await reviewOrderBookComponent(order.id, comp.id, verdict, verdict === 'rejected' ? note : undefined)
+    if (res.ok) onUpdated(res.data)
+    else setErr(`审稿失败（${res.status}）`)
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-line py-1.5 pl-4 text-[12px] last:border-b-0">
+      <span className="min-w-9 font-medium text-ink">{BOOK_ROLE_LABEL[comp.role] ?? comp.role}</span>
+      <span className="text-dim">
+        {comp.paper_name} · {comp.size_label}
+      </span>
+      {comp.has_file ? (
+        <a className="text-dim underline hover:text-ink" href={orderBookComponentFileUrl(order.id, comp.id)}>
+          下载稿件
+        </a>
+      ) : (
+        <span className="font-mono text-[10px] tracking-[.1em] text-dim">未上传</span>
+      )}
+      <span
+        className={`font-mono text-[10px] tracking-[.1em] ${
+          comp.file_status === 'approved' ? 'text-ink' : comp.file_status === 'rejected' ? 'text-warn' : 'text-dim'
+        }`}
+      >
+        {FILE_STATUS_LABEL[comp.file_status]}
+      </span>
+      {comp.file_note && <span className="text-warn">意见：{comp.file_note}</span>}
+      {reviewable && (
+        <span className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            className="rounded-full border border-ink px-2.5 py-0.5 text-[11.5px] text-ink hover:bg-card"
+            onClick={() => void review('approved')}
+          >
+            通过
+          </button>
+          <input
+            placeholder="驳回意见"
+            className="w-36 border border-line bg-card px-2 py-0.5 text-[11.5px] text-ink outline-none focus:border-wine"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <button
+            type="button"
+            className="rounded-full border border-wine px-2.5 py-0.5 text-[11.5px] text-wine-ink hover:opacity-80"
+            onClick={() => void review('rejected')}
+          >
+            驳回
+          </button>
+        </span>
+      )}
+      {err && <span className="text-wine-ink">{err}</span>}
+    </div>
+  )
+}
+
+function BookReviewBlock({ order, books, onUpdated }: { order: OrderDto; books: OrderBookDto[]; onUpdated: (o: OrderDto) => void }) {
+  return (
+    <div className="mt-4">
+      <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">审稿 · 册子 {books.length}</div>
+      {books.map((b) => (
+        <div key={b.id} className="mb-2 border-b border-line pb-1 last:border-b-0">
+          <div className="text-[13px] font-medium text-ink">
+            📖 {b.name} <span className="text-[12px] text-dim">×{b.count}</span>
+          </div>
+          {b.components.map((c) => (
+            <BookComponentReviewRow key={c.id} order={order} comp={c} onUpdated={onUpdated} />
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
@@ -223,6 +318,9 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
           {order.items.map((item) => (
             <ReviewRow key={item.id} order={order} item={item} onUpdated={onUpdated} />
           ))}
+          {order.books && order.books.length > 0 && (
+            <BookReviewBlock order={order} books={order.books} onUpdated={onUpdated} />
+          )}
           {order.notes && <p className="mt-3 text-[12.5px] text-dim">备注：{order.notes}</p>}
         </div>
 

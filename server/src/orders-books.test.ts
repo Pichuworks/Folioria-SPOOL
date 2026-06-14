@@ -205,8 +205,37 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
     return (res.json() as { id: string }).id
   }
 
-  it('纯书单无文件门：admin 可从 quoted 直接 confirm，拆出每组件一道 Job(queued)', async () => {
+  /** D31: 书组件现有文件门，confirm 前须全部组件有文件且 approved。本组件作业测试用 DB 捷径推进到 file_approved */
+  function approveAllComponents(id: string): void {
+    db.prepare(
+      `UPDATE order_book_components SET file_url = 'seed.pdf', file_status = 'approved'
+       WHERE order_book_id IN (SELECT id FROM order_books WHERE order_id = ?)`,
+    ).run(id)
+    db.prepare("UPDATE orders SET status = 'file_approved' WHERE id = ?").run(id)
+  }
+
+  /** 下单并推进到 file_approved（审稿过），返回可 confirm 的 order id */
+  async function placeApprovedBookOrder(innerSheets = 10, count = 5): Promise<string> {
+    const id = await placeBookOrder(innerSheets, count)
+    approveAllComponents(id)
+    return id
+  }
+
+  it('D31 书组件文件门：未审稿时 quoted 直接 confirm → 409 not_confirmable', async () => {
     const id = await placeBookOrder()
+    const admin = await login('staff@folioria.jp')
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/orders/${id}/status`,
+      headers: { cookie: admin },
+      payload: { status: 'confirmed' },
+    })
+    expect(res.statusCode).toBe(409)
+    expect((res.json() as { error: string }).error).toBe('not_confirmable_from_quoted')
+  })
+
+  it('书单审稿过后 confirm：拆出每组件一道 Job(queued)', async () => {
+    const id = await placeApprovedBookOrder()
     const admin = await login('staff@folioria.jp')
     const res = await app.inject({
       method: 'PATCH',
@@ -240,7 +269,7 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
   })
 
   it('折扣后 Σ(组件 quoted_price) === total 守恒', async () => {
-    const id = await placeBookOrder()
+    const id = await placeApprovedBookOrder()
     const admin = await login('staff@folioria.jp')
     const disc = await app.inject({
       method: 'PATCH',
@@ -263,7 +292,7 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
   })
 
   it('AdminJobs 编组字段：GET /api/jobs 暴露 order_book_id/book_name/book_role', async () => {
-    const id = await placeBookOrder()
+    const id = await placeApprovedBookOrder()
     const admin = await login('staff@folioria.jp')
     await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
     const res = await app.inject({ method: 'GET', url: '/api/jobs', headers: { cookie: admin } })
@@ -275,7 +304,7 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
   })
 
   it('confirmed 后 cancel：组件作业连带取消（queued → cancelled）', async () => {
-    const id = await placeBookOrder()
+    const id = await placeApprovedBookOrder()
     const admin = await login('staff@folioria.jp')
     await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
     await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'cancelled' } })
@@ -290,7 +319,7 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
   })
 
   it('组件作业 done 落账：按组件 mode/paper/size/quantity 扣库存（completeJob 不变）', async () => {
-    const id = await placeBookOrder(10, 5)
+    const id = await placeApprovedBookOrder(10, 5)
     const admin = await login('staff@folioria.jp')
     await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
     // 给内页纸（paper 1 / A4）备 100 张账面
