@@ -108,6 +108,20 @@
         web/src/Home.tsx；#/ 缺省路由，Calculator 挪 #/calculator；价目区实时取
         /api/calculator/options 起价，API 不可达时优雅降级。
 
+## P5 Track A · 书/册子组合产品（头牌，新立项 · D27）
+> 一本书 = 多张单页组件 + 工艺；additive，combos/§2.5 stored 基线（187/43）不动。复用属性产品层
+> （listProducts / color_class）+ 机器推荐改派（recommendMachines / PATCH /api/jobs/:id/mode）。
+> 机器对客户不可见；金额三铁律（唯一舍入点 line_total）；测试先行。
+
+- [x] A1 schema migration 0010（book_products / book_components / finishing_ops / book_finishings /
+      order_books / order_book_components / order_book_finishings；STRICT，user_version 9→10）+ 附录A D27。
+- [x] A2 书定价 priceBook（每本 unit_price_c = Σ组件单页价×张数 + Σ工艺贡献；per_book/per_page/per_area
+      口径；机器不可见复用 listProducts；priceComponentSpec 折叠最低单页价 + 最便宜 mode）。server/src/books.ts，测试先行。
+- [ ] A3 下单：createOrder 接书行（order_books + 组件 + 工艺快照），subtotal 含书行；orderDto 增 books（双域白名单）。
+- [ ] A4 confirm 拆 Job（每组件一道，营收按材料贡献整数分摊）+ 工艺记录；cancel 连带；AdminJobs 按书编组。
+- [ ] A5 管理域 CRUD：book_products / components / finishing_ops（pricing-routes + AdminPricing）。
+- [ ] A6 前台 #/quote 增「册子」类目（选成品 → 填内页/插图张数 + 本数 → 出价，机器不可见）。
+
 ## P4 Phase 3 远期（PRD 立项，不急）
 
 - 环境传感器 MQTT → location 湿度自动预警 · 打印机 SNMP → 出纸计数/碳粉余量自动校正

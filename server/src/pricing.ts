@@ -258,6 +258,33 @@ export function listProducts(db: DB, opts?: QuoteOptions): Product[] {
   return [...map.values()]
 }
 
+/**
+ * D27 书组件：给定 (color_class, paper, size, duplex)，返回匹配产品里**最低单页 sell_c**
+ * 与对应最便宜 mode（机器对客户不可见）。复用 listProducts 折叠口径。不可做 → null。
+ * products 可外部预算一次复用（priceBook 逐组件调用，避免重复全目录重算）。
+ */
+export function priceComponentSpec(
+  db: DB,
+  spec: { paper_id: number; size_key: string; color_class: string; duplex: number },
+  opts?: QuoteOptions,
+  products?: readonly Product[],
+): { mode_id: number; unit_sell_c: MoneyC } | null {
+  const list = products ?? listProducts(db, opts)
+  let best: { mode_id: number; sell_c: number } | null = null
+  for (const p of list) {
+    if (
+      p.category === spec.color_class &&
+      p.paper_id === spec.paper_id &&
+      p.size_key === spec.size_key &&
+      p.duplex === spec.duplex &&
+      (!best || (p.sell_c as number) < best.sell_c)
+    ) {
+      best = { mode_id: p.mode_id, sell_c: p.sell_c as number }
+    }
+  }
+  return best ? { mode_id: best.mode_id, unit_sell_c: moneyC(best.sell_c) } : null
+}
+
 /** 折旧摊薄（§2.3）：round(equipment_cost_c ÷ (dep_months × month_volume))。不计入报价 total_c，T12 成本快照用 */
 export function overheadC(db: DB, printerId: number): MoneyC {
   const printer = db
