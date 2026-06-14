@@ -165,7 +165,8 @@
 - [x] PB2 书行再下单（migration 0015：order_book_components +source_component_id → book_components.id；附录A D32）：
       C1 reorder 支持册子行预填（book_id + count + 各组件张数还原）；成品/组件已归档则跳过并提示。
 - [x] PB3 AdminJobs 按书编组：用 order_book_id/book_name/book_role 折叠组件作业。
-- [ ] PB4 书作业核算校验：测试覆盖 dashboard / 月报正确计入书组件作业（quoted_price 营收 / done 成本快照）；内外口径不被书行破坏。
+- [x] PB4 书作业核算校验：测试覆盖 dashboard / 月报正确计入书组件作业（quoted_price 营收 / done 成本快照）；内外口径不被书行破坏。
+      —— Track B（PB1–PB4）全部完成：书子系统 production 收尾（文件门 / 再下单 / 编组 / 核算）闭合。
 
 ### Track C · 审计扩面 + 运营校验
 - [ ] PC1 审计 choke-point 扩面：书成品/组件/工艺定价编辑、mode/paper/size 编辑、订单状态流转（confirm/cancel）、
