@@ -1,4 +1,5 @@
 import { type FastifyInstance } from 'fastify'
+import { type BookLineInput } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin, requireUser } from './guards.js'
@@ -12,9 +13,11 @@ import {
   createOrder,
   CUSTOMER_CANCELLABLE,
   getOrder,
+  getOrderBooks,
   getOrderItems,
   GUEST_SENTINEL_ID,
   syncFileState,
+  type OrderBook,
   type OrderItemRow,
   type OrderRow,
 } from './orders.js'
@@ -41,6 +44,59 @@ export const ORDER_ITEM_SCHEMA = {
     file_status: { type: 'string' },
     file_note: { type: ['string', 'null'] },
     job_id: { type: ['string', 'null'] }, // admin 视图专用
+  },
+}
+
+// ---------- D27 书行序列化（下单域：仅售价侧；mode_id 机器/job_id 仅 admin 视图） ----------
+
+export const ORDER_BOOK_COMPONENT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    role: { type: 'string' },
+    paper_id: { type: 'integer' },
+    paper_name: { type: 'string' },
+    size_key: { type: 'string' },
+    size_label: { type: 'string' },
+    color_class: { type: 'string' },
+    duplex: { type: 'boolean' },
+    sheets_per_book: { type: 'integer' },
+    unit_sell_c: { type: 'integer' },
+    unit_display: { type: 'string' },
+    mode_id: { type: 'integer' }, // admin 视图专用（机器对客户不可见）
+    job_id: { type: ['string', 'null'] }, // admin 视图专用
+  },
+}
+
+export const ORDER_BOOK_FINISHING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    finishing_id: { type: 'integer' },
+    name: { type: 'string' },
+    pricing: { type: 'string' },
+    price_c: { type: 'integer' },
+    price_display: { type: 'string' },
+    contribution_c: { type: 'integer' },
+    contribution_display: { type: 'string' },
+  },
+}
+
+export const ORDER_BOOK_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    book_id: { type: 'integer' },
+    name: { type: 'string' },
+    count: { type: 'integer' },
+    unit_price_c: { type: 'integer' },
+    unit_display: { type: 'string' },
+    line_total: { type: 'integer' },
+    line_total_display: { type: 'string' },
+    components: { type: 'array', items: ORDER_BOOK_COMPONENT_SCHEMA },
+    finishings: { type: 'array', items: ORDER_BOOK_FINISHING_SCHEMA },
   },
 }
 
@@ -85,6 +141,7 @@ export const ORDER_SCHEMA = {
     completed_at: { type: ['string', 'null'] },
     notes: { type: ['string', 'null'] },
     items: { type: 'array', items: ORDER_ITEM_SCHEMA },
+    books: { type: 'array', items: ORDER_BOOK_SCHEMA }, // D27 书行
   },
 }
 
@@ -94,6 +151,58 @@ export const ERROR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: { error: { type: 'string' }, message: { type: 'string' } },
+}
+
+// ---------- 下单请求行（单页 item + D27 书行），两个下单端点共用 ----------
+
+const ITEM_LINE_SCHEMA = {
+  type: 'object',
+  required: ['mode_id', 'paper_id', 'size_key', 'quantity'],
+  additionalProperties: false,
+  properties: {
+    mode_id: { type: 'integer', minimum: 1 },
+    paper_id: { type: 'integer', minimum: 1 },
+    size_key: { type: 'string', minLength: 1, maxLength: 20 },
+    quantity: { type: 'integer', minimum: 1, maximum: 1000000 },
+  },
+}
+
+const BOOK_LINE_SCHEMA = {
+  type: 'object',
+  required: ['book_id', 'count'],
+  additionalProperties: false,
+  properties: {
+    book_id: { type: 'integer', minimum: 1 },
+    count: { type: 'integer', minimum: 1, maximum: 1000000 },
+    // 客户为每个内页/插图组件填每本张数（封面忽略=固定 1；插图缺省=不含）
+    components: {
+      type: 'array',
+      maxItems: 50,
+      items: {
+        type: 'object',
+        required: ['component_id', 'sheets_per_book'],
+        additionalProperties: false,
+        properties: {
+          component_id: { type: 'integer', minimum: 1 },
+          sheets_per_book: { type: 'integer', minimum: 1, maximum: 1000000 },
+        },
+      },
+    },
+  },
+}
+
+interface OrderLineBody {
+  items?: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
+  books?: Array<{ book_id: number; count: number; components?: Array<{ component_id: number; sheets_per_book: number }> }>
+}
+
+/** 请求体书行 → createOrder 的 BookLineInput（components 数组转 sheets record） */
+function toBookLines(books: OrderLineBody['books']): BookLineInput[] {
+  return (books ?? []).map((bk) => ({
+    book_id: bk.book_id,
+    count: bk.count,
+    sheets: Object.fromEntries((bk.components ?? []).map((c) => [c.component_id, c.sheets_per_book])),
+  }))
 }
 
 export interface DtoOptions {
@@ -123,8 +232,46 @@ function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
   }
 }
 
+/** D27 书行 DTO：售价侧字段；组件 mode_id（机器）与 job_id 仅 admin 视图暴露 */
+function bookDto(book: OrderBook, currency: Currency, opts: DtoOptions) {
+  return {
+    id: book.book.id,
+    book_id: book.book.book_id,
+    name: book.book.name,
+    count: book.book.count,
+    unit_price_c: book.book.unit_price_c,
+    unit_display: formatMoneyC(moneyC(book.book.unit_price_c), currency),
+    line_total: book.book.line_total,
+    line_total_display: formatMoney(money(book.book.line_total), currency),
+    components: book.components.map((c) => ({
+      id: c.id,
+      role: c.role,
+      paper_id: c.paper_id,
+      paper_name: c.paper_name,
+      size_key: c.size_key,
+      size_label: c.size_label,
+      color_class: c.color_class,
+      duplex: c.duplex !== 0,
+      sheets_per_book: c.sheets_per_book,
+      unit_sell_c: c.unit_sell_c,
+      unit_display: formatMoneyC(moneyC(c.unit_sell_c), currency),
+      ...(opts.admin ? { mode_id: c.mode_id, job_id: c.job_id } : {}),
+    })),
+    finishings: book.finishings.map((f) => ({
+      finishing_id: f.finishing_id,
+      name: f.name,
+      pricing: f.pricing,
+      price_c: f.price_c,
+      price_display: formatMoneyC(moneyC(f.price_c), currency),
+      contribution_c: f.contribution_c,
+      contribution_display: formatMoneyC(moneyC(f.contribution_c), currency),
+    })),
+  }
+}
+
 export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoOptions) {
   const items = getOrderItems(db, order.id)
+  const books = getOrderBooks(db, order.id)
   const base = {
     id: order.id,
     order_number: order.order_number,
@@ -153,6 +300,7 @@ export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoO
     notes: order.notes,
     is_guest: order.customer_id === GUEST_SENTINEL_ID,
     items: items.map((i) => itemDto(i, currency, opts)),
+    books: books.map((b) => bookDto(b, currency, opts)),
   }
   if (opts.includeToken) Object.assign(base, { access_token: order.access_token })
   if (opts.admin) {
@@ -179,25 +327,11 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       schema: {
         body: {
           type: 'object',
-          required: ['items'],
+          // items 与 books 均可选，但至少一行（空单由 createOrder 422 empty_order）
           additionalProperties: false,
           properties: {
-            items: {
-              type: 'array',
-              minItems: 1,
-              maxItems: 50,
-              items: {
-                type: 'object',
-                required: ['mode_id', 'paper_id', 'size_key', 'quantity'],
-                additionalProperties: false,
-                properties: {
-                  mode_id: { type: 'integer', minimum: 1 },
-                  paper_id: { type: 'integer', minimum: 1 },
-                  size_key: { type: 'string', minLength: 1, maxLength: 20 },
-                  quantity: { type: 'integer', minimum: 1, maximum: 1000000 },
-                },
-              },
-            },
+            items: { type: 'array', maxItems: 50, items: ITEM_LINE_SCHEMA },
+            books: { type: 'array', maxItems: 50, items: BOOK_LINE_SCHEMA },
             contact_info: { type: ['string', 'null'], maxLength: 200 },
             notes: { type: ['string', 'null'], maxLength: 2000 },
           },
@@ -214,17 +348,14 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       if (cfg.require_email_verification === 1 && user.email_verified_at == null) {
         return reply.status(403).send({ error: 'email_unverified' })
       }
-      const b = req.body as {
-        items: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
-        contact_info?: string | null
-        notes?: string | null
-      }
-      // OrderError（422 item_not_quotable 等）带 statusCode 上抛，全局 errorHandler 映射
+      const b = req.body as OrderLineBody & { contact_info?: string | null; notes?: string | null }
+      // OrderError/BookError（422 not_quotable / empty_order 等）带 statusCode 上抛，全局 errorHandler 映射
       const orderId = createOrder(db, {
         customerId: user.id,
         // B1.1: 内部成员（member/admin）下单走内部价口径并标记 is_internal
         internal: user.role !== 'customer',
-        items: b.items,
+        items: b.items ?? [],
+        books: toBookLines(b.books),
         contactInfo: b.contact_info ?? null,
         notes: b.notes ?? null,
       })
@@ -244,25 +375,11 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       schema: {
         body: {
           type: 'object',
-          required: ['items', 'email', 'name'],
+          required: ['email', 'name'],
           additionalProperties: false,
           properties: {
-            items: {
-              type: 'array',
-              minItems: 1,
-              maxItems: 50,
-              items: {
-                type: 'object',
-                required: ['mode_id', 'paper_id', 'size_key', 'quantity'],
-                additionalProperties: false,
-                properties: {
-                  mode_id: { type: 'integer', minimum: 1 },
-                  paper_id: { type: 'integer', minimum: 1 },
-                  size_key: { type: 'string', minLength: 1, maxLength: 20 },
-                  quantity: { type: 'integer', minimum: 1, maximum: 1000000 },
-                },
-              },
-            },
+            items: { type: 'array', maxItems: 50, items: ITEM_LINE_SCHEMA },
+            books: { type: 'array', maxItems: 50, items: BOOK_LINE_SCHEMA },
             email: { type: 'string', minLength: 3, maxLength: 254, pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' },
             name: { type: 'string', minLength: 1, maxLength: 80 },
             contact_info: { type: ['string', 'null'], maxLength: 200 },
@@ -279,8 +396,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       if (!open || open.guest_orders_open === 0) {
         return reply.status(403).send({ error: 'guest_orders_closed' })
       }
-      const b = req.body as {
-        items: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
+      const b = req.body as OrderLineBody & {
         email: string
         name: string
         contact_info?: string | null
@@ -289,7 +405,8 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       const orderId = createOrder(db, {
         customerId: GUEST_SENTINEL_ID,
         internal: false,
-        items: b.items,
+        items: b.items ?? [],
+        books: toBookLines(b.books),
         contactInfo: b.contact_info ?? null,
         notes: b.notes ?? null,
         guestEmail: b.email,

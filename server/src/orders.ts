@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto'
+import { priceBook, type BookLineInput } from './books.js'
 import { type DB } from './db.js'
 import { lineTotal, sumMoney } from './money.js'
 import { quote } from './pricing.js'
@@ -110,6 +111,74 @@ export function getOrderItems(db: DB, orderId: string): OrderItemRow[] {
     .all(orderId) as OrderItemRow[]
 }
 
+// ---------- D27 书行读取 ----------
+
+export interface OrderBookRow {
+  id: string
+  order_id: string
+  book_id: number
+  name: string
+  count: number
+  unit_price_c: number
+  line_total: number
+}
+
+export interface OrderBookComponentRow {
+  id: string
+  order_book_id: string
+  role: string
+  paper_id: number
+  size_key: string
+  color_class: string
+  duplex: number
+  mode_id: number
+  sheets_per_book: number
+  unit_sell_c: number
+  job_id: string | null
+  paper_name: string
+  size_label: string
+}
+
+export interface OrderBookFinishingRow {
+  id: string
+  order_book_id: string
+  finishing_id: number
+  name: string
+  pricing: string
+  price_c: number
+  contribution_c: number
+}
+
+export interface OrderBook {
+  book: OrderBookRow
+  components: OrderBookComponentRow[]
+  finishings: OrderBookFinishingRow[]
+}
+
+/** 一单全部书行（含组件 + 工艺快照）。组件带 paper/size 展示名（机器 mode_id 仅 admin DTO 暴露） */
+export function getOrderBooks(db: DB, orderId: string): OrderBook[] {
+  const books = db
+    .prepare('SELECT * FROM order_books WHERE order_id = ? ORDER BY rowid')
+    .all(orderId) as OrderBookRow[]
+  if (books.length === 0) return []
+  const compStmt = db.prepare(
+    `SELECT obc.*, p.name AS paper_name, s.label AS size_label
+     FROM order_book_components obc
+     JOIN papers p ON p.id = obc.paper_id
+     JOIN sizes s ON s.key = obc.size_key
+     WHERE obc.order_book_id = ?
+     ORDER BY obc.rowid`,
+  )
+  const finStmt = db.prepare(
+    'SELECT * FROM order_book_finishings WHERE order_book_id = ? ORDER BY rowid',
+  )
+  return books.map((book) => ({
+    book,
+    components: compStmt.all(book.id) as OrderBookComponentRow[],
+    finishings: finStmt.all(book.id) as OrderBookFinishingRow[],
+  }))
+}
+
 /** FOL-YYYY-NNNN：仅人类可读展示，不可用作查询键（查询走 access_token） */
 function nextOrderNumber(db: DB, now: Date): string {
   const year = now.getUTCFullYear()
@@ -136,6 +205,8 @@ export interface CreateOrderInput {
   /** member/admin 视为内部需求：internal_sell_c 口径 + is_internal 标记（B1.1） */
   internal: boolean
   items: NewOrderItem[]
+  /** D27 书行：一本书 = 购物车一行（成品 + 每组件每本张数 + 本数） */
+  books?: BookLineInput[]
   contactInfo?: string | null
   notes?: string | null
   /** 访客单留痕（D23）：customerId 取哨兵，guest_* 落联系方式 */
@@ -144,7 +215,7 @@ export interface CreateOrderInput {
   guestContact?: string | null
 }
 
-/** R1/R3: 下单——unit_price_c 当场定格快照，line_total 唯一舍入点，subtotal 整数加法 */
+/** R1/R3 + D27: 下单——unit_price_c 当场定格快照（单页 item 与书行同口径），line_total 唯一舍入点，subtotal 整数加法 */
 export function createOrder(db: DB, input: CreateOrderInput): string {
   const cfg = db.prepare('SELECT quote_valid_days FROM system_config WHERE id = 1').get() as
     | { quote_valid_days: number }
@@ -156,7 +227,17 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
     if (!q) throw new OrderError(422, `item_${idx}_not_quotable`)
     return { ...item, unit_price_c: q.sell_c, line_total: lineTotal(q.sell_c, item.quantity) }
   })
-  const subtotal = sumMoney(priced.map((p) => p.line_total))
+
+  // D27 书行：priceBook 定格每本 unit_price_c（含组件 + 工艺），line_total 同唯一舍入点。
+  // 不可报价/缺张数 → BookError(422) 上抛，与 item 同由全局 errorHandler 映射。
+  const books = (input.books ?? []).map((bl) => {
+    const bq = priceBook(db, bl, { internal: input.internal })
+    return { input: bl, quote: bq, line_total: lineTotal(bq.unit_price_c, bl.count) }
+  })
+
+  if (priced.length === 0 && books.length === 0) throw new OrderError(422, 'empty_order')
+
+  const subtotal = sumMoney([...priced.map((p) => p.line_total), ...books.map((b) => b.line_total)])
 
   const now = new Date()
   const nowIso = now.toISOString()
@@ -192,6 +273,41 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
     )
     for (const p of priced) {
       insertItem.run(randomUUID(), orderId, p.mode_id, p.paper_id, p.size_key, p.quantity, p.unit_price_c, p.line_total)
+    }
+
+    const insertBook = db.prepare(
+      `INSERT INTO order_books (id, order_id, book_id, name, count, unit_price_c, line_total)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    const insertBookComp = db.prepare(
+      `INSERT INTO order_book_components (id, order_book_id, role, paper_id, size_key, color_class,
+                                          duplex, mode_id, sheets_per_book, unit_sell_c)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    const insertBookFin = db.prepare(
+      `INSERT INTO order_book_finishings (id, order_book_id, finishing_id, name, pricing, price_c, contribution_c)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    for (const b of books) {
+      const obId = randomUUID()
+      insertBook.run(obId, orderId, b.quote.book_id, b.quote.name, b.input.count, b.quote.unit_price_c, b.line_total)
+      for (const c of b.quote.components) {
+        insertBookComp.run(
+          randomUUID(),
+          obId,
+          c.role,
+          c.paper_id,
+          c.size_key,
+          c.color_class,
+          c.duplex,
+          c.mode_id,
+          c.sheets_per_book,
+          c.unit_sell_c,
+        )
+      }
+      for (const f of b.quote.finishings) {
+        insertBookFin.run(randomUUID(), obId, f.finishing_id, f.name, f.pricing, f.price_c, f.contribution_c)
+      }
     }
   })()
   return orderId
