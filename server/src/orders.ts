@@ -137,6 +137,7 @@ export interface OrderBookComponentRow {
   sheets_per_book: number
   unit_sell_c: number
   job_id: string | null
+  source_component_id: number | null
   file_url: string | null
   file_status: 'pending' | 'approved' | 'rejected'
   file_note: string | null
@@ -298,8 +299,8 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
     )
     const insertBookComp = db.prepare(
       `INSERT INTO order_book_components (id, order_book_id, role, paper_id, size_key, color_class,
-                                          duplex, mode_id, sheets_per_book, unit_sell_c)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                          duplex, mode_id, sheets_per_book, unit_sell_c, source_component_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     const insertBookFin = db.prepare(
       `INSERT INTO order_book_finishings (id, order_book_id, finishing_id, name, pricing, price_c, contribution_c)
@@ -320,6 +321,7 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
           c.mode_id,
           c.sheets_per_book,
           c.unit_sell_c,
+          c.component_id,
         )
       }
       for (const f of b.quote.finishings) {

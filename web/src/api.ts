@@ -551,6 +551,7 @@ export interface OrderBookComponentDto {
   has_file: boolean
   file_status: 'pending' | 'approved' | 'rejected'
   file_note: string | null
+  source_component_id: number | null
   mode_id?: number
   job_id?: string | null
 }
@@ -741,7 +742,7 @@ export async function uploadOrderBookComponentFile(
 export const orderBookComponentFileUrl = (orderId: string, compId: string): string =>
   `/api/orders/${orderId}/book-components/${compId}/file`
 
-// C1 一键再下单：跨视图传递预填的单页行（module 级缓冲，hash 切换不重载）
+// C1 一键再下单：跨视图传递预填行（module 级缓冲，hash 切换不重载）。D32 含册子行
 export interface ReorderItem {
   mode_id: number
   paper_id: number
@@ -749,12 +750,23 @@ export interface ReorderItem {
   quantity: number
   label: string
 }
-let reorderBuffer: ReorderItem[] | null = null
-export const setReorder = (items: ReorderItem[]): void => {
-  reorderBuffer = items
+/** D32 册子行预填：book_id + 本数 + 各非封面组件（source_component_id → 每本张数） */
+export interface ReorderBook {
+  book_id: number
+  count: number
+  components: Array<{ component_id: number; sheets_per_book: number }>
+  label: string
+}
+export interface ReorderBuffer {
+  items: ReorderItem[]
+  books: ReorderBook[]
+}
+let reorderBuffer: ReorderBuffer | null = null
+export const setReorder = (buf: ReorderBuffer): void => {
+  reorderBuffer = buf
 }
 /** 取出并清空缓冲（Quote 挂载时消费一次） */
-export const takeReorder = (): ReorderItem[] | null => {
+export const takeReorder = (): ReorderBuffer | null => {
   const b = reorderBuffer
   reorderBuffer = null
   return b

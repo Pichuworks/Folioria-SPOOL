@@ -189,6 +189,36 @@ describe('§D27 书行下单', () => {
     expect(res.statusCode).toBe(422)
     void coverId
   })
+
+  it('D32 source_component_id 下单定格：组件回指目录 book_components.id（封面/内页各对应）', async () => {
+    const cookie = await login('a@cust.example')
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/orders',
+      headers: { cookie },
+      payload: { books: [bookLine(3, 8)] },
+    })
+    expect(created.statusCode).toBe(201)
+    const id = (created.json() as { id: string }).id
+    // DB 落账：每个 order_book_component.source_component_id 指回目录组件 id
+    const rows = db
+      .prepare(
+        `SELECT obc.role, obc.source_component_id
+         FROM order_book_components obc
+         WHERE obc.order_book_id IN (SELECT id FROM order_books WHERE order_id = ?)
+         ORDER BY obc.rowid`,
+      )
+      .all(id) as Array<{ role: string; source_component_id: number | null }>
+    expect(rows.find((r) => r.role === 'cover')!.source_component_id).toBe(coverId)
+    expect(rows.find((r) => r.role === 'inner')!.source_component_id).toBe(innerId)
+
+    // DTO（admin 与 customer 两域）均回显 source_component_id
+    const admin = await login('staff@folioria.jp')
+    const view = await app.inject({ method: 'GET', url: `/api/orders/${id}`, headers: { cookie: admin } })
+    const comps = (view.json() as { books: Array<{ components: Array<{ role: string; source_component_id: number | null }> }> })
+      .books[0]!.components
+    expect(comps.find((c) => c.role === 'inner')!.source_component_id).toBe(innerId)
+  })
 })
 
 describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', () => {

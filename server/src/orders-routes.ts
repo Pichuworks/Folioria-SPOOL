@@ -69,6 +69,7 @@ export const ORDER_BOOK_COMPONENT_SCHEMA = {
     has_file: { type: 'boolean' }, // D31 组件文件上传/审稿（两域售价侧；文件内容下载仍 owner/admin）
     file_status: { type: 'string' },
     file_note: { type: ['string', 'null'] },
+    source_component_id: { type: ['integer', 'null'] }, // D32 目录组件来源（中性引用，供再下单还原）
     mode_id: { type: 'integer' }, // admin 视图专用（机器对客户不可见）
     job_id: { type: ['string', 'null'] }, // admin 视图专用
   },
@@ -281,6 +282,7 @@ function bookDto(book: OrderBook, currency: Currency, opts: DtoOptions) {
       has_file: c.file_url != null,
       file_status: c.file_status,
       file_note: c.file_note,
+      source_component_id: c.source_component_id,
       ...(opts.admin ? { mode_id: c.mode_id, job_id: c.job_id } : {}),
     })),
     finishings: book.finishings.map((f) => ({

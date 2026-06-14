@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   createGuestOrder,
   createOrder,
+  fetchBookQuote,
+  fetchBooks,
   fetchMe,
   fetchProducts,
   fetchPublicConfig,
@@ -75,6 +77,7 @@ export default function Quote() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [needLogin, setNeedLogin] = useState(false)
+  const [reorderNotice, setReorderNotice] = useState<string | null>(null)
   const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
   const [guestOpen, setGuestOpen] = useState(() => getPublicConfigCache()?.guest_orders_open ?? false)
   const [guestEmail, setGuestEmail] = useState('')
@@ -90,14 +93,16 @@ export default function Quote() {
     fetchPublicConfig().then((c) => setGuestOpen(c.guest_orders_open)).catch(() => {})
   }, [])
 
-  // C1 一键再下单：消费缓冲的单页行，按现价重新报价后填入购物车
+  // C1/D32 一键再下单：消费缓冲的单页行 + 册子行，按现价重报后填入购物车；
+  // 册子行对照实时目录——成品或任一组件已归档则跳过并提示
   useEffect(() => {
     const buf = takeReorder()
-    if (!buf || buf.length === 0) return
+    if (!buf || (buf.items.length === 0 && buf.books.length === 0)) return
     let cancelled = false
     void (async () => {
       const lines: CartLine[] = []
-      for (const it of buf) {
+      let skipped = 0
+      for (const it of buf.items) {
         const q = await fetchQuote({ mode_id: it.mode_id, paper_id: it.paper_id, size_key: it.size_key, quantity: it.quantity }).catch(() => null)
         if (q) {
           lines.push({
@@ -110,9 +115,34 @@ export default function Quote() {
             unit_display: q.unit_display,
             line_total_display: q.line_total_display,
           })
+        } else skipped += 1
+      }
+      if (buf.books.length > 0) {
+        const catalog = await fetchBooks().catch(() => null)
+        for (const rb of buf.books) {
+          // 成品下架 → 目录无此 book；组件下架 → 目录组件集合缺 source_component_id
+          const cat = catalog?.books.find((b) => b.id === rb.book_id)
+          const catIds = new Set(cat?.components.map((c) => c.id))
+          if (!cat || rb.components.some((c) => !catIds.has(c.component_id))) {
+            skipped += 1
+            continue
+          }
+          const res = await fetchBookQuote({ book_id: rb.book_id, count: rb.count, components: rb.components }).catch(() => null)
+          if (res && res.ok) {
+            lines.push({
+              kind: 'book',
+              book_id: rb.book_id,
+              count: rb.count,
+              components: rb.components,
+              label: `${cat.name} · ${rb.count}本`,
+              line_total_display: res.data.line_total_display,
+            })
+          } else skipped += 1
         }
       }
-      if (!cancelled && lines.length > 0) setCart((prev) => [...prev, ...lines])
+      if (cancelled) return
+      if (lines.length > 0) setCart((prev) => [...prev, ...lines])
+      if (skipped > 0) setReorderNotice(`${skipped} 项因成品/组件已下架或暂不可报价，已跳过——请确认清单。`)
     })()
     return () => {
       cancelled = true
@@ -475,6 +505,9 @@ export default function Quote() {
         {/* 右栏：清单与提交 */}
         <div className="flex flex-col p-7">
           <div className="font-mono text-[10px] tracking-[.14em] text-dim">ORDER LINES · {cart.length}</div>
+          {reorderNotice && (
+            <p className="mt-2 border border-warn bg-warn/10 px-3 py-2 text-[12px] text-warn">{reorderNotice}</p>
+          )}
           {cart.length === 0 ? (
             <p className="flex-1 py-12 text-[13px] leading-[1.85] text-dim">
               清单为空——左侧选定内容后「加入订单清单」，可多行混排不同类别与纸张。

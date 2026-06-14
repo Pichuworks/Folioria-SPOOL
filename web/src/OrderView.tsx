@@ -357,16 +357,25 @@ export default function OrderView({ token }: { token: string }) {
   }
 
   const reorder = () => {
-    // C1: 单页行预填购物车（机器沿用原 mode_id），册子行需在下单页重选
-    setReorder(
-      order.items.map((i) => ({
+    // C1/D32: 单页行（机器沿用原 mode_id）+ 册子行（按目录组件来源还原每本张数）预填购物车；
+    // 封面固定 1 张由 priceBook 定，不入缓冲；无 source_component_id（迁移前老单）的书行交由 Quote 跳过提示
+    setReorder({
+      items: order.items.map((i) => ({
         mode_id: i.mode_id,
         paper_id: i.paper_id,
         size_key: i.size_key,
         quantity: i.quantity,
         label: `${i.mode_name} × ${i.paper_name} · ${i.size_label}`,
       })),
-    )
+      books: (order.books ?? []).map((b) => ({
+        book_id: b.book_id,
+        count: b.count,
+        components: b.components
+          .filter((c) => c.role !== 'cover' && c.source_component_id != null)
+          .map((c) => ({ component_id: c.source_component_id as number, sheets_per_book: c.sheets_per_book })),
+        label: b.name,
+      })),
+    })
     window.location.hash = '#/quote'
   }
 
@@ -486,7 +495,7 @@ export default function OrderView({ token }: { token: string }) {
               </button>
             </div>
           )}
-          {order.items.length > 0 && (
+          {(order.items.length > 0 || (order.books?.length ?? 0) > 0) && (
             <div className="mt-5">
               <button
                 type="button"
@@ -495,9 +504,7 @@ export default function OrderView({ token }: { token: string }) {
               >
                 一键再下单 ↻
               </button>
-              {order.books && order.books.length > 0 && (
-                <p className="mt-1.5 text-[11px] text-dim">（册子行需在下单页重新选择）</p>
-              )}
+              <p className="mt-1.5 text-[11px] text-dim">按现价重报后填入下单清单，可再调整。</p>
             </div>
           )}
           {actionErr && <p className="mt-2 text-[12.5px] text-wine-ink">{actionErr}</p>}
