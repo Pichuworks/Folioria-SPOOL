@@ -1,4 +1,5 @@
 import { type FastifyInstance } from 'fastify'
+import { audit } from './audit.js'
 import { type BookLineInput } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
@@ -780,6 +781,13 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         if (err instanceof PaymentError) return reply.status(422).send({ error: err.message })
         throw err
       }
+      audit(db, {
+        actorId: req.user?.id ?? null,
+        action: 'payment.record',
+        targetType: 'order',
+        targetId: id,
+        summary: `${b.kind} ${b.amount}${b.method ? ` · ${b.method}` : ''}`,
+      })
       const updated = getOrder(db, id) as OrderRow
       return reply.status(201).send(orderDto(db, updated, baseCurrency(db), { admin: true, includeToken: true }))
     },
@@ -818,6 +826,13 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       }
       // total = subtotal − discount：整数减法，无舍入
       db.prepare('UPDATE orders SET discount = ?, total = subtotal - ? WHERE id = ?').run(discount, discount, id)
+      audit(db, {
+        actorId: req.user?.id ?? null,
+        action: 'order.discount',
+        targetType: 'order',
+        targetId: id,
+        summary: `折扣 ${order.discount} → ${discount}`,
+      })
       const updated = getOrder(db, id) as OrderRow
       return orderDto(db, updated, baseCurrency(db), { admin: true, includeToken: true })
     },

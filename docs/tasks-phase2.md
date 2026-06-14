@@ -135,7 +135,8 @@
       POST/GET /api/orders/:id/payments 替换覆盖式 PATCH；AdminOrders 收款面板改流水时间线 + 记一笔。
 - [x] B2 客户 CRM：GET /api/admin/users/:id/summary（订单史 + 累计已收 + 欠款投影 + 联系方式，只读 join）；
       AdminUsers 行内「钻取」展开面板。customer→403 / 未知/guest→404。
-- [ ] B3 审计日志：admin_audit 表 + 单一 choke-point 写入（定价/折扣/收款/角色归档/设置）+ 审阅视图。migration + 附录A。
+- [x] B3 审计日志（D29）：admin_audit（migration 0012）+ 单一 choke-point audit()（best-effort 不阻断）写入
+      定价(combo_price)/折扣/收款/角色归档/设置；GET /api/admin/audit 审阅视图 + 前台 #/admin/audit。
 - [ ] B4 按机台排产板（只读先行）：按 printer 分泳道显示 queued/printing 作业 + status + due_date，离线机仍压 job 告警。
 
 ## P7 Track C · 前台体验补全

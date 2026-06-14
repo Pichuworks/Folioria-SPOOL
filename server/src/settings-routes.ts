@@ -1,4 +1,5 @@
 import { type FastifyInstance } from 'fastify'
+import { audit } from './audit.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
 
@@ -146,6 +147,14 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
         b.overhead_month_volume ?? existing.overhead_month_volume,
         b.quote_valid_days ?? existing.quote_valid_days,
       )
+      audit(db, {
+        actorId: req.user?.id ?? null,
+        action: 'settings.update',
+        targetType: 'settings',
+        targetId: '1',
+        summary: `更新设置：${Object.keys(b).join(', ')}`,
+        detail: b,
+      })
       return toDto(db.prepare(SELECT_CONFIG).get() as ConfigRow)
     },
   )

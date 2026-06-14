@@ -1,4 +1,5 @@
 import { type FastifyInstance } from 'fastify'
+import { audit } from './audit.js'
 import { BookError, priceBook } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
@@ -509,6 +510,13 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         }
         throw err
       }
+      audit(db, {
+        actorId: req.user?.id ?? null,
+        action: 'pricing.combo_price',
+        targetType: 'combo',
+        targetId: String(comboId),
+        summary: `combo ${comboId} ${sizeKey}: sell_c=${sell ?? 'auto'} internal=${internal ?? 'auto'}`,
+      })
       return db
         .prepare('SELECT * FROM combo_prices WHERE combo_id = ? AND size_key = ?')
         .get(comboId, sizeKey)

@@ -17,6 +17,7 @@ import {
   verifyLogin,
   type SessionUser,
 } from './auth.js'
+import { audit, listAudit } from './audit.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { spoolInit } from './init.js'
@@ -619,11 +620,41 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         body.archived === undefined ? existing.archived : body.archived ? 1 : 0,
         id,
       )
+      audit(db, {
+        actorId: req.user?.id ?? null,
+        action: 'user.update',
+        targetType: 'user',
+        targetId: id,
+        summary: [
+          body.role !== undefined && body.role !== existing.role ? `角色 ${existing.role}→${body.role}` : null,
+          body.archived !== undefined && (body.archived ? 1 : 0) !== existing.archived
+            ? body.archived
+              ? '归档'
+              : '恢复'
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || '无变更',
+      })
       const updated = db
         .prepare('SELECT id, email, name, role, must_change_password FROM users WHERE id = ?')
         .get(id) as SessionUser
       return userDto(updated)
     },
+  )
+
+  // D29 审计审阅视图（admin）：倒序最近 200 条，actor 名 join
+  app.get('/api/admin/audit', { preHandler: requireAdmin }, async () =>
+    listAudit(db).map((a) => ({
+      id: a.id,
+      actor_id: a.actor_id,
+      actor_name: a.actor_name,
+      action: a.action,
+      target_type: a.target_type,
+      target_id: a.target_id,
+      summary: a.summary,
+      created_at: a.created_at,
+    })),
   )
 
   // B2 客户 CRM 钻取（只读 join）：订单史 + 累计已收 + 欠款 + 联系方式
