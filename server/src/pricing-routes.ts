@@ -18,6 +18,10 @@ const isConstraint = (err: unknown, kind: string): boolean =>
   err instanceof Error && err.message.includes(kind)
 
 export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
+  // PC1: 定价/配置编辑审计（单一 audit() 入口，best-effort 不阻断）
+  const logEdit = (actorId: string | null, action: string, targetId: string | number, summary: string) =>
+    audit(db, { actorId, action, targetType: 'pricing', targetId: String(targetId), summary })
+
   // ---------- 管理域: sizes ----------
 
   app.get('/api/pricing/sizes', { preHandler: requireAdmin }, async () =>
@@ -57,6 +61,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         }
         throw err
       }
+      logEdit(req.user?.id ?? null, 'pricing.size', b.key, `新建尺寸 ${b.key}`)
       return reply.status(201).send(db.prepare('SELECT * FROM sizes WHERE key = ?').get(b.key))
     },
   )
@@ -91,6 +96,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         b.sort ?? existing.sort,
         key,
       )
+      logEdit(req.user?.id ?? null, 'pricing.size', key, `改尺寸 ${key}`)
       return db.prepare('SELECT * FROM sizes WHERE key = ?').get(key)
     },
   )
@@ -106,6 +112,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       }
       throw err
     }
+    logEdit(req.user?.id ?? null, 'pricing.size', key, `删尺寸 ${key}`)
     return reply.status(204).send()
   })
 
@@ -189,6 +196,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         }
         throw err
       }
+      logEdit(req.user?.id ?? null, 'pricing.mode', String(lastInsertRowid), `新建模式 ${b.name}`)
       return reply
         .status(201)
         .send(db.prepare('SELECT * FROM print_modes WHERE id = ?').get(lastInsertRowid))
@@ -236,6 +244,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         }
         throw err
       }
+      logEdit(req.user?.id ?? null, 'pricing.mode', id, `改模式 ${id}`)
       return db.prepare('SELECT * FROM print_modes WHERE id = ?').get(id)
     },
   )
@@ -244,6 +253,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     const id = Number((req.params as { id: string }).id)
     const { changes } = db.prepare('UPDATE print_modes SET archived = 1 WHERE id = ?').run(id)
     if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    logEdit(req.user?.id ?? null, 'pricing.mode', id, `归档模式 ${id}`)
     return reply.status(204).send()
   })
 
@@ -293,6 +303,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
            VALUES (?, ?, ?, ?, ?, ?)`,
         )
         .run(b['name'], b['category'] ?? null, b['gsm'] ?? null, b['color_tag'] ?? null, b['supplier'] ?? null, b['notes'] ?? null)
+      logEdit(req.user?.id ?? null, 'pricing.paper', String(lastInsertRowid), `新建纸张 ${String(b['name'])}`)
       return reply
         .status(201)
         .send(db.prepare('SELECT * FROM papers WHERE id = ?').get(lastInsertRowid))
@@ -326,6 +337,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         `UPDATE papers SET name=@name, category=@category, gsm=@gsm, color_tag=@color_tag,
            supplier=@supplier, notes=@notes, archived=@archived WHERE id=@id`,
       ).run(merged)
+      logEdit(req.user?.id ?? null, 'pricing.paper', id, `改纸张 ${id}`)
       return db.prepare('SELECT * FROM papers WHERE id = ?').get(id)
     },
   )
@@ -334,6 +346,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     const id = Number((req.params as { id: string }).id)
     const { changes } = db.prepare('UPDATE papers SET archived = 1 WHERE id = ?').run(id)
     if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    logEdit(req.user?.id ?? null, 'pricing.paper', id, `归档纸张 ${id}`)
     return reply.status(204).send()
   })
 
@@ -558,6 +571,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     async (req, reply) => {
       const b = req.body as { name: string }
       const { lastInsertRowid } = db.prepare('INSERT INTO book_products (name) VALUES (?)').run(b.name)
+      logEdit(req.user?.id ?? null, 'pricing.book', String(lastInsertRowid), `新建书成品 ${b.name}`)
       return reply.status(201).send(db.prepare('SELECT * FROM book_products WHERE id = ?').get(lastInsertRowid))
     },
   )
@@ -588,6 +602,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         b.archived === undefined ? existing.archived : b.archived ? 1 : 0,
         id,
       )
+      logEdit(req.user?.id ?? null, 'pricing.book', id, `改书成品 ${id}`)
       return db.prepare('SELECT * FROM book_products WHERE id = ?').get(id)
     },
   )
@@ -596,6 +611,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     const id = Number((req.params as { id: string }).id)
     const { changes } = db.prepare('UPDATE book_products SET archived = 1 WHERE id = ?').run(id)
     if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    logEdit(req.user?.id ?? null, 'pricing.book', id, `归档书成品 ${id}`)
     return reply.status(204).send()
   })
 
@@ -647,6 +663,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         if (isConstraint(err, 'FOREIGN KEY')) return reply.status(409).send({ error: 'unknown_paper_or_size' })
         throw err
       }
+      logEdit(req.user?.id ?? null, 'pricing.book_component', String(lastInsertRowid), `书 ${bookId} 增组件 ${b.role}`)
       return reply.status(201).send(db.prepare('SELECT * FROM book_components WHERE id = ?').get(lastInsertRowid))
     },
   )
@@ -684,6 +701,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         if (isConstraint(err, 'FOREIGN KEY')) return reply.status(409).send({ error: 'unknown_paper_or_size' })
         throw err
       }
+      logEdit(req.user?.id ?? null, 'pricing.book_component', id, `改书组件 ${id}`)
       return db.prepare('SELECT * FROM book_components WHERE id = ?').get(id)
     },
   )
@@ -692,6 +710,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     const id = Number((req.params as { id: string }).id)
     const { changes } = db.prepare('UPDATE book_components SET archived = 1 WHERE id = ?').run(id)
     if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    logEdit(req.user?.id ?? null, 'pricing.book_component', id, `归档书组件 ${id}`)
     return reply.status(204).send()
   })
 
@@ -707,6 +726,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       return reply.status(404).send({ error: 'finishing_not_found' })
     }
     db.prepare('INSERT OR IGNORE INTO book_finishings (book_id, finishing_id) VALUES (?, ?)').run(bookId, finId)
+    logEdit(req.user?.id ?? null, 'pricing.book_finishing', bookId, `书 ${bookId} 挂工艺 ${finId}`)
     return reply.status(204).send()
   })
 
@@ -716,6 +736,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       .prepare('DELETE FROM book_finishings WHERE book_id = ? AND finishing_id = ?')
       .run(Number(id), Number(fid))
     if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    logEdit(req.user?.id ?? null, 'pricing.book_finishing', Number(id), `书 ${id} 摘工艺 ${fid}`)
     return reply.status(204).send()
   })
 
@@ -748,6 +769,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       const { lastInsertRowid } = db
         .prepare('INSERT INTO finishing_ops (name, pricing, price_c) VALUES (?, ?, ?)')
         .run(b.name, b.pricing, b.price_c)
+      logEdit(req.user?.id ?? null, 'pricing.finishing', String(lastInsertRowid), `新建工艺 ${b.name} ${b.pricing} ${b.price_c}`)
       return reply.status(201).send(db.prepare('SELECT * FROM finishing_ops WHERE id = ?').get(lastInsertRowid))
     },
   )
@@ -780,6 +802,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         b.archived === undefined ? existing.archived : b.archived ? 1 : 0,
         id,
       )
+      logEdit(req.user?.id ?? null, 'pricing.finishing', id, `改工艺 ${id}`)
       return db.prepare('SELECT * FROM finishing_ops WHERE id = ?').get(id)
     },
   )
@@ -788,6 +811,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     const id = Number((req.params as { id: string }).id)
     const { changes } = db.prepare('UPDATE finishing_ops SET archived = 1 WHERE id = ?').run(id)
     if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    logEdit(req.user?.id ?? null, 'pricing.finishing', id, `归档工艺 ${id}`)
     return reply.status(204).send()
   })
 

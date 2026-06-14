@@ -655,6 +655,13 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         }
         throw err
       }
+      audit(db, {
+        actorId: req.user?.id ?? null,
+        action: 'user.create',
+        targetType: 'user',
+        targetId: id,
+        summary: `创建 ${body.role} · ${body.email}`,
+      })
       return reply.status(201).send({
         id,
         email: body.email,

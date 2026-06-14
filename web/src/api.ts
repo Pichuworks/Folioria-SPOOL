@@ -606,6 +606,8 @@ export interface OrderDto {
   payment_status: 'unpaid' | 'deposit' | 'paid'
   paid_amount: number
   paid_amount_display: string
+  refund_due?: number | undefined // PC2: 已取消且已收款的须退额（admin 视图）
+  refund_due_display?: string | undefined
   payment_method: string | null
   paid_at: string | null
   quote_valid_until: string

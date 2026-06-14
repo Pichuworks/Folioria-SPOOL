@@ -169,9 +169,11 @@
       —— Track B（PB1–PB4）全部完成：书子系统 production 收尾（文件门 / 再下单 / 编组 / 核算）闭合。
 
 ### Track C · 审计扩面 + 运营校验
-- [ ] PC1 审计 choke-point 扩面：书成品/组件/工艺定价编辑、mode/paper/size 编辑、订单状态流转（confirm/cancel）、
+- [x] PC1 审计 choke-point 扩面（附录A D33）：书成品/组件/工艺定价编辑、mode/paper/size 编辑、订单状态流转（confirm/cancel）、
       用户创建一并落 admin_audit（单一 audit() 入口，best-effort 不阻断）。
-- [ ] PC2 取消含已收款订单：cancel 不自动退款，但响应/AdminOrders 提示「须退 ¥X(=paid_amount)」，引导走退款流水。
+- [x] PC2 取消含已收款订单（附录A D33）：cancel 不自动退款，但响应（orderDto admin refund_due）/AdminOrders
+      提示「须退 ¥X(=paid_amount)」+ 取消确认弹窗警示，引导走退款流水。
+      —— Track C（PC1–PC2）全部完成。P8 三块（登录统一 / 书收尾 / 审计运营）闭合。
 
 ## P4 Phase 3 远期（PRD 立项，不急）
 

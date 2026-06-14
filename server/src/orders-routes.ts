@@ -154,6 +154,8 @@ export const ORDER_SCHEMA = {
     payment_status: { type: 'string' },
     paid_amount: { type: 'integer' },
     paid_amount_display: { type: 'string' },
+    refund_due: { type: 'integer' }, // PC2: 已取消且已收款时 = paid_amount（admin 视图；不自动退款，引导走退款流水）
+    refund_due_display: { type: 'string' },
     payment_method: { type: ['string', 'null'] },
     paid_at: { type: ['string', 'null'] },
     quote_valid_until: { type: 'string' },
@@ -345,6 +347,12 @@ export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoO
     // D28 收款流水（admin 视图：账实可对）
     Object.assign(base, {
       payments: getPayments(db, order.id).map((p) => paymentDto(p, currency)),
+    })
+    // PC2 取消含已收款：不自动退款，提示须退额（=已收）引导走退款流水
+    const refundDue = order.status === 'cancelled' ? order.paid_amount : 0
+    Object.assign(base, {
+      refund_due: refundDue,
+      refund_due_display: formatMoney(money(refundDue), currency),
     })
   }
   return base
@@ -684,6 +692,21 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       }
       const updated = getOrder(db, id) as OrderRow
       const currency = baseCurrency(db)
+      // PC1: 订单状态流转留痕（confirm/cancel）。cancel 附已收额提示须退款额（PC2）
+      if (status === 'confirmed' || status === 'cancelled') {
+        audit(db, {
+          actorId: req.user?.id ?? null,
+          action: status === 'confirmed' ? 'order.confirm' : 'order.cancel',
+          targetType: 'order',
+          targetId: id,
+          summary:
+            status === 'confirmed'
+              ? `确认 ${order.order_number} · 建作业`
+              : `取消 ${order.order_number}（${order.status}→cancelled）${
+                  order.paid_amount > 0 ? ` · 须退 ${order.paid_amount}` : ''
+                }`,
+        })
+      }
       // R7: confirm/ready 通知客户（分发永不抛错，状态流转不被通知阻塞）。
       // 访客单走 guest_email 直发（哨兵用户 archived，notifyUser 不投递）
       const notifyParty = async (event: 'order_confirmed' | 'order_ready', msg: ReturnType<typeof templates.orderReady>) => {

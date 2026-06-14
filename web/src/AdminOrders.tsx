@@ -333,6 +333,11 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
             note={PAY_LABEL[order.payment_status]}
             value={order.paid_amount_display}
           />
+          {order.status === 'cancelled' && (order.refund_due ?? 0) > 0 && (
+            <p className="mt-2 border border-warn bg-warn/10 px-3 py-2 text-[12.5px] leading-[1.7] text-warn">
+              订单已取消但已收 {order.refund_due_display}——系统不自动退款，请在下方收款流水「记一笔 · 退款」完成退款。
+            </p>
+          )}
 
           <div className="mt-4 space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -350,7 +355,11 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`取消订单 ${order.order_number}？未完成作业将一并取消。`)) void advance('cancelled')
+                    const paidWarn =
+                      order.paid_amount > 0
+                        ? `\n\n注意：已收 ${order.paid_amount_display}，取消不自动退款，需随后在收款流水记一笔退款。`
+                        : ''
+                    if (window.confirm(`取消订单 ${order.order_number}？未完成作业将一并取消。${paidWarn}`)) void advance('cancelled')
                   }}
                   className="rounded-full border border-line px-4 py-1.5 text-[13px] text-dim hover:border-wine hover:text-wine-ink"
                 >
