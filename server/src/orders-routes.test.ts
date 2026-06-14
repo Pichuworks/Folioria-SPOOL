@@ -64,6 +64,9 @@ interface OrderDto {
   total_display: string
   payment_status: string
   paid_amount: number
+  payment_method?: string | null
+  paid_at?: string | null
+  payments?: Array<{ id: string; kind: string; amount: number }>
   quote_valid_until: string
   quote_expired: boolean
   is_internal?: boolean
@@ -658,70 +661,68 @@ describe('R6 收款与折扣（§5/C7）', () => {
     expect(res.statusCode).toBe(409)
   })
 
-  it('payment: deposit/paid 落 paid_amount/method/paid_at；unpaid 清零', async () => {
-    const adminCookie = await login('staff@folioria.jp')
-    const cookie = await login('a@cust.example')
-    const order = await placeOrder(cookie, [A4_ITEM])
-
-    const deposit = await app.inject({
-      method: 'PATCH',
-      url: `/api/orders/${order.id}/payment`,
-      headers: { cookie: adminCookie },
-      payload: { payment_status: 'deposit', paid_amount: 7, payment_method: '现金' },
-    })
-    expect(deposit.statusCode).toBe(200)
-    const d = deposit.json() as OrderDto & { payment_method: string; paid_at: string }
-    expect(d.payment_status).toBe('deposit')
-    expect(d.paid_amount).toBe(7)
-    expect(d.payment_method).toBe('现金')
-    expect(d.paid_at).toBeTruthy()
-
-    const paid = await app.inject({
-      method: 'PATCH',
-      url: `/api/orders/${order.id}/payment`,
-      headers: { cookie: adminCookie },
-      payload: { payment_status: 'paid', paid_amount: 14 },
-    })
-    expect((paid.json() as OrderDto).paid_amount).toBe(14)
-
-    const unpaid = await app.inject({
-      method: 'PATCH',
-      url: `/api/orders/${order.id}/payment`,
-      headers: { cookie: adminCookie },
-      payload: { payment_status: 'unpaid' },
-    })
-    const u = unpaid.json() as OrderDto & { paid_at: string | null }
-    expect(u.paid_amount).toBe(0)
-    expect(u.paid_at).toBeNull()
-  })
-
-  it('H2: 超付 / 状态与金额不一致 → 422（钱不可超付，状态须自洽）', async () => {
+  it('D28 流水投影：押金→尾款→退款，paid_amount/status/paid_at 为 payments 投影', async () => {
     const adminCookie = await login('staff@folioria.jp')
     const cookie = await login('a@cust.example')
     const order = await placeOrder(cookie, [A4_ITEM]) // total 14
     const pay = (payload: Record<string, unknown>) =>
-      app.inject({ method: 'PATCH', url: `/api/orders/${order.id}/payment`, headers: { cookie: adminCookie }, payload })
+      app.inject({ method: 'POST', url: `/api/orders/${order.id}/payments`, headers: { cookie: adminCookie }, payload })
 
-    expect((await pay({ payment_status: 'paid', paid_amount: 15 })).statusCode).toBe(422) // 超付
-    expect((await pay({ payment_status: 'paid', paid_amount: 7 })).statusCode).toBe(422) // paid 须等于 total
-    expect((await pay({ payment_status: 'deposit', paid_amount: 14 })).statusCode).toBe(422) // deposit 须 < total
-    expect((await pay({ payment_status: 'deposit', paid_amount: 0 })).statusCode).toBe(422) // deposit 须 > 0
-    // 标记 paid 不给金额 → 自动结清为 total
-    const paid = await pay({ payment_status: 'paid' })
-    expect(paid.statusCode).toBe(200)
-    expect((paid.json() as OrderDto).paid_amount).toBe(14)
+    const deposit = await pay({ kind: 'deposit', amount: 7, method: '现金' })
+    expect(deposit.statusCode).toBe(201)
+    const d = deposit.json() as OrderDto & { payment_method: string; paid_at: string; payments: Array<{ amount: number }> }
+    expect(d.payment_status).toBe('deposit')
+    expect(d.paid_amount).toBe(7)
+    expect(d.payment_method).toBe('现金')
+    expect(d.paid_at).toBeTruthy()
+    expect(d.payments).toHaveLength(1)
+
+    const balance = await pay({ kind: 'balance', amount: 7, method: 'PayPay' })
+    const b = balance.json() as OrderDto
+    expect(b.payment_status).toBe('paid')
+    expect(b.paid_amount).toBe(14)
+    expect(b.payment_method).toBe('PayPay') // 投影取最近一笔
+
+    const refund = await pay({ kind: 'refund', amount: -14, note: '全额退款' })
+    const r = refund.json() as OrderDto & { paid_at: string | null; payments: unknown[] }
+    expect(r.payment_status).toBe('unpaid')
+    expect(r.paid_amount).toBe(0)
+    expect(r.paid_at).toBeNull()
+    expect(r.payments).toHaveLength(3) // append-only：不抹历史
+
+    const list = await app.inject({ method: 'GET', url: `/api/orders/${order.id}/payments`, headers: { cookie: adminCookie } })
+    expect((list.json() as unknown[]).length).toBe(3)
   })
 
-  it('金额字段传 1.5 / "100" → 422（§7 边界，paid_amount）', async () => {
+  it('H2/D28: 超付、退过、kind↔符号不一致 → 422', async () => {
+    const adminCookie = await login('staff@folioria.jp')
+    const cookie = await login('a@cust.example')
+    const order = await placeOrder(cookie, [A4_ITEM]) // total 14
+    const pay = (payload: Record<string, unknown>) =>
+      app.inject({ method: 'POST', url: `/api/orders/${order.id}/payments`, headers: { cookie: adminCookie }, payload })
+
+    expect((await pay({ kind: 'balance', amount: 15 })).statusCode).toBe(422) // 超付
+    expect((await pay({ kind: 'refund', amount: -1 })).statusCode).toBe(422) // 退过（未收先退）
+    expect((await pay({ kind: 'deposit', amount: -5 })).statusCode).toBe(422) // 收款须正
+    expect((await pay({ kind: 'refund', amount: 5 })).statusCode).toBe(422) // 退款须负
+    // 收 10，再收 5 会超付（10+5>14）→ 422；改收 4 正好结清
+    expect((await pay({ kind: 'deposit', amount: 10 })).statusCode).toBe(201)
+    expect((await pay({ kind: 'balance', amount: 5 })).statusCode).toBe(422)
+    const ok = await pay({ kind: 'balance', amount: 4 })
+    expect(ok.statusCode).toBe(201)
+    expect((ok.json() as OrderDto).payment_status).toBe('paid')
+  })
+
+  it('金额字段传 1.5 / "100" → 422（§7 边界，amount）', async () => {
     const adminCookie = await login('staff@folioria.jp')
     const cookie = await login('a@cust.example')
     const order = await placeOrder(cookie, [A4_ITEM])
     for (const bad of [1.5, '100']) {
       const res = await app.inject({
-        method: 'PATCH',
-        url: `/api/orders/${order.id}/payment`,
+        method: 'POST',
+        url: `/api/orders/${order.id}/payments`,
         headers: { cookie: adminCookie },
-        payload: { payment_status: 'paid', paid_amount: bad },
+        payload: { kind: 'deposit', amount: bad },
       })
       expect(res.statusCode).toBe(422)
     }
@@ -795,10 +796,10 @@ describe('§6 双域权限与序列化白名单', () => {
       expect(
         (
           await app.inject({
-            method: 'PATCH',
-            url: `/api/orders/${order.id}/payment`,
+            method: 'POST',
+            url: `/api/orders/${order.id}/payments`,
             headers: { cookie: c },
-            payload: { payment_status: 'paid' },
+            payload: { kind: 'balance', amount: 1 },
           })
         ).statusCode,
       ).toBe(403)

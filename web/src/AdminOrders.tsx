@@ -5,8 +5,8 @@ import {
   ORDER_STATUS_LABEL,
   orderItemFileUrl,
   patchOrderDiscount,
-  patchOrderPayment,
   patchOrderStatus,
+  recordPayment,
   reviewOrderItem,
   type OrderDto,
   type OrderItemDto,
@@ -33,6 +33,7 @@ const ACTIONS: Partial<Record<OrderDto['status'], Array<{ to: string; label: str
 }
 
 const PAY_LABEL = { unpaid: '未付', deposit: '定金', paid: '付清' } as const
+const PAY_KIND_LABEL = { deposit: '押金', balance: '尾款', refund: '退款' } as const
 
 function ReviewRow({
   order,
@@ -115,19 +116,19 @@ function ReviewRow({
 }
 
 function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdated: (o: OrderDto) => void; onRefresh: () => void }) {
-  const [payStatus, setPayStatus] = useState(order.payment_status)
-  const [payAmount, setPayAmount] = useState(String(order.paid_amount))
-  const [payMethod, setPayMethod] = useState(order.payment_method ?? '')
+  const [payKind, setPayKind] = useState<'deposit' | 'balance' | 'refund'>('deposit')
+  const [payAmount, setPayAmount] = useState('')
+  const [payMethod, setPayMethod] = useState('')
   const [discount, setDiscount] = useState(String(order.discount))
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    setPayStatus(order.payment_status)
-    setPayAmount(String(order.paid_amount))
-    setPayMethod(order.payment_method ?? '')
+    setPayKind('deposit')
+    setPayAmount('')
+    setPayMethod('')
     setDiscount(String(order.discount))
     setErr(null)
-  }, [order.id, order.payment_status, order.paid_amount, order.payment_method, order.discount])
+  }, [order.id, order.discount])
 
   const advance = async (to: string) => {
     setErr(null)
@@ -143,20 +144,33 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
 
   const savePayment = async () => {
     setErr(null)
-    const amount = Number(payAmount)
-    if (!Number.isSafeInteger(amount) || amount < 0) {
-      setErr('收款金额必须是非负整数（最小货币单位）。')
+    const mag = Number(payAmount)
+    if (!Number.isSafeInteger(mag) || mag <= 0) {
+      setErr('金额须为正整数（最小货币单位）。')
       return
     }
-    const res = await patchOrderPayment(order.id, {
-      payment_status: payStatus,
-      paid_amount: amount,
-      payment_method: payMethod.trim() === '' ? null : payMethod.trim(),
+    // 退款落负数；收款落正数（amount 带符号）
+    const signed = payKind === 'refund' ? -mag : mag
+    const res = await recordPayment(order.id, {
+      kind: payKind,
+      amount: signed,
+      method: payMethod.trim() === '' ? null : payMethod.trim(),
     })
     if (res.ok) {
+      setPayAmount('')
+      setPayMethod('')
       onUpdated(res.data)
       onRefresh()
-    } else setErr(`收款记录失败（${res.status}）`)
+    } else {
+      const code = (res.data as { error?: string })?.error ?? String(res.status)
+      setErr(
+        code === 'paid_exceeds_total'
+          ? '收款超过应付总额。'
+          : code === 'refund_exceeds_paid'
+            ? '退款超过已收金额。'
+            : `记账失败（${code}）`,
+      )
+    }
   }
 
   const saveDiscount = async () => {
@@ -245,21 +259,37 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
             </div>
 
             <div className="border-t border-line pt-3">
-              <div className="mb-2 font-mono text-[10px] tracking-[.14em] text-dim">收款记录</div>
+              <div className="mb-2 font-mono text-[10px] tracking-[.14em] text-dim">收款流水 · PAYMENTS</div>
+              {order.payments && order.payments.length > 0 ? (
+                <div className="mb-3">
+                  {order.payments.map((p) => (
+                    <div key={p.id} className="flex items-baseline gap-2 border-b border-line py-[5px] text-[12px]">
+                      <span className="min-w-8 font-medium text-ink">{PAY_KIND_LABEL[p.kind]}</span>
+                      {p.method && <span className="text-dim">{p.method}</span>}
+                      <span className="font-mono text-[10.5px] text-dim">{p.created_at.slice(0, 10)}</span>
+                      {p.note && <span className="text-dim">· {p.note}</span>}
+                      <Leader />
+                      <span className={`font-mono ${p.amount < 0 ? 'text-warn' : 'text-ink'}`}>{p.amount_display}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-2 text-[12px] text-dim">尚无收款记录。</p>
+              )}
               <div className="grid grid-cols-[auto_1fr_1fr_auto] items-end gap-2">
                 <select
                   className={`${specInput} w-auto`}
-                  value={payStatus}
-                  onChange={(e) => setPayStatus(e.target.value as typeof payStatus)}
+                  value={payKind}
+                  onChange={(e) => setPayKind(e.target.value as typeof payKind)}
                 >
-                  <option value="unpaid">未付</option>
-                  <option value="deposit">定金</option>
-                  <option value="paid">付清</option>
+                  <option value="deposit">押金</option>
+                  <option value="balance">尾款</option>
+                  <option value="refund">退款</option>
                 </select>
-                <Field label="金额（整数）">
+                <Field label="金额（正整数）">
                   <input className={specInput} inputMode="numeric" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
                 </Field>
-                <Field label="方式">
+                <Field label="方式 / 备注">
                   <input className={specInput} value={payMethod} onChange={(e) => setPayMethod(e.target.value)} />
                 </Field>
                 <button
@@ -267,7 +297,7 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
                   onClick={() => void savePayment()}
                   className="rounded-full border border-ink px-4 py-2 text-[13px] text-ink hover:bg-paper"
                 >
-                  记账
+                  记一笔
                 </button>
               </div>
             </div>

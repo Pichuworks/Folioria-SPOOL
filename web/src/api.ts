@@ -596,6 +596,7 @@ export interface OrderDto {
   notes: string | null
   items: OrderItemDto[]
   books?: OrderBookDto[] | undefined
+  payments?: PaymentDto[] | undefined
   is_guest?: boolean | undefined
   is_internal?: boolean | undefined
   customer?: { id: string; name: string; email: string; role: string } | undefined
@@ -645,10 +646,22 @@ export const reviewOrderItem = (orderId: string, itemId: string, verdict: 'appro
     file_note: note ?? null,
   })
 
-export const patchOrderPayment = (
+// D28 收款流水（append-only；paid_amount/payment_status 为其投影）
+export interface PaymentDto {
+  id: string
+  kind: 'deposit' | 'balance' | 'refund'
+  amount: number
+  amount_display: string
+  method: string | null
+  note: string | null
+  created_at: string
+}
+
+/** 追加一笔流水（押金/尾款/退款）。amount 带符号：收正、退负 */
+export const recordPayment = (
   id: string,
-  body: { payment_status: 'unpaid' | 'deposit' | 'paid'; paid_amount?: number; payment_method?: string | null },
-) => send<OrderDto>('PATCH', `/api/orders/${id}/payment`, body)
+  body: { kind: 'deposit' | 'balance' | 'refund'; amount: number; method?: string | null; note?: string | null },
+) => send<OrderDto & { error?: string }>('POST', `/api/orders/${id}/payments`, body)
 
 export const patchOrderDiscount = (id: string, discount: number) =>
   send<OrderDto & { error?: string }>('PATCH', `/api/orders/${id}/discount`, { discount })

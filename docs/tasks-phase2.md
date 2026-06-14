@@ -128,6 +128,20 @@
       预览实测：写真集 50本 ¥1,096（2191/本）、机器不可见、admin CRUD 面板组件+工艺联动、§2.5 报价基线 187 不变。
       —— Track A（书子系统）A1–A6 全部完成。
 
+## P6 Track B · 后台金钱+运营深化（money 优先 · D28+）
+
+- [x] B1 收款/退款流水账（D28）：append-only `payments`（migration 0011，回填既有 paid_amount）；
+      orders.paid_amount/payment_status/paid_at/method 改为投影；强制 0≤Σ≤total + kind↔符号；
+      POST/GET /api/orders/:id/payments 替换覆盖式 PATCH；AdminOrders 收款面板改流水时间线 + 记一笔。
+- [ ] B2 客户 CRM：AdminUsers 增 per-customer 钻取（订单史/累计消费/欠款/联系方式，只读 join）。
+- [ ] B3 审计日志：admin_audit 表 + 单一 choke-point 写入（定价/折扣/收款/角色归档/设置）+ 审阅视图。migration + 附录A。
+- [ ] B4 按机台排产板（只读先行）：按 printer 分泳道显示 queued/printing 作业 + status + due_date，离线机仍压 job 告警。
+
+## P7 Track C · 前台体验补全
+- [ ] C1 历史单一键再下单（预填购物车）；C2 订单状态时间线（各节点时间）。
+- [ ] C3 账户页通知偏好（notify_channels/addresses，注：目前仅 email channel）。
+- [ ] C4 配送方式/地址（orders 增 delivery 列，migration）；文件预检反馈留 Phase 3。
+
 ## P4 Phase 3 远期（PRD 立项，不急）
 
 - 环境传感器 MQTT → location 湿度自动预警 · 打印机 SNMP → 出纸计数/碳粉余量自动校正

@@ -21,6 +21,7 @@ import {
   type OrderItemRow,
   type OrderRow,
 } from './orders.js'
+import { getPayments, PaymentError, recordPayment, type PaymentRow } from './payments.js'
 
 // ---------- 序列化白名单（D5/§6）：下单域响应仅含售价侧字段，cost/profit/margin 不进 schema ----------
 
@@ -100,6 +101,21 @@ export const ORDER_BOOK_SCHEMA = {
   },
 }
 
+// D28 收款流水（admin 视图专用；无 cost/profit/margin 字段）
+export const PAYMENT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    kind: { type: 'string' },
+    amount: { type: 'integer' },
+    amount_display: { type: 'string' },
+    method: { type: ['string', 'null'] },
+    note: { type: ['string', 'null'] },
+    created_at: { type: 'string' },
+  },
+}
+
 export const ORDER_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -142,6 +158,7 @@ export const ORDER_SCHEMA = {
     notes: { type: ['string', 'null'] },
     items: { type: 'array', items: ORDER_ITEM_SCHEMA },
     books: { type: 'array', items: ORDER_BOOK_SCHEMA }, // D27 书行
+    payments: { type: 'array', items: PAYMENT_SCHEMA }, // D28 收款流水（admin 视图专用）
   },
 }
 
@@ -312,8 +329,24 @@ export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoO
             .prepare('SELECT id, name, email, role FROM users WHERE id = ?')
             .get(order.customer_id) as { id: string; name: string; email: string; role: string } | undefined)
     Object.assign(base, { is_internal: order.is_internal !== 0, customer })
+    // D28 收款流水（admin 视图：账实可对）
+    Object.assign(base, {
+      payments: getPayments(db, order.id).map((p) => paymentDto(p, currency)),
+    })
   }
   return base
+}
+
+function paymentDto(p: PaymentRow, currency: Currency) {
+  return {
+    id: p.id,
+    kind: p.kind,
+    amount: p.amount,
+    amount_display: formatMoney(money(p.amount), currency),
+    method: p.method,
+    note: p.note,
+    created_at: p.created_at,
+  }
 }
 
 export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
@@ -699,67 +732,56 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
-  // ---------- 管理域: 收款 / 折扣（C7：整数减额，禁百分比） ----------
+  // ---------- 管理域: 收款流水（D28：append-only payments，paid_amount/status 为其投影） ----------
 
-  app.patch(
-    '/api/orders/:id/payment',
+  app.get(
+    '/api/orders/:id/payments',
+    {
+      preHandler: requireAdmin,
+      schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string }
+      if (!getOrder(db, id)) return reply.status(404).send({ error: 'not_found' })
+      const currency = baseCurrency(db)
+      return getPayments(db, id).map((p) => paymentDto(p, currency))
+    },
+  )
+
+  app.post(
+    '/api/orders/:id/payments',
     {
       preHandler: requireAdmin,
       schema: {
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: { id: { type: 'string' } },
-        },
+        params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
         body: {
           type: 'object',
-          required: ['payment_status'],
+          required: ['kind', 'amount'],
           additionalProperties: false,
           properties: {
-            payment_status: { type: 'string', enum: ['unpaid', 'deposit', 'paid'] },
-            paid_amount: { type: 'integer', minimum: 0 },
-            payment_method: { type: ['string', 'null'], maxLength: 50 },
+            kind: { type: 'string', enum: ['deposit', 'balance', 'refund'] },
+            // 带符号整数：收款(deposit/balance)正、退款(refund)负。1.5/"100" 由 schema 422（coerceTypes 关）
+            amount: { type: 'integer' },
+            method: { type: ['string', 'null'], maxLength: 50 },
+            note: { type: ['string', 'null'], maxLength: 500 },
           },
         },
-        response: { 200: ORDER_SCHEMA, 404: ERROR_SCHEMA, 422: ERROR_SCHEMA },
+        response: { 201: ORDER_SCHEMA, 404: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
       const { id } = req.params as { id: string }
-      const b = req.body as {
-        payment_status: 'unpaid' | 'deposit' | 'paid'
-        paid_amount?: number
-        payment_method?: string | null
+      if (!getOrder(db, id)) return reply.status(404).send({ error: 'not_found' })
+      const b = req.body as { kind: 'deposit' | 'balance' | 'refund'; amount: number; method?: string | null; note?: string | null }
+      try {
+        // PaymentError 仅 422（超付/退过/kind 符号不一致）；order 已存在故不会 404
+        recordPayment(db, id, { kind: b.kind, amount: b.amount, method: b.method ?? null, note: b.note ?? null, operatorId: req.user?.id ?? null })
+      } catch (err) {
+        if (err instanceof PaymentError) return reply.status(422).send({ error: err.message })
+        throw err
       }
-      const order = getOrder(db, id)
-      if (!order) return reply.status(404).send({ error: 'not_found' })
-      // 目标 paid_amount 并做上限/一致性校验：钱不可超付，状态须与金额自洽
-      const total = order.total
-      const newPaid =
-        b.payment_status === 'unpaid'
-          ? 0
-          : b.payment_status === 'paid'
-            ? (b.paid_amount ?? total) // 标记结清而未给金额 → 默认等于 total
-            : (b.paid_amount ?? order.paid_amount)
-      if (newPaid > total) return reply.status(422).send({ error: 'paid_exceeds_total' })
-      if (b.payment_status === 'paid' && newPaid !== total) {
-        return reply.status(422).send({ error: 'paid_amount_must_equal_total' })
-      }
-      if (b.payment_status === 'deposit' && !(newPaid > 0 && newPaid < total)) {
-        return reply.status(422).send({ error: 'deposit_out_of_range' })
-      }
-      const paidAt = b.payment_status === 'unpaid' ? null : (order.paid_at ?? new Date().toISOString())
-      db.prepare(
-        'UPDATE orders SET payment_status = ?, paid_amount = ?, payment_method = ?, paid_at = ? WHERE id = ?',
-      ).run(
-        b.payment_status,
-        newPaid,
-        'payment_method' in b ? (b.payment_method ?? null) : order.payment_method,
-        paidAt,
-        id,
-      )
       const updated = getOrder(db, id) as OrderRow
-      return orderDto(db, updated, baseCurrency(db), { admin: true, includeToken: true })
+      return reply.status(201).send(orderDto(db, updated, baseCurrency(db), { admin: true, includeToken: true }))
     },
   )
 
