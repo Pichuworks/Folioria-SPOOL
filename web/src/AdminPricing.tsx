@@ -692,6 +692,333 @@ function SizesSection({ sizes, onChanged }: { sizes: SizeDto[]; onChanged: () =>
   )
 }
 
+// ---------- D27 书成品 / 组件 / 工艺 ----------
+
+interface BookComponentRow {
+  id: number
+  book_id: number
+  role: string
+  paper_id: number
+  size_key: string
+  color_class: string
+  duplex: number
+  sort: number
+  archived: number
+}
+interface BookProductDto {
+  id: number
+  name: string
+  archived: number
+  components: BookComponentRow[]
+  finishing_ids: number[]
+}
+interface FinishingDto {
+  id: number
+  name: string
+  pricing: 'per_book' | 'per_page' | 'per_area'
+  price_c: number
+  archived: number
+}
+
+const ROLE_OPTIONS = [
+  { v: 'cover', l: '封面' },
+  { v: 'inner', l: '内页' },
+  { v: 'insert', l: '插图' },
+]
+const COLOR_OPTIONS = [
+  { v: 'bw', l: '黑白' },
+  { v: 'color', l: '彩色' },
+  { v: 'photo-value', l: '照片·性价比' },
+  { v: 'photo-premium', l: '照片·高质量' },
+  { v: 'photo-art', l: '照片·艺术微喷' },
+]
+const PRICING_OPTIONS = [
+  { v: 'per_book', l: '按本' },
+  { v: 'per_page', l: '按页' },
+  { v: 'per_area', l: '按面积' },
+]
+const roleLabel = (r: string) => ROLE_OPTIONS.find((o) => o.v === r)?.l ?? r
+const colorLabel = (c: string) => COLOR_OPTIONS.find((o) => o.v === c)?.l ?? c
+const pricingLabel = (p: string) => PRICING_OPTIONS.find((o) => o.v === p)?.l ?? p
+
+function FinishingLibrary({ finishings, onChanged }: { finishings: FinishingDto[]; onChanged: () => void }) {
+  const [name, setName] = useState('')
+  const [pricing, setPricing] = useState('per_book')
+  const [priceC, setPriceC] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const add = async (e: FormEvent) => {
+    e.preventDefault()
+    const price = Math.trunc(Number(priceC))
+    if (name.trim() === '' || price < 0) {
+      setNotice('名称非空、价格非负整数 _c')
+      return
+    }
+    const res = await send('POST', '/api/pricing/finishings', { name: name.trim(), pricing, price_c: price })
+    if (res.ok) {
+      setName('')
+      setPriceC('')
+      setNotice(null)
+      onChanged()
+    } else setNotice('创建失败')
+  }
+
+  return (
+    <div className="mb-6 border border-line bg-card p-4">
+      <span className="font-mono text-[10px] tracking-[.14em] text-dim">工艺库 · FINISHING OPS</span>
+      <div className="mt-2">
+        {finishings.filter((f) => f.archived === 0).map((f) => (
+          <div key={f.id} className="flex items-baseline gap-3 border-b border-line py-[6px]">
+            <span className="text-[13px] font-medium text-ink">{f.name}</span>
+            <span className="font-mono text-[11px] text-dim">
+              {pricingLabel(f.pricing)} · {f.price_c}_c
+            </span>
+            <Leader />
+            <button
+              type="button"
+              className={`${actionBtn} text-dim`}
+              onClick={() => {
+                if (window.confirm(`归档工艺「${f.name}」？`)) {
+                  void send('DELETE', `/api/pricing/finishings/${f.id}`).then((r) => r.ok && onChanged())
+                }
+              }}
+            >
+              归档
+            </button>
+          </div>
+        ))}
+        {finishings.filter((f) => f.archived === 0).length === 0 && (
+          <p className="py-2 text-[12px] text-dim">暂无工艺。</p>
+        )}
+      </div>
+      <form onSubmit={(e) => void add(e)} className="mt-3 flex flex-wrap items-end gap-3">
+        <Field label="工艺名">
+          <input type="text" required className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="计价口径">
+          <select className={specInput} value={pricing} onChange={(e) => setPricing(e.target.value)}>
+            {PRICING_OPTIONS.map((o) => (
+              <option key={o.v} value={o.v}>{o.l}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="单价 _c（本/页/面积）">
+          <input type="number" min={0} required className={specInput} value={priceC} onChange={(e) => setPriceC(e.target.value)} />
+        </Field>
+        <PillBtn>新增工艺</PillBtn>
+        {notice && <p className="w-full text-[12px] text-wine-ink">{notice}</p>}
+      </form>
+    </div>
+  )
+}
+
+function BookPanel({
+  book,
+  finishings,
+  papers,
+  sizes,
+  onChanged,
+}: {
+  book: BookProductDto
+  finishings: FinishingDto[]
+  papers: PaperDto[]
+  sizes: SizeDto[]
+  onChanged: () => void
+}) {
+  const [form, setForm] = useState({ role: 'inner', paper_id: '', size_key: '', color_class: 'color', duplex: false })
+  const [notice, setNotice] = useState<string | null>(null)
+  const paperName = useMemo(() => new Map(papers.map((p) => [p.id, p.name])), [papers])
+
+  const addComp = async (e: FormEvent) => {
+    e.preventDefault()
+    if (form.paper_id === '' || form.size_key === '') {
+      setNotice('选择纸张与尺寸')
+      return
+    }
+    const res = await send('POST', `/api/pricing/books/${book.id}/components`, {
+      role: form.role,
+      paper_id: Number(form.paper_id),
+      size_key: form.size_key,
+      color_class: form.color_class,
+      duplex: form.duplex,
+      sort: book.components.length,
+    })
+    if (res.ok) {
+      setNotice(null)
+      onChanged()
+    } else setNotice('创建失败（检查纸/尺寸）')
+  }
+
+  const toggleFinishing = async (fid: number, on: boolean) => {
+    const res = await send(on ? 'PUT' : 'DELETE', `/api/pricing/books/${book.id}/finishings/${fid}`)
+    if (res.ok) onChanged()
+  }
+
+  return (
+    <div className="mt-2 border border-line bg-card p-3.5">
+      <span className="font-mono text-[10px] tracking-[.14em] text-dim">组件 · COMPONENTS</span>
+      <div className="mt-1.5">
+        {book.components.filter((c) => c.archived === 0).map((c) => (
+          <div key={c.id} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[6px]">
+            <span className="min-w-9 text-[12.5px] font-medium text-ink">{roleLabel(c.role)}</span>
+            <span className="text-[12px] text-dim">
+              {colorLabel(c.color_class)} · {paperName.get(c.paper_id) ?? c.paper_id} · {c.size_key}
+              {c.duplex !== 0 ? ' · 双面' : ''}
+            </span>
+            <Leader />
+            <button
+              type="button"
+              className={`${actionBtn} text-dim`}
+              onClick={() => void send('DELETE', `/api/pricing/book-components/${c.id}`).then((r) => r.ok && onChanged())}
+            >
+              移除
+            </button>
+          </div>
+        ))}
+        {book.components.filter((c) => c.archived === 0).length === 0 && (
+          <p className="py-1.5 text-[12px] text-dim">暂无组件——至少加一个内页。</p>
+        )}
+      </div>
+
+      <form onSubmit={(e) => void addComp(e)} className="mt-3 grid grid-cols-2 items-end gap-3 md:grid-cols-5">
+        <Field label="角色">
+          <select className={specInput} value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
+            {ROLE_OPTIONS.map((o) => (
+              <option key={o.v} value={o.v}>{o.l}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="色彩档">
+          <select className={specInput} value={form.color_class} onChange={(e) => setForm((f) => ({ ...f, color_class: e.target.value }))}>
+            {COLOR_OPTIONS.map((o) => (
+              <option key={o.v} value={o.v}>{o.l}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="纸张">
+          <select className={specInput} value={form.paper_id} onChange={(e) => setForm((f) => ({ ...f, paper_id: e.target.value }))}>
+            <option value="">—</option>
+            {papers.filter((p) => p.archived === 0).map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="尺寸">
+          <select className={specInput} value={form.size_key} onChange={(e) => setForm((f) => ({ ...f, size_key: e.target.value }))}>
+            <option value="">—</option>
+            {sizes.map((s) => (
+              <option key={s.key} value={s.key}>{s.key}</option>
+            ))}
+          </select>
+        </Field>
+        <label className="flex items-center gap-2 pb-3 text-[12px] text-dim">
+          <input type="checkbox" checked={form.duplex} onChange={(e) => setForm((f) => ({ ...f, duplex: e.target.checked }))} />
+          双面
+        </label>
+        <PillBtn>加组件</PillBtn>
+        {notice && <p className="w-full text-[12px] text-wine-ink">{notice}</p>}
+      </form>
+
+      <div className="mt-4">
+        <span className="font-mono text-[10px] tracking-[.14em] text-dim">工艺 · FINISHINGS</span>
+        <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1.5">
+          {finishings.filter((f) => f.archived === 0).map((f) => (
+            <label key={f.id} className="flex items-center gap-2 text-[12.5px] text-ink">
+              <input
+                type="checkbox"
+                checked={book.finishing_ids.includes(f.id)}
+                onChange={(e) => void toggleFinishing(f.id, e.target.checked)}
+              />
+              {f.name} <span className="text-dim">（{pricingLabel(f.pricing)} {f.price_c}_c）</span>
+            </label>
+          ))}
+          {finishings.filter((f) => f.archived === 0).length === 0 && (
+            <span className="text-[12px] text-dim">先在工艺库新增工艺。</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BooksSection({
+  books,
+  finishings,
+  papers,
+  sizes,
+  onChanged,
+}: {
+  books: BookProductDto[]
+  finishings: FinishingDto[]
+  papers: PaperDto[]
+  sizes: SizeDto[]
+  onChanged: () => void
+}) {
+  const [expanded, setExpanded] = useState<number | null>(null)
+  const [name, setName] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const addBook = async (e: FormEvent) => {
+    e.preventDefault()
+    if (name.trim() === '') return
+    const res = await send<{ id: number }>('POST', '/api/pricing/books', { name: name.trim() })
+    if (res.ok) {
+      setName('')
+      setNotice(null)
+      setExpanded(res.data.id)
+      onChanged()
+    } else setNotice('创建失败')
+  }
+
+  return (
+    <MagSec tag="05" title="册子成品" note="BOOK PRODUCTS · D27">
+      <FinishingLibrary finishings={finishings} onChanged={onChanged} />
+
+      {books.filter((b) => b.archived === 0).map((b) => (
+        <div key={b.id} className="border-b border-line py-[8px]">
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <span className="text-[14px] font-medium text-ink">{b.name}</span>
+            <span className="font-mono text-[11px] text-dim">
+              {b.components.filter((c) => c.archived === 0).length} 组件 · {b.finishing_ids.length} 工艺
+            </span>
+            <Leader />
+            <button
+              type="button"
+              className={`${actionBtn} text-wine-ink`}
+              onClick={() => setExpanded(expanded === b.id ? null : b.id)}
+            >
+              {expanded === b.id ? '收起' : '编辑'}
+            </button>
+            <button
+              type="button"
+              className={`${actionBtn} text-dim`}
+              onClick={() => {
+                if (window.confirm(`归档册子「${b.name}」？`)) {
+                  void send('DELETE', `/api/pricing/books/${b.id}`).then((r) => r.ok && onChanged())
+                }
+              }}
+            >
+              归档
+            </button>
+          </div>
+          {expanded === b.id && (
+            <BookPanel book={b} finishings={finishings} papers={papers} sizes={sizes} onChanged={onChanged} />
+          )}
+        </div>
+      ))}
+
+      <form onSubmit={(e) => void addBook(e)} className="mt-4 flex flex-wrap items-end gap-3 border border-ink bg-card p-4">
+        <span className="w-full font-mono text-[10px] tracking-[.14em] text-dim">NEW BOOK</span>
+        <Field label="成品名">
+          <input type="text" required className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <PillBtn>新增册子</PillBtn>
+        {notice && <p className="w-full text-[12px] text-wine-ink">{notice}</p>}
+      </form>
+    </MagSec>
+  )
+}
+
 function PricingBody() {
   const [quotes, setQuotes] = useState<QuoteDto[] | null>(null)
   const [combos, setCombos] = useState<ComboDto[] | null>(null)
@@ -699,6 +1026,8 @@ function PricingBody() {
   const [papers, setPapers] = useState<PaperDto[] | null>(null)
   const [sizes, setSizes] = useState<SizeDto[] | null>(null)
   const [printers, setPrinters] = useState<PrinterDto[] | null>(null)
+  const [books, setBooks] = useState<BookProductDto[] | null>(null)
+  const [finishings, setFinishings] = useState<FinishingDto[] | null>(null)
 
   const reload = useCallback(() => {
     void send<QuoteDto[]>('GET', '/api/admin/pricing/quotes').then((r) => r.ok && setQuotes(r.data))
@@ -707,10 +1036,12 @@ function PricingBody() {
     void send<PaperDto[]>('GET', '/api/pricing/papers').then((r) => r.ok && setPapers(r.data))
     void send<SizeDto[]>('GET', '/api/pricing/sizes').then((r) => r.ok && setSizes(r.data))
     void send<PrinterDto[]>('GET', '/api/equipment').then((r) => r.ok && setPrinters(r.data))
+    void send<BookProductDto[]>('GET', '/api/pricing/books').then((r) => r.ok && setBooks(r.data))
+    void send<FinishingDto[]>('GET', '/api/pricing/finishings').then((r) => r.ok && setFinishings(r.data))
   }, [])
   useEffect(reload, [reload])
 
-  if (!quotes || !combos || !modes || !papers || !sizes || !printers) {
+  if (!quotes || !combos || !modes || !papers || !sizes || !printers || !books || !finishings) {
     return <p className="pt-13 text-[14px] text-dim">价目加载中…</p>
   }
 
@@ -720,6 +1051,7 @@ function PricingBody() {
       <PapersSection papers={papers} sizes={sizes} onChanged={reload} />
       <ModesSection modes={modes} sizes={sizes} printers={printers} onChanged={reload} />
       <SizesSection sizes={sizes} onChanged={reload} />
+      <BooksSection books={books} finishings={finishings} papers={papers} sizes={sizes} onChanged={reload} />
     </div>
   )
 }

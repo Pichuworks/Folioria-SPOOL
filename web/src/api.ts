@@ -135,6 +135,61 @@ export async function fetchProducts(): Promise<ProductsDto> {
   return productsCache
 }
 
+// ③⑤/D27 册子目录（机器对客户不可见）
+export interface BookComponentDto {
+  id: number
+  role: 'cover' | 'inner' | 'insert'
+  paper_id: number
+  paper_name: string
+  size_key: string
+  size_label: string
+  color_class: string
+  duplex: boolean
+}
+export interface BookFinishingDto {
+  id: number
+  name: string
+  pricing: 'per_book' | 'per_page' | 'per_area'
+  price_c: number
+  price_display: string
+}
+export interface BookCatalogItemDto {
+  id: number
+  name: string
+  components: BookComponentDto[]
+  finishings: BookFinishingDto[]
+}
+export interface BooksCatalogDto {
+  currency: CurrencyDto
+  books: BookCatalogItemDto[]
+}
+let booksCache: BooksCatalogDto | null = null
+export const getBooksCache = (): BooksCatalogDto | null => booksCache
+export async function fetchBooks(): Promise<BooksCatalogDto> {
+  const res = await fetch('/api/calculator/books')
+  if (!res.ok) throw new Error(`books failed: ${res.status}`)
+  booksCache = (await res.json()) as BooksCatalogDto
+  return booksCache
+}
+
+export interface BookQuoteDto {
+  book_id: number
+  name: string
+  count: number
+  unit_price_c: number
+  unit_display: string
+  line_total: number
+  line_total_display: string
+  components: Array<{ component_id: number; role: string; sheets_per_book: number; unit_sell_c: number; unit_display: string }>
+  finishings: Array<{ finishing_id: number; name: string; pricing: string; contribution_c: number; contribution_display: string }>
+}
+/** 册子实时报价：客户填内页/插图张数 + 本数 → 出价（机器不可见）。422 → { error } */
+export const fetchBookQuote = (body: {
+  book_id: number
+  count: number
+  components?: Array<{ component_id: number; sheets_per_book: number }>
+}) => send<BookQuoteDto & { error?: string }>('POST', '/api/calculator/book-quote', body)
+
 export interface MeDto {
   id: string
   email: string
@@ -470,6 +525,44 @@ export interface OrderItemDto {
   job_id?: string | null | undefined
 }
 
+// D27 订单内书行（下单域：仅售价侧；mode_id/job_id 仅 admin 视图）
+export interface OrderBookComponentDto {
+  id: string
+  role: string
+  paper_id: number
+  paper_name: string
+  size_key: string
+  size_label: string
+  color_class: string
+  duplex: boolean
+  sheets_per_book: number
+  unit_sell_c: number
+  unit_display: string
+  mode_id?: number
+  job_id?: string | null
+}
+export interface OrderBookFinishingDto {
+  finishing_id: number
+  name: string
+  pricing: string
+  price_c: number
+  price_display: string
+  contribution_c: number
+  contribution_display: string
+}
+export interface OrderBookDto {
+  id: string
+  book_id: number
+  name: string
+  count: number
+  unit_price_c: number
+  unit_display: string
+  line_total: number
+  line_total_display: string
+  components: OrderBookComponentDto[]
+  finishings: OrderBookFinishingDto[]
+}
+
 export interface OrderDto {
   id: string
   order_number: string
@@ -502,6 +595,7 @@ export interface OrderDto {
   completed_at: string | null
   notes: string | null
   items: OrderItemDto[]
+  books?: OrderBookDto[] | undefined
   is_guest?: boolean | undefined
   is_internal?: boolean | undefined
   customer?: { id: string; name: string; email: string; role: string } | undefined
@@ -518,20 +612,19 @@ export const ORDER_STATUS_LABEL: Record<OrderDto['status'], string> = {
   cancelled: '已取消',
 }
 
-export const createOrder = (body: {
-  items: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
-  contact_info?: string | null
-  notes?: string | null
-}) => send<OrderDto & { error?: string }>('POST', '/api/orders', body)
+/** D27: items 与 books 均可选，至少一行 */
+export interface OrderLineBody {
+  items?: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
+  books?: Array<{ book_id: number; count: number; components?: Array<{ component_id: number; sheets_per_book: number }> }>
+}
+
+export const createOrder = (body: OrderLineBody & { contact_info?: string | null; notes?: string | null }) =>
+  send<OrderDto & { error?: string }>('POST', '/api/orders', body)
 
 /** D23 免登录下单（需 guest_orders_open）；返回订单含 access_token */
-export const createGuestOrder = (body: {
-  items: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
-  email: string
-  name: string
-  contact_info?: string | null
-  notes?: string | null
-}) => send<OrderDto & { error?: string }>('POST', '/api/orders/guest', body)
+export const createGuestOrder = (
+  body: OrderLineBody & { email: string; name: string; contact_info?: string | null; notes?: string | null },
+) => send<OrderDto & { error?: string }>('POST', '/api/orders/guest', body)
 
 /** D23 已验证用户认领访客单 */
 export const claimOrder = (token: string) =>

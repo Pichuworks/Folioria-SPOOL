@@ -31,12 +31,15 @@ async function login(email: string): Promise<string> {
 
 /** admin 经 API 搭一本带封面+内页+两道工艺的书，返回 ids */
 async function buildBook(admin: string): Promise<{ book: number; cover: number; inner: number; bind: number; num: number }> {
-  const post = (url: string, payload: unknown) => app.inject({ method: 'POST', url, headers: { cookie: admin }, payload })
-  const book = (await post('/api/pricing/books', { name: '写真集' })).json() as { id: number }
-  const cover = (await post(`/api/pricing/books/${book.id}/components`, { role: 'cover', paper_id: 6, size_key: 'A3', color_class: 'color' })).json() as { id: number }
-  const inner = (await post(`/api/pricing/books/${book.id}/components`, { role: 'inner', paper_id: 1, size_key: 'A4', color_class: 'bw', sort: 1 })).json() as { id: number }
-  const bind = (await post('/api/pricing/finishings', { name: '骑马钉', pricing: 'per_book', price_c: 2000 })).json() as { id: number }
-  const num = (await post('/api/pricing/finishings', { name: '页码', pricing: 'per_page', price_c: 3 })).json() as { id: number }
+  const mk = async (url: string, payload: object): Promise<{ id: number }> => {
+    const r = await app.inject({ method: 'POST', url, headers: { cookie: admin }, payload })
+    return r.json() as { id: number }
+  }
+  const book = await mk('/api/pricing/books', { name: '写真集' })
+  const cover = await mk(`/api/pricing/books/${book.id}/components`, { role: 'cover', paper_id: 6, size_key: 'A3', color_class: 'color' })
+  const inner = await mk(`/api/pricing/books/${book.id}/components`, { role: 'inner', paper_id: 1, size_key: 'A4', color_class: 'bw', sort: 1 })
+  const bind = await mk('/api/pricing/finishings', { name: '骑马钉', pricing: 'per_book', price_c: 2000 })
+  const num = await mk('/api/pricing/finishings', { name: '页码', pricing: 'per_page', price_c: 3 })
   await app.inject({ method: 'PUT', url: `/api/pricing/books/${book.id}/finishings/${bind.id}`, headers: { cookie: admin } })
   await app.inject({ method: 'PUT', url: `/api/pricing/books/${book.id}/finishings/${num.id}`, headers: { cookie: admin } })
   return { book: book.id, cover: cover.id, inner: inner.id, bind: bind.id, num: num.id }

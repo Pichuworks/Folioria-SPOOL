@@ -21,6 +21,39 @@ export const FILE_STATUS_LABEL: Record<OrderItemDto['file_status'], string> = {
   rejected: '已驳回',
 }
 
+const BOOK_ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
+
+/** D27 书行展示（下单域：仅售价侧；机器对客户不可见） */
+function BookLine({ book }: { book: NonNullable<OrderDto['books']>[number] }) {
+  return (
+    <div className="border-b border-line py-3 last:border-b-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-[14px] font-medium text-ink">📖 {book.name}</span>
+        <span className="text-[12.5px] text-dim">
+          {book.unit_display}/本 × {book.count}
+        </span>
+        <Leader />
+        <span className="font-mono text-[13.5px] text-wine-ink">{book.line_total_display}</span>
+      </div>
+      <div className="mt-1 pl-4">
+        {book.components.map((c) => (
+          <div key={c.id} className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-dim">
+            <span className="min-w-9 text-ink">{BOOK_ROLE_LABEL[c.role] ?? c.role}</span>
+            <span>
+              {c.paper_name} · {c.size_label}
+              {c.duplex ? ' · 双面' : ''}
+            </span>
+            <span className="font-mono">· {c.sheets_per_book} 张/本</span>
+          </div>
+        ))}
+        {book.finishings.length > 0 && (
+          <p className="mt-1 text-[11.5px] text-dim">工艺：{book.finishings.map((f) => f.name).join('、')}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function StatusBadge({ status }: { status: OrderDto['status'] }) {
   const tone =
     status === 'cancelled'
@@ -236,6 +269,14 @@ export default function OrderView({ token }: { token: string }) {
             <p className="mt-3 text-[12px] leading-[1.8] text-dim">
               <a className="text-wine-ink underline" href="#/my/orders">登录下单账号</a> 后可在此上传文件。
             </p>
+          )}
+          {order.books && order.books.length > 0 && (
+            <div className="mt-6">
+              <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">册子 · {order.books.length}</div>
+              {order.books.map((b) => (
+                <BookLine key={b.id} book={b} />
+              ))}
+            </div>
           )}
         </div>
 

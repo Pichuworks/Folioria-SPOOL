@@ -14,6 +14,7 @@ import {
   type ProductsDto,
   type QuoteDto,
 } from './api'
+import BookConfigurator, { type BookCartLine } from './BookConfigurator'
 import { VerifyBanner } from './CustomerGate'
 import CustomerGate from './CustomerGate'
 import { Field, Leader, MagSec, specInput } from './spec'
@@ -38,7 +39,8 @@ function GateReturn({ me, onReady }: { me: MeDto; onReady: (m: MeDto) => void })
   return <p className="pt-13 text-[14px] text-dim">登录成功，返回订单清单…</p>
 }
 
-interface CartLine {
+interface ItemCartLine {
+  kind: 'item'
   mode_id: number
   paper_id: number
   size_key: string
@@ -47,11 +49,14 @@ interface CartLine {
   unit_display: string
   line_total_display: string
 }
+/** 购物车一行 = 单页 item 或 D27 书行 */
+type CartLine = ItemCartLine | BookCartLine
 
 /** ③⑤ #/quote：按属性（类别/纸/尺寸/双面/技术 或 照片品质档）选,机器对客户不可见 */
 export default function Quote() {
   const [data, setData] = useState<ProductsDto | null>(getProductsCache)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<'single' | 'book'>('single')
   const [category, setCategory] = useState<'bw' | 'color' | 'photo' | null>(null)
   const [grade, setGrade] = useState<string | null>(null)
   const [tech, setTech] = useState<string | null>(null)
@@ -158,6 +163,7 @@ export default function Quote() {
     setCart((prev) => [
       ...prev,
       {
+        kind: 'item',
         mode_id: resolved.mode_id,
         paper_id: resolved.paper_id,
         size_key: resolved.size_key,
@@ -170,7 +176,13 @@ export default function Quote() {
   }
 
   const items = () =>
-    cart.map(({ mode_id, paper_id, size_key, quantity: qty }) => ({ mode_id, paper_id, size_key, quantity: qty }))
+    cart
+      .filter((l): l is ItemCartLine => l.kind === 'item')
+      .map(({ mode_id, paper_id, size_key, quantity: qty }) => ({ mode_id, paper_id, size_key, quantity: qty }))
+  const books = () =>
+    cart
+      .filter((l): l is BookCartLine => l.kind === 'book')
+      .map(({ book_id, count, components }) => ({ book_id, count, components }))
 
   const showError = (err: string | undefined, status: number) =>
     setSubmitError(
@@ -198,6 +210,7 @@ export default function Quote() {
       setSubmitError(null)
       const gres = await createGuestOrder({
         items: items(),
+        books: books(),
         email: guestEmail.trim(),
         name: guestName.trim(),
         contact_info: contact.trim() === '' ? null : contact.trim(),
@@ -215,6 +228,7 @@ export default function Quote() {
     setSubmitError(null)
     const res = await createOrder({
       items: items(),
+      books: books(),
       contact_info: contact.trim() === '' ? null : contact.trim(),
       notes: notes.trim() === '' ? null : notes.trim(),
     })
@@ -254,8 +268,20 @@ export default function Quote() {
     <MagSec tag="下单" title="自助报价 · 在线下单" note="选内容 → 清单 → 下单">
       {me && <VerifyBanner me={me} />}
       <div className="mt-2 grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
-        {/* 左栏：属性配置器 */}
+        {/* 左栏：单页属性配置器 / 册子配置器 */}
         <div className="space-y-5 border-b border-ink p-7 md:border-b-0 md:border-r">
+          <div className="flex gap-2">
+            <button type="button" className={catBtn(mode === 'single')} onClick={() => setMode('single')}>
+              单页
+            </button>
+            <button type="button" className={catBtn(mode === 'book')} onClick={() => setMode('book')}>
+              册子
+            </button>
+          </div>
+          {mode === 'book' ? (
+            <BookConfigurator onAdd={(line) => setCart((prev) => [...prev, line])} />
+          ) : (
+          <div className="space-y-5">
           <div className="font-mono text-[10px] tracking-[.14em] text-dim">想打什么</div>
 
           <Field label="类别">
@@ -399,6 +425,8 @@ export default function Quote() {
               加入订单清单 ↓
             </button>
           </div>
+          </div>
+          )}
         </div>
 
         {/* 右栏：清单与提交 */}
@@ -413,9 +441,11 @@ export default function Quote() {
               {cart.map((line, idx) => (
                 <div key={idx} className="flex items-baseline gap-3 border-b border-line py-[10px]">
                   <span className="text-[13.5px] font-medium text-ink">{line.label}</span>
-                  <span className="text-[12px] text-dim">
-                    {line.unit_display}/张 × {line.quantity}
-                  </span>
+                  {line.kind === 'item' && (
+                    <span className="text-[12px] text-dim">
+                      {line.unit_display}/张 × {line.quantity}
+                    </span>
+                  )}
                   <Leader />
                   <span className="font-mono text-[13px] text-wine-ink">{line.line_total_display}</span>
                   <button

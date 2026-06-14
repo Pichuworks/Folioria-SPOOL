@@ -123,7 +123,10 @@
 - [x] A5 管理域 CRUD（pricing-routes）：book_products / book_components / finishing_ops + book_finishings 挂接；
       下单域目录 GET /api/calculator/books + 实时报价 POST /api/calculator/book-quote（机器不可见，仅售价侧）。
       AdminPricing UI 留 A6。
-- [ ] A6 前台 #/quote 增「册子」类目（选成品 → 填内页/插图张数 + 本数 → 出价，机器不可见）。
+- [x] A6 前台 #/quote 增「册子」类目（单页/册子切换 + BookConfigurator：选成品 → 填内页/插图张数 + 本数 →
+      实时出价，机器不可见）；购物车 item/book 联合，提交携 books；OrderView 渲染书行；AdminPricing 增 书成品/组件/工艺 CRUD。
+      预览实测：写真集 50本 ¥1,096（2191/本）、机器不可见、admin CRUD 面板组件+工艺联动、§2.5 报价基线 187 不变。
+      —— Track A（书子系统）A1–A6 全部完成。
 
 ## P4 Phase 3 远期（PRD 立项，不急）
 
