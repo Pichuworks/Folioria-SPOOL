@@ -1,6 +1,70 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { changePassword, fetchMe, getMeCache, logout, updateProfile, type MeDto } from './api'
+import {
+  changePassword,
+  fetchMe,
+  fetchNotifyPrefs,
+  getMeCache,
+  logout,
+  updateNotifyPrefs,
+  updateProfile,
+  type MeDto,
+  type NotifyPrefsDto,
+} from './api'
 import { Field, MagSec, PillBtn, SpecRow, specInput } from './spec'
+
+/** C3 通知偏好（目前仅 email channel） */
+function NotifyPrefsSection() {
+  const [prefs, setPrefs] = useState<NotifyPrefsDto | null>(null)
+  const [emailOn, setEmailOn] = useState(true)
+  const [altEmail, setAltEmail] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    void fetchNotifyPrefs().then((r) => {
+      if (r.ok) {
+        setPrefs(r.data)
+        setEmailOn(r.data.channels.includes('email'))
+        setAltEmail(r.data.addresses.email ?? '')
+      }
+    })
+  }, [])
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    setMsg(null)
+    const r = await updateNotifyPrefs({
+      channels: emailOn ? ['email'] : [],
+      addresses: { email: altEmail.trim() === '' ? null : altEmail.trim() },
+    })
+    if (r.ok) {
+      setPrefs(r.data)
+      setMsg('通知偏好已保存')
+    } else setMsg((r.data as { error?: string })?.error === 'invalid_email' ? '通知邮箱格式不正确' : '保存失败')
+  }
+
+  if (!prefs) return null
+  return (
+    <MagSec tag="04" title="通知偏好" note="目前仅 EMAIL 渠道">
+      <form onSubmit={(e) => void save(e)} className="max-w-xl space-y-4 border border-ink bg-card p-6">
+        <label className="flex items-center gap-2 text-[13px] text-ink">
+          <input type="checkbox" checked={emailOn} onChange={(e) => setEmailOn(e.target.checked)} />
+          接收邮件通知（订单确认 / 待取件 / 审稿驳回等）
+        </label>
+        <Field label={`通知邮箱（留空 = 账号邮箱 ${prefs.account_email}）`}>
+          <input
+            type="email"
+            disabled={!emailOn}
+            className={specInput}
+            value={altEmail}
+            onChange={(e) => setAltEmail(e.target.value)}
+          />
+        </Field>
+        <PillBtn full>保存通知偏好</PillBtn>
+        {msg && <p className="text-[12.5px] text-wine-ink">{msg}</p>}
+      </form>
+    </MagSec>
+  )
+}
 
 /** 刊头右上统一账号控件：guest → 登录/注册；登录态 → 下拉（资料/订单/[管理台]/登出） */
 export function AccountMenu({ me }: { me: MeDto | null }) {
@@ -115,6 +179,8 @@ function AccountBody({ me, onUpdate }: { me: MeDto; onUpdate: (m: MeDto) => void
           {pwMsg && <p className="text-[12.5px] text-wine-ink">{pwMsg}</p>}
         </form>
       </MagSec>
+
+      <NotifyPrefsSection />
     </div>
   )
 }

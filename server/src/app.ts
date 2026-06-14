@@ -458,6 +458,96 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
     },
   )
 
+  // C3 通知偏好（目前仅 email channel）：notify_channels 选渠道，notify_addresses 可覆盖收件地址（缺省=账号邮箱）
+  const NOTIFY_PREFS_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      channels: { type: 'array', items: { type: 'string' } },
+      addresses: { type: 'object', additionalProperties: false, properties: { email: { type: ['string', 'null'] } } },
+      account_email: { type: 'string' },
+    },
+  }
+
+  app.get(
+    '/api/auth/notify-prefs',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: { response: { 200: NOTIFY_PREFS_SCHEMA, 401: ERROR_SCHEMA } },
+    },
+    async (req, reply) => {
+      if (!req.user) return reply.status(401).send({ error: 'unauthorized' })
+      const row = db
+        .prepare('SELECT email, notify_channels, notify_addresses FROM users WHERE id = ?')
+        .get(req.user.id) as { email: string; notify_channels: string; notify_addresses: string }
+      let channels: string[]
+      let addresses: Record<string, string>
+      try {
+        channels = JSON.parse(row.notify_channels) as string[]
+        addresses = JSON.parse(row.notify_addresses) as Record<string, string>
+      } catch {
+        channels = ['email']
+        addresses = {}
+      }
+      return { channels, addresses, account_email: row.email }
+    },
+  )
+
+  app.patch(
+    '/api/auth/notify-prefs',
+    {
+      config: { rateLimit: { max: 20, timeWindow: '5 minutes' } },
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: {
+            // 已知渠道白名单（当前仅 email）；未知渠道被剔除
+            channels: { type: 'array', items: { type: 'string', enum: ['email'] }, uniqueItems: true },
+            addresses: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { email: { type: ['string', 'null'], maxLength: 254 } },
+            },
+          },
+        },
+        response: { 200: NOTIFY_PREFS_SCHEMA, 401: ERROR_SCHEMA, 422: ERROR_SCHEMA },
+      },
+    },
+    async (req, reply) => {
+      if (!req.user) return reply.status(401).send({ error: 'unauthorized' })
+      const b = req.body as { channels?: string[]; addresses?: { email?: string | null } }
+      const row = db
+        .prepare('SELECT email, notify_channels, notify_addresses FROM users WHERE id = ?')
+        .get(req.user.id) as { email: string; notify_channels: string; notify_addresses: string }
+      let channels: string[]
+      let addresses: Record<string, string>
+      try {
+        channels = JSON.parse(row.notify_channels) as string[]
+        addresses = JSON.parse(row.notify_addresses) as Record<string, string>
+      } catch {
+        channels = ['email']
+        addresses = {}
+      }
+      if (b.channels !== undefined) channels = b.channels
+      if (b.addresses !== undefined && 'email' in b.addresses) {
+        const v = b.addresses.email
+        if (v == null || v.trim() === '') delete addresses['email']
+        else {
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim())) return reply.status(422).send({ error: 'invalid_email' })
+          addresses['email'] = v.trim()
+        }
+      }
+      db.prepare('UPDATE users SET notify_channels = ?, notify_addresses = ? WHERE id = ?').run(
+        JSON.stringify(channels),
+        JSON.stringify(addresses),
+        req.user.id,
+      )
+      return { channels, addresses, account_email: row.email }
+    },
+  )
+
   app.post(
     '/api/auth/change-password',
     {

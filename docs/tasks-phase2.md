@@ -143,7 +143,8 @@
 ## P7 Track C · 前台体验补全
 - [x] C1 历史单一键再下单：OrderView「一键再下单」→ 缓冲单页行 → Quote 挂载按现价重报填入购物车（册子行提示重选）。
 - [x] C2 订单状态时间线：OrderView Timeline（下单/确认/收款/完成 + 交期目标，用既有里程碑时间戳）。
-- [ ] C3 账户页通知偏好（notify_channels/addresses，注：目前仅 email channel）。
+- [x] C3 账户页通知偏好：GET/PATCH /api/auth/notify-prefs（notify_channels/addresses，仅 email channel 白名单）；
+      notifyUser 分发遵循订阅/覆盖地址；Account 页「通知偏好」开关 + 备用邮箱。
 - [ ] C4 配送方式/地址（orders 增 delivery 列，migration）；文件预检反馈留 Phase 3。
 
 ## P4 Phase 3 远期（PRD 立项，不急）

@@ -235,6 +235,16 @@ export async function fetchPublicConfig(): Promise<PublicConfigDto> {
   return publicConfigCache
 }
 
+// C3 通知偏好（仅 email channel）
+export interface NotifyPrefsDto {
+  channels: string[]
+  addresses: { email?: string }
+  account_email: string
+}
+export const fetchNotifyPrefs = () => send<NotifyPrefsDto>('GET', '/api/auth/notify-prefs')
+export const updateNotifyPrefs = (body: { channels?: string[]; addresses?: { email?: string | null } }) =>
+  send<NotifyPrefsDto & { error?: string }>('PATCH', '/api/auth/notify-prefs', body)
+
 export async function fetchMe(): Promise<MeDto | null> {
   const res = await fetch('/api/auth/me')
   if (res.status === 401) return (meCache = null)
