@@ -8,6 +8,7 @@ import {
   orderItemFileUrl,
   patchOrderStatus,
   send,
+  setReorder,
   uploadOrderItemFile,
   type MeDto,
   type OrderDto,
@@ -22,6 +23,47 @@ export const FILE_STATUS_LABEL: Record<OrderItemDto['file_status'], string> = {
 }
 
 const BOOK_ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
+
+const fmtTime = (t: string) => t.slice(0, 16).replace('T', ' ')
+
+/** C2 订单状态时间线：用既有里程碑时间戳（下单/确认/收款/完成）+ 交期目标 */
+function Timeline({ order }: { order: OrderDto }) {
+  const paidLabel =
+    order.payment_status === 'paid' ? '付清' : order.payment_status === 'deposit' ? '收定金' : '收款'
+  const nodes: Array<{ label: string; time: string | null; done: boolean; target?: boolean }> = [
+    { label: '下单', time: order.created_at, done: true },
+    { label: '确认排产', time: order.confirmed_at, done: order.confirmed_at != null },
+    { label: paidLabel, time: order.paid_at, done: order.paid_at != null },
+    {
+      label: order.status === 'cancelled' ? '已取消' : '完成交付',
+      time: order.completed_at,
+      done: order.completed_at != null,
+    },
+  ]
+  if (order.due_date) nodes.splice(3, 0, { label: '交期', time: order.due_date, done: false, target: true })
+
+  return (
+    <div className="mt-5">
+      <div className="mb-2 font-mono text-[10px] tracking-[.14em] text-dim">进度时间线 · TIMELINE</div>
+      <ol className="space-y-2">
+        {nodes.map((n, i) => (
+          <li key={i} className="flex items-baseline gap-2.5 text-[12.5px]">
+            <span
+              className={`mt-[3px] inline-block h-[7px] w-[7px] shrink-0 rounded-full border ${
+                n.done ? 'border-wine bg-wine' : n.target ? 'border-ink bg-paper' : 'border-line bg-paper'
+              }`}
+            />
+            <span className={n.done ? 'text-ink' : n.target ? 'text-ink' : 'text-dim'}>{n.label}</span>
+            <Leader />
+            <span className="font-mono text-[10.5px] text-dim">
+              {n.time ? fmtTime(n.time) : n.target ? '目标' : '—'}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
 
 /** D27 书行展示（下单域：仅售价侧；机器对客户不可见） */
 function BookLine({ book }: { book: NonNullable<OrderDto['books']>[number] }) {
@@ -218,6 +260,20 @@ export default function OrderView({ token }: { token: string }) {
     else setActionErr(`取消失败（${(res.data as { error?: string })?.error ?? res.status}）`)
   }
 
+  const reorder = () => {
+    // C1: 单页行预填购物车（机器沿用原 mode_id），册子行需在下单页重选
+    setReorder(
+      order.items.map((i) => ({
+        mode_id: i.mode_id,
+        paper_id: i.paper_id,
+        size_key: i.size_key,
+        quantity: i.quantity,
+        label: `${i.mode_name} × ${i.paper_name} · ${i.size_label}`,
+      })),
+    )
+    window.location.hash = '#/quote'
+  }
+
   const claim = async () => {
     const res = await claimOrder(token)
     if (res.ok) {
@@ -296,6 +352,7 @@ export default function OrderView({ token }: { token: string }) {
                   : '未付款'
             }
           />
+          <Timeline order={order} />
           {order.is_guest && me && (
             <div className="mt-5">
               <button
@@ -317,6 +374,20 @@ export default function OrderView({ token }: { token: string }) {
               >
                 取消订单
               </button>
+            </div>
+          )}
+          {order.items.length > 0 && (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={reorder}
+                className="rounded-full border border-wine px-4 py-2 text-[13px] text-wine-ink hover:opacity-80"
+              >
+                一键再下单 ↻
+              </button>
+              {order.books && order.books.length > 0 && (
+                <p className="mt-1.5 text-[11px] text-dim">（册子行需在下单页重新选择）</p>
+              )}
             </div>
           )}
           {actionErr && <p className="mt-2 text-[12.5px] text-wine-ink">{actionErr}</p>}

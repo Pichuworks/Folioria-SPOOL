@@ -9,6 +9,7 @@ import {
   getMeCache,
   getProductsCache,
   getPublicConfigCache,
+  takeReorder,
   type MeDto,
   type ProductDto,
   type ProductsDto,
@@ -85,6 +86,35 @@ export default function Quote() {
       })
     fetchMe().then(setMe).catch(() => setMe(null))
     fetchPublicConfig().then((c) => setGuestOpen(c.guest_orders_open)).catch(() => {})
+  }, [])
+
+  // C1 一键再下单：消费缓冲的单页行，按现价重新报价后填入购物车
+  useEffect(() => {
+    const buf = takeReorder()
+    if (!buf || buf.length === 0) return
+    let cancelled = false
+    void (async () => {
+      const lines: CartLine[] = []
+      for (const it of buf) {
+        const q = await fetchQuote({ mode_id: it.mode_id, paper_id: it.paper_id, size_key: it.size_key, quantity: it.quantity }).catch(() => null)
+        if (q) {
+          lines.push({
+            kind: 'item',
+            mode_id: it.mode_id,
+            paper_id: it.paper_id,
+            size_key: it.size_key,
+            quantity: it.quantity,
+            label: it.label,
+            unit_display: q.unit_display,
+            line_total_display: q.line_total_display,
+          })
+        }
+      }
+      if (!cancelled && lines.length > 0) setCart((prev) => [...prev, ...lines])
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const products = useMemo(() => data?.products ?? [], [data])

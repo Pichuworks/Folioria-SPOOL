@@ -593,6 +593,7 @@ export interface OrderDto {
   created_at: string
   confirmed_at: string | null
   completed_at: string | null
+  due_date?: string | null
   notes: string | null
   items: OrderItemDto[]
   books?: OrderBookDto[] | undefined
@@ -685,6 +686,25 @@ export async function uploadOrderItemFile(
 
 export const orderItemFileUrl = (orderId: string, itemId: string): string =>
   `/api/orders/${orderId}/items/${itemId}/file`
+
+// C1 一键再下单：跨视图传递预填的单页行（module 级缓冲，hash 切换不重载）
+export interface ReorderItem {
+  mode_id: number
+  paper_id: number
+  size_key: string
+  quantity: number
+  label: string
+}
+let reorderBuffer: ReorderItem[] | null = null
+export const setReorder = (items: ReorderItem[]): void => {
+  reorderBuffer = items
+}
+/** 取出并清空缓冲（Quote 挂载时消费一次） */
+export const takeReorder = (): ReorderItem[] | null => {
+  const b = reorderBuffer
+  reorderBuffer = null
+  return b
+}
 
 export async function fetchQuote(req: {
   mode_id: number

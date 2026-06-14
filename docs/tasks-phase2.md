@@ -141,7 +141,8 @@
       离线/维护机台压活告警）；前台 #/admin/board 卡片泳道。 —— Track B（B1–B4）全部完成。
 
 ## P7 Track C · 前台体验补全
-- [ ] C1 历史单一键再下单（预填购物车）；C2 订单状态时间线（各节点时间）。
+- [x] C1 历史单一键再下单：OrderView「一键再下单」→ 缓冲单页行 → Quote 挂载按现价重报填入购物车（册子行提示重选）。
+- [x] C2 订单状态时间线：OrderView Timeline（下单/确认/收款/完成 + 交期目标，用既有里程碑时间戳）。
 - [ ] C3 账户页通知偏好（notify_channels/addresses，注：目前仅 email channel）。
 - [ ] C4 配送方式/地址（orders 增 delivery 列，migration）；文件预检反馈留 Phase 3。
 
