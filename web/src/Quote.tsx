@@ -70,6 +70,8 @@ export default function Quote() {
   const [cart, setCart] = useState<CartLine[]>([])
   const [contact, setContact] = useState('')
   const [notes, setNotes] = useState('')
+  const [deliveryMethod, setDeliveryMethod] = useState<'pickup' | 'shipping'>('pickup')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [needLogin, setNeedLogin] = useState(false)
@@ -225,8 +227,17 @@ export default function Quote() {
             : `提交失败（${err ?? status}）`,
     )
 
+  const delivery = () => ({
+    delivery_method: deliveryMethod,
+    delivery_address: deliveryMethod === 'shipping' ? deliveryAddress.trim() : null,
+  })
+
   const submit = async () => {
     if (cart.length === 0) return
+    if (deliveryMethod === 'shipping' && deliveryAddress.trim() === '') {
+      setSubmitError('选择邮寄请填写收件地址。')
+      return
+    }
     if (!me) {
       if (!guestOpen) {
         setNeedLogin(true)
@@ -241,6 +252,7 @@ export default function Quote() {
       const gres = await createGuestOrder({
         items: items(),
         books: books(),
+        ...delivery(),
         email: guestEmail.trim(),
         name: guestName.trim(),
         contact_info: contact.trim() === '' ? null : contact.trim(),
@@ -259,6 +271,7 @@ export default function Quote() {
     const res = await createOrder({
       items: items(),
       books: books(),
+      ...delivery(),
       contact_info: contact.trim() === '' ? null : contact.trim(),
       notes: notes.trim() === '' ? null : notes.trim(),
     })
@@ -508,6 +521,27 @@ export default function Quote() {
                   <input maxLength={80} className={specInput} value={guestName} onChange={(e) => setGuestName(e.target.value)} />
                 </Field>
               </>
+            )}
+            <Field label="配送方式">
+              <select
+                className={specInput}
+                value={deliveryMethod}
+                onChange={(e) => setDeliveryMethod(e.target.value as 'pickup' | 'shipping')}
+              >
+                <option value="pickup">到店自取</option>
+                <option value="shipping">邮寄</option>
+              </select>
+            </Field>
+            {deliveryMethod === 'shipping' && (
+              <Field label="收件地址">
+                <textarea
+                  className={specInput}
+                  rows={2}
+                  maxLength={500}
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                />
+              </Field>
             )}
             <Field label="联系方式（取件/寄送沟通用，可留空）">
               <input className={specInput} maxLength={200} value={contact} onChange={(e) => setContact(e.target.value)} />

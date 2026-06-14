@@ -145,7 +145,9 @@
 - [x] C2 订单状态时间线：OrderView Timeline（下单/确认/收款/完成 + 交期目标，用既有里程碑时间戳）。
 - [x] C3 账户页通知偏好：GET/PATCH /api/auth/notify-prefs（notify_channels/addresses，仅 email channel 白名单）；
       notifyUser 分发遵循订阅/覆盖地址；Account 页「通知偏好」开关 + 备用邮箱。
-- [ ] C4 配送方式/地址（orders 增 delivery 列，migration）；文件预检反馈留 Phase 3。
+- [x] C4 配送方式/地址（D30，migration 0013）：orders delivery_method/delivery_address；下单（含访客）带配送，
+      shipping 须地址否则 422；Quote 结账增「自取/邮寄 + 地址」；OrderView/AdminOrders 展示。文件预检留 Phase 3。
+      —— Track C（C1–C4）全部完成。三线（书/金钱运营/前台体验）全部闭合。
 
 ## P4 Phase 3 远期（PRD 立项，不急）
 

@@ -209,6 +209,9 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
           <span className="font-mono text-[10.5px] tracking-[.1em] text-warn">报价过期</span>
         )}
         {order.contact_info && <span className="text-[12px] text-dim">联系：{order.contact_info}</span>}
+        {order.delivery_method === 'shipping' && (
+          <span className="text-[12px] text-wine-ink">邮寄：{order.delivery_address}</span>
+        )}
         <span className="ml-auto font-mono text-[10.5px] text-dim">
           <a href={`#/order/${order.access_token}`} className="underline hover:text-ink">客户视图 →</a>
         </span>

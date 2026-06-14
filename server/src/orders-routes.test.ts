@@ -67,6 +67,8 @@ interface OrderDto {
   payment_method?: string | null
   paid_at?: string | null
   payments?: Array<{ id: string; kind: string; amount: number }>
+  delivery_method?: string
+  delivery_address?: string | null
   quote_valid_until: string
   quote_expired: boolean
   is_internal?: boolean
@@ -868,5 +870,35 @@ describe('§3.1 订单作业 done 落账回归（done 只走既有 completeJob�
       quantity: number
     }
     expect(stock.quantity).toBe(500 - 203)
+  })
+})
+
+describe('D30 配送方式/地址', () => {
+  it('默认 pickup；shipping + 地址 → 落库回显', async () => {
+    const cookie = await login('a@cust.example')
+    const def = await app.inject({ method: 'POST', url: '/api/orders', headers: { cookie }, payload: { items: [A4_ITEM] } })
+    expect((def.json() as OrderDto).delivery_method).toBe('pickup')
+
+    const ship = await app.inject({
+      method: 'POST',
+      url: '/api/orders',
+      headers: { cookie },
+      payload: { items: [A4_ITEM], delivery_method: 'shipping', delivery_address: '東京都杉並区阿佐谷 1-2-3' },
+    })
+    expect(ship.statusCode).toBe(201)
+    const o = ship.json() as OrderDto
+    expect(o.delivery_method).toBe('shipping')
+    expect(o.delivery_address).toBe('東京都杉並区阿佐谷 1-2-3')
+  })
+
+  it('shipping 缺地址 → 422 delivery_address_required', async () => {
+    const cookie = await login('a@cust.example')
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/orders',
+      headers: { cookie },
+      payload: { items: [A4_ITEM], delivery_method: 'shipping' },
+    })
+    expect(res.statusCode).toBe(422)
   })
 })

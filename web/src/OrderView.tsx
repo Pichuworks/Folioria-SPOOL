@@ -352,6 +352,13 @@ export default function OrderView({ token }: { token: string }) {
                   : '未付款'
             }
           />
+          {order.delivery_method && (
+            <SpecRow
+              label="配送"
+              {...(order.delivery_address ? { note: order.delivery_address } : {})}
+              value={order.delivery_method === 'shipping' ? '邮寄' : '到店自取'}
+            />
+          )}
           <Timeline order={order} />
           {order.is_guest && me && (
             <div className="mt-5">

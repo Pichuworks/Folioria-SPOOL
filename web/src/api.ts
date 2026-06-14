@@ -587,6 +587,8 @@ export interface OrderDto {
     | 'delivered'
     | 'cancelled'
   contact_info: string | null
+  delivery_method?: 'pickup' | 'shipping' | string
+  delivery_address?: string | null
   subtotal: number
   subtotal_display: string
   discount: number
@@ -630,12 +632,19 @@ export interface OrderLineBody {
   books?: Array<{ book_id: number; count: number; components?: Array<{ component_id: number; sheets_per_book: number }> }>
 }
 
-export const createOrder = (body: OrderLineBody & { contact_info?: string | null; notes?: string | null }) =>
-  send<OrderDto & { error?: string }>('POST', '/api/orders', body)
+/** D30 配送 */
+export interface DeliveryBody {
+  delivery_method?: 'pickup' | 'shipping'
+  delivery_address?: string | null
+}
+
+export const createOrder = (
+  body: OrderLineBody & DeliveryBody & { contact_info?: string | null; notes?: string | null },
+) => send<OrderDto & { error?: string }>('POST', '/api/orders', body)
 
 /** D23 免登录下单（需 guest_orders_open）；返回订单含 access_token */
 export const createGuestOrder = (
-  body: OrderLineBody & { email: string; name: string; contact_info?: string | null; notes?: string | null },
+  body: OrderLineBody & DeliveryBody & { email: string; name: string; contact_info?: string | null; notes?: string | null },
 ) => send<OrderDto & { error?: string }>('POST', '/api/orders/guest', body)
 
 /** D23 已验证用户认领访客单 */

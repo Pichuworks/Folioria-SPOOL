@@ -66,6 +66,8 @@ export interface OrderRow {
   guest_email: string | null
   guest_name: string | null
   guest_contact: string | null
+  delivery_method: string
+  delivery_address: string | null
 }
 
 /** D23: 已验证用户认领访客单（仅 guest_email 与本人邮箱一致时），改绑 customer_id 并清访客字段 */
@@ -209,6 +211,9 @@ export interface CreateOrderInput {
   books?: BookLineInput[]
   contactInfo?: string | null
   notes?: string | null
+  /** D30 配送：'pickup'（默认）| 'shipping'（须 deliveryAddress 非空） */
+  deliveryMethod?: 'pickup' | 'shipping'
+  deliveryAddress?: string | null
   /** 访客单留痕（D23）：customerId 取哨兵，guest_* 落联系方式 */
   guestEmail?: string | null
   guestName?: string | null
@@ -237,6 +242,13 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
 
   if (priced.length === 0 && books.length === 0) throw new OrderError(422, 'empty_order')
 
+  // D30 配送：邮寄须有非空地址
+  const deliveryMethod = input.deliveryMethod ?? 'pickup'
+  const deliveryAddress = input.deliveryAddress?.trim() ? input.deliveryAddress.trim() : null
+  if (deliveryMethod === 'shipping' && !deliveryAddress) {
+    throw new OrderError(422, 'delivery_address_required')
+  }
+
   const subtotal = sumMoney([...priced.map((p) => p.line_total), ...books.map((b) => b.line_total)])
 
   const now = new Date()
@@ -248,8 +260,8 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
     db.prepare(
       `INSERT INTO orders (id, order_number, access_token, customer_id, contact_info, is_internal,
                            subtotal, discount, total, status, quote_valid_until, created_at, notes,
-                           guest_email, guest_name, guest_contact)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'quoted', ?, ?, ?, ?, ?, ?)`,
+                           guest_email, guest_name, guest_contact, delivery_method, delivery_address)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'quoted', ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       orderId,
       nextOrderNumber(db, now),
@@ -265,6 +277,8 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
       input.guestEmail ?? null,
       input.guestName ?? null,
       input.guestContact ?? null,
+      deliveryMethod,
+      deliveryAddress,
     )
     const insertItem = db.prepare(
       `INSERT INTO order_items (id, order_id, mode_id, paper_id, size_key, quantity,

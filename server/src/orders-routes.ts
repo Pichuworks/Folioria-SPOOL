@@ -139,6 +139,8 @@ export const ORDER_SCHEMA = {
       },
     },
     contact_info: { type: ['string', 'null'] },
+    delivery_method: { type: 'string' }, // D30 'pickup' | 'shipping'
+    delivery_address: { type: ['string', 'null'] },
     subtotal: { type: 'integer' },
     subtotal_display: { type: 'string' },
     discount: { type: 'integer' },
@@ -295,6 +297,8 @@ export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoO
     order_number: order.order_number,
     status: order.status,
     contact_info: order.contact_info,
+    delivery_method: order.delivery_method,
+    delivery_address: order.delivery_address,
     subtotal: order.subtotal,
     subtotal_display: formatMoney(money(order.subtotal), currency),
     discount: order.discount,
@@ -368,6 +372,8 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
             books: { type: 'array', maxItems: 50, items: BOOK_LINE_SCHEMA },
             contact_info: { type: ['string', 'null'], maxLength: 200 },
             notes: { type: ['string', 'null'], maxLength: 2000 },
+            delivery_method: { type: 'string', enum: ['pickup', 'shipping'] },
+            delivery_address: { type: ['string', 'null'], maxLength: 500 },
           },
         },
         response: { 201: ORDER_SCHEMA, 403: ERROR_SCHEMA, 422: ERROR_SCHEMA },
@@ -382,8 +388,13 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       if (cfg.require_email_verification === 1 && user.email_verified_at == null) {
         return reply.status(403).send({ error: 'email_unverified' })
       }
-      const b = req.body as OrderLineBody & { contact_info?: string | null; notes?: string | null }
-      // OrderError/BookError（422 not_quotable / empty_order 等）带 statusCode 上抛，全局 errorHandler 映射
+      const b = req.body as OrderLineBody & {
+        contact_info?: string | null
+        notes?: string | null
+        delivery_method?: 'pickup' | 'shipping'
+        delivery_address?: string | null
+      }
+      // OrderError/BookError（422 not_quotable / empty_order / delivery_address_required 等）带 statusCode 上抛
       const orderId = createOrder(db, {
         customerId: user.id,
         // B1.1: 内部成员（member/admin）下单走内部价口径并标记 is_internal
@@ -392,6 +403,8 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         books: toBookLines(b.books),
         contactInfo: b.contact_info ?? null,
         notes: b.notes ?? null,
+        deliveryMethod: b.delivery_method ?? 'pickup',
+        deliveryAddress: b.delivery_address ?? null,
       })
       const order = getOrder(db, orderId) as OrderRow
       return reply
@@ -418,6 +431,8 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
             name: { type: 'string', minLength: 1, maxLength: 80 },
             contact_info: { type: ['string', 'null'], maxLength: 200 },
             notes: { type: ['string', 'null'], maxLength: 2000 },
+            delivery_method: { type: 'string', enum: ['pickup', 'shipping'] },
+            delivery_address: { type: ['string', 'null'], maxLength: 500 },
           },
         },
         response: { 201: ORDER_SCHEMA, 403: ERROR_SCHEMA, 422: ERROR_SCHEMA },
@@ -435,6 +450,8 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         name: string
         contact_info?: string | null
         notes?: string | null
+        delivery_method?: 'pickup' | 'shipping'
+        delivery_address?: string | null
       }
       const orderId = createOrder(db, {
         customerId: GUEST_SENTINEL_ID,
@@ -443,6 +460,8 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         books: toBookLines(b.books),
         contactInfo: b.contact_info ?? null,
         notes: b.notes ?? null,
+        deliveryMethod: b.delivery_method ?? 'pickup',
+        deliveryAddress: b.delivery_address ?? null,
         guestEmail: b.email,
         guestName: b.name,
         guestContact: b.contact_info ?? null,
