@@ -133,7 +133,8 @@
 - [x] B1 收款/退款流水账（D28）：append-only `payments`（migration 0011，回填既有 paid_amount）；
       orders.paid_amount/payment_status/paid_at/method 改为投影；强制 0≤Σ≤total + kind↔符号；
       POST/GET /api/orders/:id/payments 替换覆盖式 PATCH；AdminOrders 收款面板改流水时间线 + 记一笔。
-- [ ] B2 客户 CRM：AdminUsers 增 per-customer 钻取（订单史/累计消费/欠款/联系方式，只读 join）。
+- [x] B2 客户 CRM：GET /api/admin/users/:id/summary（订单史 + 累计已收 + 欠款投影 + 联系方式，只读 join）；
+      AdminUsers 行内「钻取」展开面板。customer→403 / 未知/guest→404。
 - [ ] B3 审计日志：admin_audit 表 + 单一 choke-point 写入（定价/折扣/收款/角色归档/设置）+ 审阅视图。migration + 附录A。
 - [ ] B4 按机台排产板（只读先行）：按 printer 分泳道显示 queued/printing 作业 + status + due_date，离线机仍压 job 告警。
 

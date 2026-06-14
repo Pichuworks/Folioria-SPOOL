@@ -17,8 +17,10 @@ import {
   verifyLogin,
   type SessionUser,
 } from './auth.js'
+import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { spoolInit } from './init.js'
+import { formatMoney, money } from './money.js'
 import { importSeed } from './seed.js'
 import { registerAlertsRoutes } from './alerts-routes.js'
 import { registerDashboardRoutes } from './dashboard-routes.js'
@@ -621,6 +623,57 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         .prepare('SELECT id, email, name, role, must_change_password FROM users WHERE id = ?')
         .get(id) as SessionUser
       return userDto(updated)
+    },
+  )
+
+  // B2 客户 CRM 钻取（只读 join）：订单史 + 累计已收 + 欠款 + 联系方式
+  app.get(
+    '/api/admin/users/:id/summary',
+    {
+      preHandler: requireAdmin,
+      schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string }
+      const user = db
+        .prepare("SELECT id, email, username, name, role, contact_info, created_at FROM users WHERE id = ? AND id != 'guest'")
+        .get(id) as
+        | { id: string; email: string; username: string | null; name: string; role: string; contact_info: string | null; created_at: string }
+        | undefined
+      if (!user) return reply.status(404).send({ error: 'not_found' })
+      const currency = baseCurrency(db)
+      const orders = db
+        .prepare(
+          `SELECT id, order_number, status, total, paid_amount, created_at
+           FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 200`,
+        )
+        .all(id) as Array<{ id: string; order_number: string; status: string; total: number; paid_amount: number; created_at: string }>
+      let totalPaid = 0
+      let outstanding = 0
+      let activeCount = 0
+      for (const o of orders) {
+        totalPaid += o.paid_amount
+        if (o.status !== 'cancelled') {
+          outstanding += o.total - o.paid_amount
+          activeCount += 1
+        }
+      }
+      return {
+        user,
+        stats: {
+          order_count: orders.length,
+          active_count: activeCount,
+          total_paid: totalPaid,
+          total_paid_display: formatMoney(money(totalPaid), currency),
+          outstanding,
+          outstanding_display: formatMoney(money(outstanding), currency),
+        },
+        orders: orders.map((o) => ({
+          ...o,
+          total_display: formatMoney(money(o.total), currency),
+          paid_amount_display: formatMoney(money(o.paid_amount), currency),
+        })),
+      }
     },
   )
   })
