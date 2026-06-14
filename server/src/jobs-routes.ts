@@ -30,10 +30,14 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
     },
     async (req) => {
       const { status } = req.query as { status?: string }
-      const sql = `SELECT j.*, m.name AS mode_name, p.name AS paper_name
+      // D27: LEFT JOIN 书行组件，暴露 order_book_id/book_name/book_role 供 AdminJobs 按书编组（item 作业为 NULL）
+      const sql = `SELECT j.*, m.name AS mode_name, p.name AS paper_name,
+                          obc.order_book_id AS order_book_id, ob.name AS book_name, obc.role AS book_role
                    FROM jobs j
                    JOIN print_modes m ON m.id = j.mode_id
                    JOIN papers p ON p.id = j.paper_id
+                   LEFT JOIN order_book_components obc ON obc.job_id = j.id
+                   LEFT JOIN order_books ob ON ob.id = obc.order_book_id
                    ${status ? 'WHERE j.status = ?' : ''}
                    ORDER BY j.created_at DESC LIMIT 500`
       const rows = (status ? db.prepare(sql).all(status) : db.prepare(sql).all()) as Array<

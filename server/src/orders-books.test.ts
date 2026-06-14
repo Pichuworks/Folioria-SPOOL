@@ -190,3 +190,129 @@ describe('§D27 书行下单', () => {
     void coverId
   })
 })
+
+describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', () => {
+  /** 下单（customer）→ 返回 order id */
+  async function placeBookOrder(innerSheets = 10, count = 5): Promise<string> {
+    const cookie = await login('a@cust.example')
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/orders',
+      headers: { cookie },
+      payload: { books: [bookLine(count, innerSheets)] },
+    })
+    expect(res.statusCode).toBe(201)
+    return (res.json() as { id: string }).id
+  }
+
+  it('纯书单无文件门：admin 可从 quoted 直接 confirm，拆出每组件一道 Job(queued)', async () => {
+    const id = await placeBookOrder()
+    const admin = await login('staff@folioria.jp')
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/orders/${id}/status`,
+      headers: { cookie: admin },
+      payload: { status: 'confirmed' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect((res.json() as { status: string }).status).toBe('confirmed')
+
+    // 组件作业：封面(1×5=5) + 内页(10×5=50)，均 queued，order_item_id NULL
+    const jobs = db
+      .prepare(
+        `SELECT j.mode_id, j.paper_id, j.size_key, j.quantity, j.quoted_price, j.status, j.order_item_id, obc.role
+         FROM order_book_components obc JOIN jobs j ON j.id = obc.job_id
+         WHERE obc.order_book_id IN (SELECT id FROM order_books WHERE order_id = ?)
+         ORDER BY obc.rowid`,
+      )
+      .all(id) as Array<{ mode_id: number; quantity: number; quoted_price: number; status: string; order_item_id: string | null; role: string }>
+    expect(jobs).toHaveLength(2)
+    expect(jobs.every((j) => j.status === 'queued')).toBe(true)
+    expect(jobs.every((j) => j.order_item_id === null)).toBe(true)
+    const cover = jobs.find((j) => j.role === 'cover')!
+    const inner = jobs.find((j) => j.role === 'inner')!
+    expect(cover.quantity).toBe(5) // 1 张/本 × 5 本
+    expect(cover.mode_id).toBe(4)
+    expect(inner.quantity).toBe(50) // 10 张/本 × 5 本
+    expect(inner.mode_id).toBe(1)
+    // Σ quoted_price === total（书行营收守恒，line_total 110）
+    expect(jobs.reduce((s, j) => s + j.quoted_price, 0)).toBe(110)
+  })
+
+  it('折扣后 Σ(组件 quoted_price) === total 守恒', async () => {
+    const id = await placeBookOrder()
+    const admin = await login('staff@folioria.jp')
+    const disc = await app.inject({
+      method: 'PATCH',
+      url: `/api/orders/${id}/discount`,
+      headers: { cookie: admin },
+      payload: { discount: 10 },
+    })
+    expect((disc.json() as { total: number }).total).toBe(100)
+    await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
+    const sum = (
+      db
+        .prepare(
+          `SELECT COALESCE(SUM(j.quoted_price), 0) AS s
+           FROM order_book_components obc JOIN jobs j ON j.id = obc.job_id
+           WHERE obc.order_book_id IN (SELECT id FROM order_books WHERE order_id = ?)`,
+        )
+        .get(id) as { s: number }
+    ).s
+    expect(sum).toBe(100)
+  })
+
+  it('AdminJobs 编组字段：GET /api/jobs 暴露 order_book_id/book_name/book_role', async () => {
+    const id = await placeBookOrder()
+    const admin = await login('staff@folioria.jp')
+    await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
+    const res = await app.inject({ method: 'GET', url: '/api/jobs', headers: { cookie: admin } })
+    const jobs = res.json() as Array<{ order_book_id: string | null; book_name: string | null; book_role: string | null }>
+    const bookJobs = jobs.filter((j) => j.order_book_id != null)
+    expect(bookJobs).toHaveLength(2)
+    expect(bookJobs.every((j) => j.book_name === '写真集')).toBe(true)
+    expect(bookJobs.map((j) => j.book_role).sort()).toEqual(['cover', 'inner'])
+  })
+
+  it('confirmed 后 cancel：组件作业连带取消（queued → cancelled）', async () => {
+    const id = await placeBookOrder()
+    const admin = await login('staff@folioria.jp')
+    await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
+    await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'cancelled' } })
+    const statuses = db
+      .prepare(
+        `SELECT j.status FROM order_book_components obc JOIN jobs j ON j.id = obc.job_id
+         WHERE obc.order_book_id IN (SELECT id FROM order_books WHERE order_id = ?)`,
+      )
+      .all(id) as Array<{ status: string }>
+    expect(statuses).toHaveLength(2)
+    expect(statuses.every((s) => s.status === 'cancelled')).toBe(true)
+  })
+
+  it('组件作业 done 落账：按组件 mode/paper/size/quantity 扣库存（completeJob 不变）', async () => {
+    const id = await placeBookOrder(10, 5)
+    const admin = await login('staff@folioria.jp')
+    await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
+    // 给内页纸（paper 1 / A4）备 100 张账面
+    db.prepare(
+      "INSERT INTO paper_stocks (id, paper_id, size_key, quantity) VALUES ('st-inner', 1, 'A4', 100)",
+    ).run()
+    const innerJob = db
+      .prepare(
+        `SELECT j.id, j.quantity FROM order_book_components obc JOIN jobs j ON j.id = obc.job_id
+         WHERE obc.role = 'inner' AND obc.order_book_id IN (SELECT id FROM order_books WHERE order_id = ?)`,
+      )
+      .get(id) as { id: string; quantity: number }
+    expect(innerJob.quantity).toBe(50)
+    const done = await app.inject({
+      method: 'POST',
+      url: `/api/jobs/${innerJob.id}/done`,
+      headers: { cookie: admin },
+      payload: { waste_quantity: 0 },
+    })
+    expect(done.statusCode).toBe(200)
+    expect((done.json() as { status: string }).status).toBe('done')
+    const left = (db.prepare("SELECT quantity FROM paper_stocks WHERE id = 'st-inner'").get() as { quantity: number }).quantity
+    expect(left).toBe(50) // 100 − 50
+  })
+})

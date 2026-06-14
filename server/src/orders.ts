@@ -368,28 +368,65 @@ function distributeDiscount(discount: number, subtotal: number, lineTotals: read
 }
 
 /**
- * R1/R6 confirm：仅 file_approved 且未过 quote_valid_until（过期 409，须重新报价）。
- * 单事务：逐 item 生成 Job(queued) 并回写 order_items.job_id。
- * 折扣按行比例整数分摊进 quoted_price，Σ(quoted_price) === total 守恒。
+ * 整数权重分摊：split_i = floor(total × w_i ÷ Σw)，末位吸收余额（Σ = total）。
+ * 全零权重（罕见）→ 全归末位。D27 书行营收按组件材料贡献分入各组件作业 quoted_price。
+ */
+function splitByWeight(total: number, weights: readonly number[]): number[] {
+  if (weights.length === 0) return []
+  const sum = weights.reduce((a, b) => a + b, 0)
+  if (sum <= 0) return weights.map((_, i) => (i === weights.length - 1 ? total : 0))
+  const shares: number[] = []
+  let allocated = 0
+  for (let i = 0; i < weights.length; i++) {
+    if (i === weights.length - 1) {
+      shares.push(total - allocated)
+    } else {
+      const num = total * weights[i]!
+      const rem = num % sum
+      const share = (num - rem) / sum
+      shares.push(share)
+      allocated += share
+    }
+  }
+  return shares
+}
+
+const ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
+
+/**
+ * R1/R6 + D27 confirm：未过 quote_valid_until（过期 409，须重新报价）。
+ * 含单页 item 的单须 file_approved（审稿过）；纯书单（无 item，本阶段无组件文件门）可从 quoted 直接确认。
+ * 单事务：逐 item 生成 Job(queued) 回写 order_items.job_id；逐书行按组件拆 Job(queued) 回写
+ * order_book_components.job_id（工艺已落 order_book_finishings 作记录）。
+ * 折扣按全部行（item + 书行）比例整数分摊；书行营收再按组件材料贡献整数分摊进各组件 quoted_price，
+ * Σ(全部 job quoted_price) === total 守恒。
  */
 export function confirmOrder(db: DB, orderId: string): void {
   const order = getOrder(db, orderId)
   if (!order) throw new OrderError(404, 'not_found')
-  if (order.status !== 'file_approved') {
+  const items = getOrderItems(db, orderId)
+  const books = getOrderBooks(db, orderId)
+  // 单页 item 须经审稿（file_approved）；纯书单无文件门，pre-confirm 任一态可确认
+  const confirmable =
+    items.length > 0 ? ['file_approved'] : ['quoted', 'file_pending', 'file_approved']
+  if (!confirmable.includes(order.status)) {
     throw new OrderError(409, `not_confirmable_from_${order.status}`)
   }
   const nowIso = new Date().toISOString()
   if (nowIso > order.quote_valid_until) throw new OrderError(409, 'quote_expired')
 
-  const items = getOrderItems(db, orderId)
-  const shares = distributeDiscount(order.discount, order.subtotal, items.map((it) => it.line_total))
+  const lineTotals = [...items.map((it) => it.line_total), ...books.map((b) => b.book.line_total)]
+  const shares = distributeDiscount(order.discount, order.subtotal, lineTotals)
+  const itemShares = shares.slice(0, items.length)
+  const bookShares = shares.slice(items.length)
+
   db.transaction(() => {
     const insertJob = db.prepare(
       `INSERT INTO jobs (id, order_item_id, requester_id, title, mode_id, paper_id, size_key,
                          quantity, quoted_price, file_url, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
     )
-    const backfill = db.prepare('UPDATE order_items SET job_id = ? WHERE id = ?')
+    const backfillItem = db.prepare('UPDATE order_items SET job_id = ? WHERE id = ?')
     for (let i = 0; i < items.length; i++) {
       const item = items[i]!
       const jobId = randomUUID()
@@ -402,11 +439,39 @@ export function confirmOrder(db: DB, orderId: string): void {
         item.paper_id,
         item.size_key,
         item.quantity,
-        item.line_total - shares[i]!,
+        item.line_total - itemShares[i]!,
         item.file_url,
         nowIso,
       )
-      backfill.run(jobId, item.id)
+      backfillItem.run(jobId, item.id)
+    }
+
+    const backfillComp = db.prepare('UPDATE order_book_components SET job_id = ? WHERE id = ?')
+    for (let bi = 0; bi < books.length; bi++) {
+      const b = books[bi]!
+      const bookRevenue = b.book.line_total - bookShares[bi]!
+      // 组件营收权重 = 单页价 × 每本张数 × 本数（材料贡献）
+      const weights = b.components.map((c) => c.unit_sell_c * c.sheets_per_book * b.book.count)
+      const compShares = splitByWeight(bookRevenue, weights)
+      for (let ci = 0; ci < b.components.length; ci++) {
+        const c = b.components[ci]!
+        const jobId = randomUUID()
+        // 组件作业：order_item_id NULL（书行作业），mode_id 取下单定格的最便宜机器（admin 可改派）
+        insertJob.run(
+          jobId,
+          null,
+          order.customer_id,
+          `${order.order_number} · ${b.book.name} · ${ROLE_LABEL[c.role] ?? c.role} ${c.size_key}`,
+          c.mode_id,
+          c.paper_id,
+          c.size_key,
+          c.sheets_per_book * b.book.count,
+          compShares[ci]!,
+          null,
+          nowIso,
+        )
+        backfillComp.run(jobId, c.id)
+      }
     }
     db.prepare("UPDATE orders SET status = 'confirmed', confirmed_at = ? WHERE id = ?").run(nowIso, orderId)
   })()
@@ -425,6 +490,15 @@ export function cancelOrder(db: DB, orderId: string): void {
     db.prepare(
       `UPDATE jobs SET status = 'cancelled', completed_at = ?
        WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)
+         AND status IN ('draft', 'queued', 'printing')`,
+    ).run(nowIso, orderId)
+    // D27: 书行组件作业（order_item_id NULL，经 order_book_components.job_id 关联）连带取消
+    db.prepare(
+      `UPDATE jobs SET status = 'cancelled', completed_at = ?
+       WHERE id IN (
+               SELECT job_id FROM order_book_components
+               WHERE job_id IS NOT NULL
+                 AND order_book_id IN (SELECT id FROM order_books WHERE order_id = ?))
          AND status IN ('draft', 'queued', 'printing')`,
     ).run(nowIso, orderId)
     db.prepare("UPDATE orders SET status = 'cancelled', completed_at = ? WHERE id = ?").run(nowIso, orderId)
