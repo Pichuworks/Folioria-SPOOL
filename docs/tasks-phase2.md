@@ -149,6 +149,29 @@
       shipping 须地址否则 422；Quote 结账增「自取/邮寄 + 地址」；OrderView/AdminOrders 展示。文件预检留 Phase 3。
       —— Track C（C1–C4）全部完成。三线（书/金钱运营/前台体验）全部闭合。
 
+## P8 Production 收尾 · 登录统一 / 书收尾 / 审计扩面（D31+）
+> 沿用铁律：金额三铁律、双域 cost/profit/margin 白名单、机器对客户不可见、schema 冻结只走 migration +
+> prd.md 附录A 一行。复用属性产品层、payments/recordPayment、audit() choke-point、书层
+> （priceBook / order_book_components / confirm 拆组件作业）。测试先行；combos/§2.5 基线（187/43）不得回归。
+
+### Track A · 登录统一（纯前端）
+- [x] PA1 合并 AdminGate/CustomerGate 登录卡为共享 web/src/Auth.tsx（去 STAFF 品牌化，统一 ATELIER/登录 tag）；
+      AdminGate 保留 admin 角色门（非 admin →「本页仅管理域可见」）；登录/首登改密/忘记密码同一表单。不动 auth API。
+
+### Track B · 书子系统 production 收尾
+- [ ] PB1 书组件文件上传/审稿（migration 0014：order_book_components +file_url/file_status/file_note；附录A D31）：
+      files-routes 扩 order_book_components 级上传（复用 R5 白名单+magic bytes+隔离存储+randomUUID）；per-component
+      审稿；含书行订单 confirm 须「全部书组件有文件且 approved」；纯书单与单页 item 同口径有文件门。OrderView/AdminOrders 渲染。
+- [ ] PB2 书行再下单（migration 0015：order_book_components +source_component_id → book_components.id；附录A D32）：
+      C1 reorder 支持册子行预填（book_id + count + 各组件张数还原）；成品/组件已归档则跳过并提示。
+- [ ] PB3 AdminJobs 按书编组：用 order_book_id/book_name/book_role 折叠组件作业。
+- [ ] PB4 书作业核算校验：测试覆盖 dashboard / 月报正确计入书组件作业（quoted_price 营收 / done 成本快照）；内外口径不被书行破坏。
+
+### Track C · 审计扩面 + 运营校验
+- [ ] PC1 审计 choke-point 扩面：书成品/组件/工艺定价编辑、mode/paper/size 编辑、订单状态流转（confirm/cancel）、
+      用户创建一并落 admin_audit（单一 audit() 入口，best-effort 不阻断）。
+- [ ] PC2 取消含已收款订单：cancel 不自动退款，但响应/AdminOrders 提示「须退 ¥X(=paid_amount)」，引导走退款流水。
+
 ## P4 Phase 3 远期（PRD 立项，不急）
 
 - 环境传感器 MQTT → location 湿度自动预警 · 打印机 SNMP → 出纸计数/碳粉余量自动校正
