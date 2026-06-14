@@ -635,9 +635,10 @@ describe('R6 收款与折扣（§5/C7）', () => {
       )
       .all(order.id) as Array<{ quoted_price: number }>
     expect(jobs.length).toBe(2)
-    // floor(4×14/104)=0, remainder 4 → shares [0, 4]
-    expect(jobs[0]?.quoted_price).toBe(14)
-    expect(jobs[1]?.quoted_price).toBe(86)
+    // Hamilton 分摊：exact A4=0.538 A3=3.46 → base [0,3] + 余 1 给余数最大者(A4) → shares [1,3]
+    // ⇒ quoted [13, 87]（每份 ≤ line_total，无负 quoted；Σ 守恒）
+    expect(jobs[0]?.quoted_price).toBe(13)
+    expect(jobs[1]?.quoted_price).toBe(87)
     expect(jobs.reduce((s, j) => s + j.quoted_price, 0)).toBe(100)
   })
 

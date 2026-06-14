@@ -360,25 +360,30 @@ export function syncFileState(db: DB, orderId: string): { status: OrderStatus; c
   return { status: next, changed: true }
 }
 
-/** Integer-only pro-rata: share_i = floor(discount × line_total_i ÷ subtotal), remainder to last. */
-function distributeDiscount(discount: number, subtotal: number, lineTotals: readonly number[]): number[] {
-  if (discount <= 0 || subtotal <= 0 || lineTotals.length === 0) {
-    return lineTotals.map(() => 0)
-  }
-  const shares: number[] = []
+/**
+ * 整数定点折扣分摊（largest-remainder / Hamilton 法）：share_i ∈ {floor, ceil}(discount×line_i/subtotal)，
+ * 余额按分数余数从大到小 +1。因 discount ≤ subtotal ⇒ 精确份额 ≤ line_i ⇒ ceil 亦 ≤ line_i（line 为整数），
+ * 故每份 ∈ [0, line_total]，line_total − share ≥ 0（杜绝负 quoted_price）；Σshare === discount 守恒。
+ * 旧实现把全部下取整余额堆到末行，小末行会被打穿成负 quoted_price（已修）。导出供性质测试。
+ */
+export function distributeDiscount(discount: number, subtotal: number, lineTotals: readonly number[]): number[] {
+  const n = lineTotals.length
+  if (discount <= 0 || subtotal <= 0 || n === 0) return lineTotals.map(() => 0)
+  const base: number[] = []
+  const rem: number[] = []
   let allocated = 0
-  for (let i = 0; i < lineTotals.length; i++) {
-    if (i === lineTotals.length - 1) {
-      shares.push(discount - allocated)
-    } else {
-      const num = discount * lineTotals[i]!
-      const rem = num % subtotal
-      const share = (num - rem) / subtotal
-      shares.push(share)
-      allocated += share
-    }
+  for (let i = 0; i < n; i++) {
+    const num = discount * lineTotals[i]!
+    const r = num % subtotal
+    const b = (num - r) / subtotal
+    base.push(b)
+    rem.push(r)
+    allocated += b
   }
-  return shares
+  const leftover = discount - allocated // ∈ [0, n)
+  const order = base.map((_, i) => i).sort((a, b) => rem[b]! - rem[a]! || a - b)
+  for (let k = 0; k < leftover; k++) base[order[k]!]! += 1
+  return base
 }
 
 /**

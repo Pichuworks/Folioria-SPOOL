@@ -22,7 +22,7 @@ import {
   type OrderItemRow,
   type OrderRow,
 } from './orders.js'
-import { getPayments, PaymentError, recordPayment, type PaymentRow } from './payments.js'
+import { getPayments, PaymentError, projectStatus, recordPayment, type PaymentRow } from './payments.js'
 
 // ---------- 序列化白名单（D5/§6）：下单域响应仅含售价侧字段，cost/profit/margin 不进 schema ----------
 
@@ -843,8 +843,18 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       if (discount > order.subtotal) {
         return reply.status(422).send({ error: 'discount_exceeds_subtotal' })
       }
-      // total = subtotal − discount：整数减法，无舍入
-      db.prepare('UPDATE orders SET discount = ?, total = subtotal - ? WHERE id = ?').run(discount, discount, id)
+      // D28: 折扣不可把应付压到已收之下（否则 paid_amount > total，投影失真，须先退款）
+      const newTotal = order.subtotal - discount
+      if (newTotal < order.paid_amount) {
+        return reply.status(422).send({ error: 'discount_below_paid' })
+      }
+      // total = subtotal − discount：整数减法，无舍入；并重算 payment_status 投影（应付变了，paid_amount 未变）
+      db.prepare('UPDATE orders SET discount = ?, total = ?, payment_status = ? WHERE id = ?').run(
+        discount,
+        newTotal,
+        projectStatus(order.paid_amount, newTotal),
+        id,
+      )
       audit(db, {
         actorId: req.user?.id ?? null,
         action: 'order.discount',
