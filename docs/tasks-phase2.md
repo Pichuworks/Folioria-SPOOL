@@ -164,7 +164,7 @@
       审稿；含书行订单 confirm 须「全部书组件有文件且 approved」；纯书单与单页 item 同口径有文件门。OrderView/AdminOrders 渲染。
 - [x] PB2 书行再下单（migration 0015：order_book_components +source_component_id → book_components.id；附录A D32）：
       C1 reorder 支持册子行预填（book_id + count + 各组件张数还原）；成品/组件已归档则跳过并提示。
-- [ ] PB3 AdminJobs 按书编组：用 order_book_id/book_name/book_role 折叠组件作业。
+- [x] PB3 AdminJobs 按书编组：用 order_book_id/book_name/book_role 折叠组件作业。
 - [ ] PB4 书作业核算校验：测试覆盖 dashboard / 月报正确计入书组件作业（quoted_price 营收 / done 成本快照）；内外口径不被书行破坏。
 
 ### Track C · 审计扩面 + 运营校验

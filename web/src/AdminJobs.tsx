@@ -200,6 +200,47 @@ function JobRow({ job, onChanged }: { job: JobDto; onChanged: () => void }) {
   )
 }
 
+const BOOK_ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
+
+/** PB3 台账编组单元：独立单页作业 或 一本书的组件作业组（同 order_book_id 折叠） */
+type RenderUnit = { kind: 'job'; job: JobDto } | { kind: 'book'; bookId: string; bookName: string; jobs: JobDto[] }
+
+/** 用 GET /api/jobs 暴露的 order_book_id/book_name 把组件作业按书折叠（保持原顺序） */
+function groupByBook(list: JobDto[]): RenderUnit[] {
+  const units: RenderUnit[] = []
+  const idx = new Map<string, number>()
+  for (const j of list) {
+    if (j.order_book_id) {
+      const at = idx.get(j.order_book_id)
+      if (at != null) (units[at] as Extract<RenderUnit, { kind: 'book' }>).jobs.push(j)
+      else {
+        idx.set(j.order_book_id, units.length)
+        units.push({ kind: 'book', bookId: j.order_book_id, bookName: j.book_name ?? '册子', jobs: [j] })
+      }
+    } else {
+      units.push({ kind: 'job', job: j })
+    }
+  }
+  return units
+}
+
+function BookJobGroup({ unit, onChanged }: { unit: Extract<RenderUnit, { kind: 'book' }>; onChanged: () => void }) {
+  return (
+    <div className="my-1.5 border-l-2 border-wine/40 pl-3">
+      <div className="flex items-baseline gap-2 pt-1.5 text-[12.5px]">
+        <span className="font-medium text-ink">📖 {unit.bookName}</span>
+        <span className="font-mono text-[10px] tracking-[.1em] text-dim">
+          {unit.jobs.length} 组件 ·{' '}
+          {unit.jobs.map((j) => BOOK_ROLE_LABEL[j.book_role ?? ''] ?? j.book_role).filter(Boolean).join('/')}
+        </span>
+      </div>
+      {unit.jobs.map((j) => (
+        <JobRow key={j.id} job={j} onChanged={onChanged} />
+      ))}
+    </div>
+  )
+}
+
 type PreviewState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
 
 function JobsBody() {
@@ -468,7 +509,13 @@ function JobsBody() {
               {groups[s].length === 0 ? (
                 <p className="py-2 text-[12px] text-dim">—</p>
               ) : (
-                groups[s].map((j) => <JobRow key={j.id} job={j} onChanged={onMutated} />)
+                groupByBook(groups[s]).map((u) =>
+                  u.kind === 'book' ? (
+                    <BookJobGroup key={u.bookId} unit={u} onChanged={onMutated} />
+                  ) : (
+                    <JobRow key={u.job.id} job={u.job} onChanged={onMutated} />
+                  ),
+                )
               )}
             </div>
           ))

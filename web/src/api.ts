@@ -403,6 +403,10 @@ export interface JobDto {
   total_cost_display: string | null
   profit_display: string | null
   quoted_price_display: string | null
+  // D27/PB3 书行组件作业编组（item 作业为 null）
+  order_book_id?: string | null
+  book_name?: string | null
+  book_role?: string | null
 }
 
 let jobsCache: JobDto[] | null = null
