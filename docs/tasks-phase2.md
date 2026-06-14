@@ -137,7 +137,8 @@
       AdminUsers 行内「钻取」展开面板。customer→403 / 未知/guest→404。
 - [x] B3 审计日志（D29）：admin_audit（migration 0012）+ 单一 choke-point audit()（best-effort 不阻断）写入
       定价(combo_price)/折扣/收款/角色归档/设置；GET /api/admin/audit 审阅视图 + 前台 #/admin/audit。
-- [ ] B4 按机台排产板（只读先行）：按 printer 分泳道显示 queued/printing 作业 + status + due_date，离线机仍压 job 告警。
+- [x] B4 按机台排产板（只读）：GET /api/jobs/board（scheduleBoard 泳道，due_date 经订单项/书行 join，
+      离线/维护机台压活告警）；前台 #/admin/board 卡片泳道。 —— Track B（B1–B4）全部完成。
 
 ## P7 Track C · 前台体验补全
 - [ ] C1 历史单一键再下单（预填购物车）；C2 订单状态时间线（各节点时间）。

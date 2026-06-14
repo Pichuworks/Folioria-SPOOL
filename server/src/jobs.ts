@@ -144,6 +144,76 @@ export function recommendMachines(
   return recs
 }
 
+export interface BoardJob {
+  id: string
+  title: string
+  status: string
+  quantity: number
+  mode_name: string
+  paper_name: string
+  size_key: string
+  due_date: string | null
+}
+
+export interface BoardLane {
+  printer_id: number
+  code: string
+  name: string
+  status: string
+  jobs: BoardJob[]
+  /** 离线/维护机台仍压着活（queued/printing）→ 告警 */
+  offline_with_jobs: boolean
+}
+
+/**
+ * B4 按机台排产板（只读）：每台机器一条泳道，列其 queued/printing 作业（含 due_date，
+ * 经订单项/书行两路 join 至 orders.due_date），离线/维护机台仍有活则告警。按 due_date 升序（NULL 殿后）。
+ */
+export function scheduleBoard(db: DB): BoardLane[] {
+  const printers = db
+    .prepare("SELECT id, code, name, status FROM printers WHERE archived = 0 ORDER BY id")
+    .all() as Array<{ id: number; code: string; name: string; status: string }>
+
+  const rows = db
+    .prepare(
+      `SELECT j.id, j.title, j.status, j.quantity, j.size_key, m.printer_id,
+              m.name AS mode_name, p.name AS paper_name,
+              COALESCE(o1.due_date, o2.due_date) AS due_date
+       FROM jobs j
+       JOIN print_modes m ON m.id = j.mode_id
+       JOIN papers p ON p.id = j.paper_id
+       LEFT JOIN order_items oi ON oi.id = j.order_item_id
+       LEFT JOIN orders o1 ON o1.id = oi.order_id
+       LEFT JOIN order_book_components obc ON obc.job_id = j.id
+       LEFT JOIN order_books ob ON ob.id = obc.order_book_id
+       LEFT JOIN orders o2 ON o2.id = ob.order_id
+       WHERE j.status IN ('queued', 'printing')
+       ORDER BY (COALESCE(o1.due_date, o2.due_date) IS NULL),
+                COALESCE(o1.due_date, o2.due_date), j.created_at`,
+    )
+    .all() as Array<BoardJob & { printer_id: number }>
+
+  const byPrinter = new Map<number, BoardJob[]>()
+  for (const r of rows) {
+    const { printer_id, ...job } = r
+    const lane = byPrinter.get(printer_id)
+    if (lane) lane.push(job)
+    else byPrinter.set(printer_id, [job])
+  }
+
+  return printers.map((p) => {
+    const jobs = byPrinter.get(p.id) ?? []
+    return {
+      printer_id: p.id,
+      code: p.code,
+      name: p.name,
+      status: p.status,
+      jobs,
+      offline_with_jobs: (p.status === 'offline' || p.status === 'maintenance') && jobs.length > 0,
+    }
+  })
+}
+
 export interface CompleteJobInput {
   wasteQuantity: number
   pagesConsumed?: number | undefined

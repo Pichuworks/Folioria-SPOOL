@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import Account, { AccountMenu } from './Account'
 import AdminAlerts from './AdminAlerts'
 import AdminAudit from './AdminAudit'
+import AdminBoard from './AdminBoard'
 import AdminEquipment from './AdminEquipment'
 import AdminInventory from './AdminInventory'
 import AdminJobs from './AdminJobs'
@@ -43,6 +44,7 @@ const ADMIN_ROUTES: Record<string, { nav: string; title: string; folio: string; 
   '#/dashboard': { nav: 'Dashboard', title: 'Dashboard', folio: 'S.P.O.O.L. CONSOLE', view: Dashboard },
   '#/admin/orders': { nav: '订单', title: '订单看板', folio: 'ORDER BOARD', view: AdminOrders },
   '#/admin/jobs': { nav: '作业', title: '作业管理', folio: 'JOBS LEDGER', view: AdminJobs },
+  '#/admin/board': { nav: '排产', title: '按机台排产板', folio: 'PRESS SCHEDULE', view: AdminBoard },
   '#/admin/inventory': { nav: '库存', title: '库存管理', folio: 'STOCK ROOM', view: AdminInventory },
   '#/admin/pricing': { nav: '价目', title: '价目管理', folio: 'PRICE BOOK', view: AdminPricing },
   '#/admin/equipment': { nav: '设备', title: '设备管理', folio: 'PRESS FLEET', view: AdminEquipment },

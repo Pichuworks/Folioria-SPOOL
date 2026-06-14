@@ -3,7 +3,7 @@ import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
-import { availability, canTransition, completeJob, JobError, recommendMachines } from './jobs.js'
+import { availability, canTransition, completeJob, JobError, recommendMachines, scheduleBoard } from './jobs.js'
 import { formatMoney, formatMoneyC, lineTotal, money, moneyC, type Currency } from './money.js'
 import { deriveUnitCost, overheadC } from './pricing.js'
 
@@ -52,6 +52,9 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
       }))
     },
   )
+
+  // B4 按机台排产板（只读）：泳道 + due_date + 离线压活告警
+  app.get('/api/jobs/board', { preHandler: requireAdmin }, async () => scheduleBoard(db))
 
   app.get('/api/jobs/availability', { preHandler: requireAdmin }, async (req, reply) => {
     const q = req.query as { paper_id?: string; size_key?: string }
