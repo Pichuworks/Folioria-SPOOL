@@ -1,8 +1,9 @@
 import { type FastifyInstance } from 'fastify'
+import { BookError, priceBook } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
-import { formatMoney, formatMoneyC, lineTotal } from './money.js'
+import { formatMoney, formatMoneyC, lineTotal, moneyC } from './money.js'
 import { listProducts, listQuotable, quote } from './pricing.js'
 
 const MONEY_C = { type: 'integer', minimum: 0 }
@@ -514,6 +515,274 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
+  // ---------- 管理域: 书成品 / 组件 / 工艺（D27） ----------
+
+  // 书成品 + 组件 + 工艺一并返回（admin 维护视图）
+  app.get('/api/pricing/books', { preHandler: requireAdmin }, async () => {
+    const books = db.prepare('SELECT * FROM book_products ORDER BY id').all() as Array<{ id: number }>
+    const comps = db.prepare('SELECT * FROM book_components ORDER BY book_id, sort, id').all() as Array<{
+      book_id: number
+    }>
+    const links = db.prepare('SELECT book_id, finishing_id FROM book_finishings').all() as Array<{
+      book_id: number
+      finishing_id: number
+    }>
+    return books.map((b) => ({
+      ...b,
+      components: comps.filter((c) => c.book_id === b.id),
+      finishing_ids: links.filter((l) => l.book_id === b.id).map((l) => l.finishing_id),
+    }))
+  })
+
+  app.post(
+    '/api/pricing/books',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['name'],
+          additionalProperties: false,
+          properties: { name: { type: 'string', minLength: 1 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body as { name: string }
+      const { lastInsertRowid } = db.prepare('INSERT INTO book_products (name) VALUES (?)').run(b.name)
+      return reply.status(201).send(db.prepare('SELECT * FROM book_products WHERE id = ?').get(lastInsertRowid))
+    },
+  )
+
+  app.patch(
+    '/api/pricing/books/:id',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: ID_PARAM,
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: { name: { type: 'string', minLength: 1 }, archived: { type: 'boolean' } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const id = Number((req.params as { id: string }).id)
+      const existing = db.prepare('SELECT * FROM book_products WHERE id = ?').get(id) as
+        | { name: string; archived: number }
+        | undefined
+      if (!existing) return reply.status(404).send({ error: 'not_found' })
+      const b = req.body as { name?: string; archived?: boolean }
+      db.prepare('UPDATE book_products SET name = ?, archived = ? WHERE id = ?').run(
+        b.name ?? existing.name,
+        b.archived === undefined ? existing.archived : b.archived ? 1 : 0,
+        id,
+      )
+      return db.prepare('SELECT * FROM book_products WHERE id = ?').get(id)
+    },
+  )
+
+  app.delete('/api/pricing/books/:id', { preHandler: requireAdmin, schema: { params: ID_PARAM } }, async (req, reply) => {
+    const id = Number((req.params as { id: string }).id)
+    const { changes } = db.prepare('UPDATE book_products SET archived = 1 WHERE id = ?').run(id)
+    if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    return reply.status(204).send()
+  })
+
+  const COMPONENT_PROPS = {
+    role: { type: 'string', enum: ['cover', 'inner', 'insert'] },
+    paper_id: { type: 'integer', minimum: 1 },
+    size_key: { type: 'string', minLength: 1 },
+    color_class: { type: 'string', minLength: 1 },
+    duplex: { type: 'boolean' },
+    sort: { type: 'integer' },
+  }
+
+  app.post(
+    '/api/pricing/books/:id/components',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: ID_PARAM,
+        body: {
+          type: 'object',
+          required: ['role', 'paper_id', 'size_key', 'color_class'],
+          additionalProperties: false,
+          properties: COMPONENT_PROPS,
+        },
+      },
+    },
+    async (req, reply) => {
+      const bookId = Number((req.params as { id: string }).id)
+      if (!db.prepare('SELECT 1 FROM book_products WHERE id = ?').get(bookId)) {
+        return reply.status(404).send({ error: 'book_not_found' })
+      }
+      const b = req.body as {
+        role: string
+        paper_id: number
+        size_key: string
+        color_class: string
+        duplex?: boolean
+        sort?: number
+      }
+      let lastInsertRowid: number | bigint
+      try {
+        ;({ lastInsertRowid } = db
+          .prepare(
+            `INSERT INTO book_components (book_id, role, paper_id, size_key, color_class, duplex, sort)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(bookId, b.role, b.paper_id, b.size_key, b.color_class, b.duplex ? 1 : 0, b.sort ?? 0))
+      } catch (err) {
+        if (isConstraint(err, 'FOREIGN KEY')) return reply.status(409).send({ error: 'unknown_paper_or_size' })
+        throw err
+      }
+      return reply.status(201).send(db.prepare('SELECT * FROM book_components WHERE id = ?').get(lastInsertRowid))
+    },
+  )
+
+  app.patch(
+    '/api/pricing/book-components/:id',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: ID_PARAM,
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: { ...COMPONENT_PROPS, archived: { type: 'boolean' } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const id = Number((req.params as { id: string }).id)
+      const existing = db.prepare('SELECT * FROM book_components WHERE id = ?').get(id) as
+        | Record<string, unknown>
+        | undefined
+      if (!existing) return reply.status(404).send({ error: 'not_found' })
+      const b = req.body as Record<string, unknown>
+      const merged = { ...existing, ...b }
+      if (typeof b['duplex'] === 'boolean') merged['duplex'] = b['duplex'] ? 1 : 0
+      if (typeof b['archived'] === 'boolean') merged['archived'] = b['archived'] ? 1 : 0
+      try {
+        db.prepare(
+          `UPDATE book_components SET role=@role, paper_id=@paper_id, size_key=@size_key,
+             color_class=@color_class, duplex=@duplex, sort=@sort, archived=@archived WHERE id=@id`,
+        ).run(merged)
+      } catch (err) {
+        if (isConstraint(err, 'FOREIGN KEY')) return reply.status(409).send({ error: 'unknown_paper_or_size' })
+        throw err
+      }
+      return db.prepare('SELECT * FROM book_components WHERE id = ?').get(id)
+    },
+  )
+
+  app.delete('/api/pricing/book-components/:id', { preHandler: requireAdmin, schema: { params: ID_PARAM } }, async (req, reply) => {
+    const id = Number((req.params as { id: string }).id)
+    const { changes } = db.prepare('UPDATE book_components SET archived = 1 WHERE id = ?').run(id)
+    if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    return reply.status(204).send()
+  })
+
+  // 工艺挂接 / 摘除（幂等）
+  app.put('/api/pricing/books/:id/finishings/:fid', { preHandler: requireAdmin }, async (req, reply) => {
+    const { id, fid } = req.params as { id: string; fid: string }
+    const bookId = Number(id)
+    const finId = Number(fid)
+    if (!db.prepare('SELECT 1 FROM book_products WHERE id = ?').get(bookId)) {
+      return reply.status(404).send({ error: 'book_not_found' })
+    }
+    if (!db.prepare('SELECT 1 FROM finishing_ops WHERE id = ?').get(finId)) {
+      return reply.status(404).send({ error: 'finishing_not_found' })
+    }
+    db.prepare('INSERT OR IGNORE INTO book_finishings (book_id, finishing_id) VALUES (?, ?)').run(bookId, finId)
+    return reply.status(204).send()
+  })
+
+  app.delete('/api/pricing/books/:id/finishings/:fid', { preHandler: requireAdmin }, async (req, reply) => {
+    const { id, fid } = req.params as { id: string; fid: string }
+    const { changes } = db
+      .prepare('DELETE FROM book_finishings WHERE book_id = ? AND finishing_id = ?')
+      .run(Number(id), Number(fid))
+    if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    return reply.status(204).send()
+  })
+
+  // 工艺库 CRUD
+  app.get('/api/pricing/finishings', { preHandler: requireAdmin }, async () =>
+    db.prepare('SELECT * FROM finishing_ops ORDER BY id').all(),
+  )
+
+  const FINISHING_PROPS = {
+    name: { type: 'string', minLength: 1 },
+    pricing: { type: 'string', enum: ['per_book', 'per_page', 'per_area'] },
+    price_c: MONEY_C,
+  }
+
+  app.post(
+    '/api/pricing/finishings',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['name', 'pricing', 'price_c'],
+          additionalProperties: false,
+          properties: FINISHING_PROPS,
+        },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body as { name: string; pricing: string; price_c: number }
+      const { lastInsertRowid } = db
+        .prepare('INSERT INTO finishing_ops (name, pricing, price_c) VALUES (?, ?, ?)')
+        .run(b.name, b.pricing, b.price_c)
+      return reply.status(201).send(db.prepare('SELECT * FROM finishing_ops WHERE id = ?').get(lastInsertRowid))
+    },
+  )
+
+  app.patch(
+    '/api/pricing/finishings/:id',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: ID_PARAM,
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: { ...FINISHING_PROPS, archived: { type: 'boolean' } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const id = Number((req.params as { id: string }).id)
+      const existing = db.prepare('SELECT * FROM finishing_ops WHERE id = ?').get(id) as
+        | { name: string; pricing: string; price_c: number; archived: number }
+        | undefined
+      if (!existing) return reply.status(404).send({ error: 'not_found' })
+      const b = req.body as { name?: string; pricing?: string; price_c?: number; archived?: boolean }
+      db.prepare('UPDATE finishing_ops SET name = ?, pricing = ?, price_c = ?, archived = ? WHERE id = ?').run(
+        b.name ?? existing.name,
+        b.pricing ?? existing.pricing,
+        b.price_c ?? existing.price_c,
+        b.archived === undefined ? existing.archived : b.archived ? 1 : 0,
+        id,
+      )
+      return db.prepare('SELECT * FROM finishing_ops WHERE id = ?').get(id)
+    },
+  )
+
+  app.delete('/api/pricing/finishings/:id', { preHandler: requireAdmin, schema: { params: ID_PARAM } }, async (req, reply) => {
+    const id = Number((req.params as { id: string }).id)
+    const { changes } = db.prepare('UPDATE finishing_ops SET archived = 1 WHERE id = ?').run(id)
+    if (changes === 0) return reply.status(404).send({ error: 'not_found' })
+    return reply.status(204).send()
+  })
+
   // ---------- 管理域: 成本速查 ----------
 
   app.get('/api/admin/pricing/quotes', { preHandler: requireAdmin }, async () => {
@@ -694,6 +963,188 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         papers: db.prepare('SELECT id, name FROM papers WHERE archived = 0 ORDER BY id').all(),
         sizes: db.prepare('SELECT key, label, sort FROM sizes ORDER BY sort').all(),
         products,
+      }
+    },
+  )
+
+  // ③⑤/D27 下单域: 册子目录（机器对客户不可见，组件含纸/尺寸/色彩档/单双面 + 工艺）
+  app.get(
+    '/api/calculator/books',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async () => {
+      const currency = baseCurrency(db)
+      const books = db.prepare('SELECT id, name FROM book_products WHERE archived = 0 ORDER BY id').all() as Array<{
+        id: number
+        name: string
+      }>
+      const comps = db
+        .prepare(
+          `SELECT obc.id, obc.book_id, obc.role, obc.paper_id, p.name AS paper_name,
+                  obc.size_key, s.label AS size_label, obc.color_class, obc.duplex, obc.sort
+           FROM book_components obc
+           JOIN papers p ON p.id = obc.paper_id
+           JOIN sizes s ON s.key = obc.size_key
+           WHERE obc.archived = 0
+           ORDER BY obc.book_id, obc.sort, obc.id`,
+        )
+        .all() as Array<{ book_id: number; duplex: number } & Record<string, unknown>>
+      const fins = db
+        .prepare(
+          `SELECT bf.book_id, f.id, f.name, f.pricing, f.price_c
+           FROM book_finishings bf JOIN finishing_ops f ON f.id = bf.finishing_id
+           WHERE f.archived = 0
+           ORDER BY bf.book_id, f.id`,
+        )
+        .all() as Array<{ book_id: number; id: number; name: string; pricing: string; price_c: number }>
+      return {
+        currency,
+        books: books.map((b) => ({
+          id: b.id,
+          name: b.name,
+          components: comps
+            .filter((c) => c.book_id === b.id)
+            .map((c) => ({
+              id: c['id'],
+              role: c['role'],
+              paper_id: c['paper_id'],
+              paper_name: c['paper_name'],
+              size_key: c['size_key'],
+              size_label: c['size_label'],
+              color_class: c['color_class'],
+              duplex: c.duplex !== 0,
+            })),
+          finishings: fins
+            .filter((f) => f.book_id === b.id)
+            .map((f) => ({
+              id: f.id,
+              name: f.name,
+              pricing: f.pricing,
+              price_c: f.price_c,
+              price_display: formatMoneyC(moneyC(f.price_c), currency),
+            })),
+        })),
+      }
+    },
+  )
+
+  // ③⑤/D27 下单域: 册子实时报价（客户填内页/插图张数 + 本数 → 出价；机器不可见，仅售价侧）
+  app.post(
+    '/api/calculator/book-quote',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['book_id', 'count'],
+          additionalProperties: false,
+          properties: {
+            book_id: { type: 'integer', minimum: 1 },
+            count: { type: 'integer', minimum: 1, maximum: 1000000 },
+            components: {
+              type: 'array',
+              maxItems: 50,
+              items: {
+                type: 'object',
+                required: ['component_id', 'sheets_per_book'],
+                additionalProperties: false,
+                properties: {
+                  component_id: { type: 'integer', minimum: 1 },
+                  sheets_per_book: { type: 'integer', minimum: 1, maximum: 1000000 },
+                },
+              },
+            },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              book_id: { type: 'integer' },
+              name: { type: 'string' },
+              count: { type: 'integer' },
+              unit_price_c: { type: 'integer' },
+              unit_display: { type: 'string' },
+              line_total: { type: 'integer' },
+              line_total_display: { type: 'string' },
+              components: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    component_id: { type: 'integer' },
+                    role: { type: 'string' },
+                    sheets_per_book: { type: 'integer' },
+                    unit_sell_c: { type: 'integer' },
+                    unit_display: { type: 'string' },
+                  },
+                },
+              },
+              finishings: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    finishing_id: { type: 'integer' },
+                    name: { type: 'string' },
+                    pricing: { type: 'string' },
+                    contribution_c: { type: 'integer' },
+                    contribution_display: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          422: {
+            type: 'object',
+            additionalProperties: false,
+            properties: { error: { type: 'string' }, message: { type: 'string' } },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body as {
+        book_id: number
+        count: number
+        components?: Array<{ component_id: number; sheets_per_book: number }>
+      }
+      const internal = req.user?.role === 'member'
+      const sheets = Object.fromEntries((b.components ?? []).map((c) => [c.component_id, c.sheets_per_book]))
+      let bq
+      try {
+        bq = priceBook(db, { book_id: b.book_id, count: b.count, sheets }, { internal })
+      } catch (err) {
+        // priceBook 仅抛 422（不可报价 / 缺张数 / 成品不存在）
+        if (err instanceof BookError) return reply.status(422).send({ error: err.message })
+        throw err
+      }
+      const currency = baseCurrency(db)
+      const total = lineTotal(bq.unit_price_c, b.count)
+      return {
+        book_id: bq.book_id,
+        name: bq.name,
+        count: b.count,
+        unit_price_c: bq.unit_price_c as number,
+        unit_display: formatMoneyC(bq.unit_price_c, currency),
+        line_total: total as number,
+        line_total_display: formatMoney(total, currency),
+        components: bq.components.map((c) => ({
+          component_id: c.component_id,
+          role: c.role,
+          sheets_per_book: c.sheets_per_book,
+          unit_sell_c: c.unit_sell_c as number,
+          unit_display: formatMoneyC(c.unit_sell_c, currency),
+        })),
+        finishings: bq.finishings.map((f) => ({
+          finishing_id: f.finishing_id,
+          name: f.name,
+          pricing: f.pricing,
+          contribution_c: f.contribution_c as number,
+          contribution_display: formatMoneyC(f.contribution_c, currency),
+        })),
       }
     },
   )

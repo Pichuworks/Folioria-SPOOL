@@ -120,7 +120,9 @@
 - [x] A3 下单：createOrder 接书行（order_books + 组件 + 工艺快照），subtotal 含书行；orderDto 增 books（双域白名单，机器对客户不可见）。
 - [x] A4 confirm 拆 Job（每组件一道，营收按材料贡献整数分摊，Σ=total 守恒）+ 工艺记录（order_book_finishings）；
       纯书单无文件门可从 quoted 直接 confirm；cancel 连带取消组件作业；GET /api/jobs 暴露 order_book_id/book_name/role 供编组。
-- [ ] A5 管理域 CRUD：book_products / components / finishing_ops（pricing-routes + AdminPricing）。
+- [x] A5 管理域 CRUD（pricing-routes）：book_products / book_components / finishing_ops + book_finishings 挂接；
+      下单域目录 GET /api/calculator/books + 实时报价 POST /api/calculator/book-quote（机器不可见，仅售价侧）。
+      AdminPricing UI 留 A6。
 - [ ] A6 前台 #/quote 增「册子」类目（选成品 → 填内页/插图张数 + 本数 → 出价，机器不可见）。
 
 ## P4 Phase 3 远期（PRD 立项，不急）
