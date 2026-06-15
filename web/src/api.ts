@@ -547,6 +547,7 @@ export interface OrderItemDto {
   file_note: string | null
   file_precheck?: FilePrecheckDto | null
   job_id?: string | null | undefined
+  file_kind?: string | undefined
 }
 
 // D27 订单内书行（下单域：仅售价侧；mode_id/job_id 仅 admin 视图）
@@ -569,6 +570,7 @@ export interface OrderBookComponentDto {
   source_component_id: number | null
   mode_id?: number
   job_id?: string | null
+  file_kind?: string | undefined
 }
 export interface OrderBookFinishingDto {
   finishing_id: number

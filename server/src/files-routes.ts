@@ -94,8 +94,15 @@ async function storeUpload(
   return { storedName, precheck }
 }
 
+const INLINE_CT: Record<string, string> = {
+  pdf: 'application/pdf',
+  png: 'image/png',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+}
+
 /** 经 randomUUID 存储名取下载流（basename 兜底防穿越）；缺文件/打不开 → 404 */
-async function sendStored(reply: FastifyReply, uploadDir: string, fileUrl: string) {
+async function sendStored(reply: FastifyReply, uploadDir: string, fileUrl: string, inline = false) {
   const safeName = path.basename(fileUrl)
   let fh
   try {
@@ -103,10 +110,15 @@ async function sendStored(reply: FastifyReply, uploadDir: string, fileUrl: strin
   } catch {
     throw new OrderError(404, 'not_found')
   }
-  // attachment + nosniff：浏览器不内联渲染、不嗅探类型（上传内容不可执行/不可注入）
-  void reply.header('content-disposition', `attachment; filename="${safeName}"`)
   void reply.header('x-content-type-options', 'nosniff')
-  void reply.header('content-type', 'application/octet-stream')
+  if (inline) {
+    const ext = path.extname(safeName).slice(1).toLowerCase()
+    void reply.header('content-type', INLINE_CT[ext] ?? 'application/octet-stream')
+    void reply.header('content-disposition', `inline; filename="${safeName}"`)
+  } else {
+    void reply.header('content-disposition', `attachment; filename="${safeName}"`)
+    void reply.header('content-type', 'application/octet-stream')
+  }
   return reply.send(fh.createReadStream())
 }
 
@@ -204,7 +216,8 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
       const { id, iid } = req.params as { id: string; iid: string }
       const { item } = loadOwnedItem(req, id, iid)
       if (item.file_url == null) throw new OrderError(404, 'not_found')
-      return sendStored(reply, uploadDir, item.file_url)
+      const inline = (req.query as { inline?: string }).inline === '1'
+      return sendStored(reply, uploadDir, item.file_url, inline)
     },
   )
 
@@ -260,7 +273,8 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
       const { id, cid } = req.params as { id: string; cid: string }
       const { comp } = loadOwnedComponent(req, id, cid)
       if (comp.file_url == null) throw new OrderError(404, 'not_found')
-      return sendStored(reply, uploadDir, comp.file_url)
+      const inline = (req.query as { inline?: string }).inline === '1'
+      return sendStored(reply, uploadDir, comp.file_url, inline)
     },
   )
 }

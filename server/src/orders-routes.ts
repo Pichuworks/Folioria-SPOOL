@@ -71,6 +71,7 @@ export const ORDER_ITEM_SCHEMA = {
     file_note: { type: ['string', 'null'] },
     file_precheck: PRECHECK_SCHEMA,
     job_id: { type: ['string', 'null'] }, // admin 视图专用
+    file_kind: { type: 'string' }, // admin 视图专用
   },
 }
 
@@ -98,6 +99,7 @@ export const ORDER_BOOK_COMPONENT_SCHEMA = {
     source_component_id: { type: ['integer', 'null'] }, // D32 目录组件来源（中性引用，供再下单还原）
     mode_id: { type: 'integer' }, // admin 视图专用（机器对客户不可见）
     job_id: { type: ['string', 'null'] }, // admin 视图专用
+    file_kind: { type: 'string' }, // admin 视图专用
   },
 }
 
@@ -293,7 +295,9 @@ function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
     file_status: item.file_status,
     file_note: item.file_note,
     file_precheck: parsePrecheck(item.file_precheck),
-    ...(opts.admin ? { mode_name: item.mode_name, job_id: item.job_id } : {}),
+    ...(opts.admin
+      ? { mode_name: item.mode_name, job_id: item.job_id, file_kind: item.file_url?.split('.').pop()?.toLowerCase() }
+      : {}),
   }
 }
 
@@ -325,7 +329,7 @@ function bookDto(book: OrderBook, currency: Currency, opts: DtoOptions) {
       file_note: c.file_note,
       file_precheck: parsePrecheck(c.file_precheck),
       source_component_id: c.source_component_id,
-      ...(opts.admin ? { mode_id: c.mode_id, job_id: c.job_id } : {}),
+      ...(opts.admin ? { mode_id: c.mode_id, job_id: c.job_id, file_kind: c.file_url?.split('.').pop()?.toLowerCase() } : {}),
     })),
     finishings: book.finishings.map((f) => ({
       finishing_id: f.finishing_id,

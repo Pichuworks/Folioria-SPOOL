@@ -39,6 +39,25 @@ const ACTIONS: Partial<Record<OrderDto['status'], Array<{ to: string; label: str
 const PAY_LABEL = { unpaid: '未付', deposit: '定金', paid: '付清' } as const
 const PAY_KIND_LABEL = { deposit: '押金', balance: '尾款', refund: '退款' } as const
 
+function FilePreview({ url, kind }: { url: string; kind: string | undefined }) {
+  const [open, setOpen] = useState(false)
+  if (!kind || kind === 'tif' || kind === 'tiff') return null
+  const src = `${url}?inline=1`
+  return (
+    <div className="mt-2">
+      <button type="button" className="text-[11px] text-dim underline hover:text-ink" onClick={() => setOpen(!open)}>
+        {open ? '收起预览' : '预览稿件'}
+      </button>
+      {open &&
+        (kind === 'png' ? (
+          <img src={src} alt="稿件预览" className="mt-2 max-h-[500px] max-w-full border border-line" />
+        ) : kind === 'pdf' ? (
+          <iframe src={src} title="稿件预览" className="mt-2 h-[600px] w-full border border-line" />
+        ) : null)}
+    </div>
+  )
+}
+
 function ReviewRow({
   order,
   item,
@@ -116,6 +135,7 @@ function ReviewRow({
         {err && <span className="text-wine-ink">{err}</span>}
       </div>
       {item.has_file && <PrecheckNotes precheck={item.file_precheck} />}
+      {item.has_file && <FilePreview url={orderItemFileUrl(order.id, item.id)} kind={item.file_kind} />}
     </div>
   )
 }
@@ -192,6 +212,7 @@ function BookComponentReviewRow({
       {comp.has_file && (
         <div className="w-full">
           <PrecheckNotes precheck={comp.file_precheck} />
+          <FilePreview url={orderBookComponentFileUrl(order.id, comp.id)} kind={comp.file_kind} />
         </div>
       )}
     </div>
