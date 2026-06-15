@@ -21,25 +21,14 @@ export function registerDashboardRoutes(app: FastifyInstance, db: DB): void {
   app.get('/api/dashboard', { preHandler: requireAdmin }, async () => {
     const month = new Date().toISOString().slice(0, 7)
 
-    const jobsActive = (
-      db
-        .prepare("SELECT COUNT(*) n FROM jobs WHERE status IN ('draft', 'queued', 'printing')")
-        .get() as { n: number }
-    ).n
-    const ordersActive = (
-      db
-        .prepare(
-          "SELECT COUNT(*) n FROM orders WHERE status NOT IN ('delivered', 'cancelled')",
-        )
-        .get() as { n: number }
-    ).n
-    const maintenanceAlerts = (
-      db
-        .prepare(
-          "SELECT COUNT(*) n FROM alerts WHERE resolved_at IS NULL AND type IN ('calibration_due', 'maintenance_due')",
-        )
-        .get() as { n: number }
-    ).n
+    const counts = db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM jobs WHERE status IN ('draft', 'queued', 'printing')) AS jobs_active,
+           (SELECT COUNT(*) FROM orders WHERE status NOT IN ('delivered', 'cancelled')) AS orders_active,
+           (SELECT COUNT(*) FROM alerts WHERE resolved_at IS NULL AND type IN ('calibration_due', 'maintenance_due')) AS maintenance_alerts`,
+      )
+      .get() as { jobs_active: number; orders_active: number; maintenance_alerts: number }
 
     const inventoryAlerts = db
       .prepare(
@@ -98,11 +87,7 @@ export function registerDashboardRoutes(app: FastifyInstance, db: DB): void {
     }))
 
     return {
-      todo: {
-        jobs_active: jobsActive,
-        orders_active: ordersActive,
-        maintenance_alerts: maintenanceAlerts,
-      },
+      todo: counts,
       inventory_alerts: inventoryAlerts,
       monthly,
       equipment,

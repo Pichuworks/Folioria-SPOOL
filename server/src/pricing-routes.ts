@@ -279,9 +279,15 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       pack_price_c: number
       pack_count: number
     }>
+    const costMap = new Map<number, typeof costs>()
+    for (const c of costs) {
+      const arr = costMap.get(c.paper_id)
+      if (arr) arr.push(c)
+      else costMap.set(c.paper_id, [c])
+    }
     return papers.map((p) => ({
       ...p,
-      size_costs: costs.filter((c) => c.paper_id === p.id),
+      size_costs: costMap.get(p.id) ?? [],
     }))
   })
 
@@ -424,7 +430,13 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   app.get('/api/pricing/combos', { preHandler: requireAdmin }, async () => {
     const combos = db.prepare('SELECT * FROM combos ORDER BY id').all() as Array<{ id: number }>
     const prices = db.prepare('SELECT * FROM combo_prices').all() as Array<{ combo_id: number }>
-    return combos.map((c) => ({ ...c, prices: prices.filter((p) => p.combo_id === c.id) }))
+    const priceMap = new Map<number, typeof prices>()
+    for (const p of prices) {
+      const arr = priceMap.get(p.combo_id)
+      if (arr) arr.push(p)
+      else priceMap.set(p.combo_id, [p])
+    }
+    return combos.map((c) => ({ ...c, prices: priceMap.get(c.id) ?? [] }))
   })
 
   app.post(
@@ -560,10 +572,22 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       book_id: number
       finishing_id: number
     }>
+    const compMap = new Map<number, typeof comps>()
+    for (const c of comps) {
+      const arr = compMap.get(c.book_id)
+      if (arr) arr.push(c)
+      else compMap.set(c.book_id, [c])
+    }
+    const linkMap = new Map<number, number[]>()
+    for (const l of links) {
+      const arr = linkMap.get(l.book_id)
+      if (arr) arr.push(l.finishing_id)
+      else linkMap.set(l.book_id, [l.finishing_id])
+    }
     return books.map((b) => ({
       ...b,
-      components: comps.filter((c) => c.book_id === b.id),
-      finishing_ids: links.filter((l) => l.book_id === b.id).map((l) => l.finishing_id),
+      components: compMap.get(b.id) ?? [],
+      finishing_ids: linkMap.get(b.id) ?? [],
     }))
   })
 

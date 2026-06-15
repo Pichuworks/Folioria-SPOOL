@@ -642,10 +642,11 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       try {
         // S3: 创建者知晓的初始密码不应永久有效 → 首登强制改密（D11 同初始 admin）。
         // D12: admin 手动供给的账号视为已验证（不走邮箱验证链路）
+        const now = new Date().toISOString()
         db.prepare(
           `INSERT INTO users (id, email, username, password_hash, name, role, must_change_password, email_verified_at, created_at)
            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-        ).run(id, body.email, body.username ?? null, await bcrypt.hash(body.password, 12), body.name, body.role, new Date().toISOString(), new Date().toISOString())
+        ).run(id, body.email, body.username ?? null, await bcrypt.hash(body.password, 12), body.name, body.role, now, now)
       } catch (err) {
         // 部分唯一索引冲突报「index 'uniq_users_username'」，列约束报「users.email」；以 username 子串判别
         if (err instanceof Error && err.message.includes('username')) {

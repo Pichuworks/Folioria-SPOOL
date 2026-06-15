@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   claimOrder,
   fetchMe,
@@ -154,8 +154,8 @@ function BookCompFile({
           <input
             ref={fileInput}
             type="file"
-            accept=".pdf,.png,.tif,.tiff"
-            className="hidden"
+            accept=".pdf,.png,.tif,.tiff,application/pdf,image/png,image/tiff"
+            className="sr-only"
             onChange={(e) => {
               const f = e.target.files?.[0]
               if (f) void pick(f)
@@ -179,7 +179,7 @@ function BookCompFile({
 }
 
 /** D27 书行展示（下单域：仅售价侧；机器对客户不可见）。D31 每组件加文件上传/审稿状态 */
-function BookLine({
+const BookLine = memo(function BookLine({
   book,
   order,
   canUpload,
@@ -222,7 +222,7 @@ function BookLine({
       </div>
     </div>
   )
-}
+})
 
 export function StatusBadge({ status }: { status: OrderDto['status'] }) {
   const tone =
@@ -244,7 +244,7 @@ const UPLOAD_ERROR_TEXT: Record<string, string> = {
   file_too_large: '文件超过 200MB 上限。',
 }
 
-function ItemRow({
+const ItemRow = memo(function ItemRow({
   order,
   item,
   canUpload,
@@ -314,8 +314,8 @@ function ItemRow({
             <input
               ref={fileInput}
               type="file"
-              accept=".pdf,.png,.tif,.tiff"
-              className="hidden"
+              accept=".pdf,.png,.tif,.tiff,application/pdf,image/png,image/tiff"
+              className="sr-only"
               onChange={(e) => {
                 const f = e.target.files?.[0]
                 if (f) void pick(f)
@@ -338,7 +338,7 @@ function ItemRow({
       {item.has_file && <PrecheckNotes precheck={item.file_precheck} />}
     </div>
   )
-}
+})
 
 /** R8 #/order/:token：公开订单查询（防枚举随机 token）；登录的下单账号可上传/取消 */
 export default function OrderView({ token }: { token: string }) {

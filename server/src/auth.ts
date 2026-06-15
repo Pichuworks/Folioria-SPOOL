@@ -58,17 +58,18 @@ export function issueEmailVerification(db: DB, userId: string): string {
 /** R4: 一次性消费验证 token，置位 email_verified_at。无效/过期/已消费 → false */
 export function verifyEmail(db: DB, token: string): boolean {
   const now = new Date().toISOString()
+  const hash = hashToken(token)
   const row = db
     .prepare(
       `SELECT user_id FROM email_verification_tokens
        WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?`,
     )
-    .get(hashToken(token), now) as { user_id: string } | undefined
+    .get(hash, now) as { user_id: string } | undefined
   if (!row) return false
   db.transaction(() => {
     db.prepare('UPDATE email_verification_tokens SET consumed_at = ? WHERE token_hash = ?').run(
       now,
-      hashToken(token),
+      hash,
     )
     db.prepare('UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL').run(
       now,
@@ -158,6 +159,7 @@ export async function changePassword(
   if (!row || !(await bcrypt.compare(oldPassword, row.password_hash))) return false
   const hash = await bcrypt.hash(newPassword, 12)
   const keepHash = keepToken === undefined ? null : hashToken(keepToken)
+  const now = new Date().toISOString()
   db.transaction(() => {
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(
       hash,
@@ -166,7 +168,7 @@ export async function changePassword(
     db.prepare(
       `UPDATE sessions SET revoked_at = ?
        WHERE user_id = ? AND revoked_at IS NULL AND (? IS NULL OR token_hash != ?)`,
-    ).run(new Date().toISOString(), userId, keepHash, keepHash)
+    ).run(now, userId, keepHash, keepHash)
   })()
   return true
 }

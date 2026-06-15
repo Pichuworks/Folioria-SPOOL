@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import {
   createGuestOrder,
   createOrder,
@@ -17,7 +17,8 @@ import {
   type ProductsDto,
   type QuoteDto,
 } from './api'
-import BookConfigurator, { type BookCartLine } from './BookConfigurator'
+import { type BookCartLine } from './BookConfigurator'
+const BookConfigurator = lazy(() => import('./BookConfigurator'))
 import { VerifyBanner } from './CustomerGate'
 import CustomerGate from './CustomerGate'
 import { Field, Leader, MagSec, specInput } from './spec'
@@ -352,7 +353,9 @@ export default function Quote() {
             </button>
           </div>
           {mode === 'book' ? (
-            <BookConfigurator onAdd={(line) => setCart((prev) => [...prev, line])} />
+            <Suspense fallback={<div className="py-8 text-center text-dim text-[13px]">载入中…</div>}>
+              <BookConfigurator onAdd={(line) => setCart((prev) => [...prev, line])} />
+            </Suspense>
           ) : (
           <div className="space-y-5">
           <Field label="类别">

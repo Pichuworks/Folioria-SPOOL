@@ -105,15 +105,28 @@ export interface QuoteDto {
   currency: string
 }
 
-// 模块级缓存：hash 路由切换会重挂载视图，缓存让二次进入即时渲染（后台再刷新）
-let optionsCache: OptionsDto | null = null
-export const getOptionsCache = (): OptionsDto | null => optionsCache
+// 模块级缓存 + stale-while-revalidate（TTL 60s）
+const CACHE_TTL = 60_000
 
-export async function fetchOptions(): Promise<OptionsDto> {
-  const res = await fetch('/api/calculator/options')
-  if (!res.ok) throw new Error(`options failed: ${res.status}`)
-  optionsCache = (await res.json()) as OptionsDto
-  return optionsCache
+interface CacheEntry<T> { data: T; at: number }
+
+function swr<T>(entry: CacheEntry<T> | null, fetchFn: () => Promise<T>, setEntry: (e: CacheEntry<T>) => void): Promise<T> {
+  const fresh = async () => { const d = await fetchFn(); setEntry({ data: d, at: Date.now() }); return d }
+  if (!entry) return fresh()
+  if (Date.now() - entry.at < CACHE_TTL) return Promise.resolve(entry.data)
+  void fresh()
+  return Promise.resolve(entry.data)
+}
+
+let optionsEntry: CacheEntry<OptionsDto> | null = null
+export const getOptionsCache = (): OptionsDto | null => optionsEntry?.data ?? null
+
+export function fetchOptions(): Promise<OptionsDto> {
+  return swr(optionsEntry, async () => {
+    const res = await fetch('/api/calculator/options')
+    if (!res.ok) throw new Error(`options failed: ${res.status}`)
+    return (await res.json()) as OptionsDto
+  }, (e) => { optionsEntry = e })
 }
 
 // ③⑤ 客户产品视图：按属性折叠的目录（机器不可见）
@@ -133,13 +146,14 @@ export interface ProductsDto {
   sizes: Array<{ key: string; label: string; sort: number }>
   products: ProductDto[]
 }
-let productsCache: ProductsDto | null = null
-export const getProductsCache = (): ProductsDto | null => productsCache
-export async function fetchProducts(): Promise<ProductsDto> {
-  const res = await fetch('/api/calculator/products')
-  if (!res.ok) throw new Error(`products failed: ${res.status}`)
-  productsCache = (await res.json()) as ProductsDto
-  return productsCache
+let productsEntry: CacheEntry<ProductsDto> | null = null
+export const getProductsCache = (): ProductsDto | null => productsEntry?.data ?? null
+export function fetchProducts(): Promise<ProductsDto> {
+  return swr(productsEntry, async () => {
+    const res = await fetch('/api/calculator/products')
+    if (!res.ok) throw new Error(`products failed: ${res.status}`)
+    return (await res.json()) as ProductsDto
+  }, (e) => { productsEntry = e })
 }
 
 // ③⑤/D27 册子目录（机器对客户不可见）
@@ -170,13 +184,14 @@ export interface BooksCatalogDto {
   currency: CurrencyDto
   books: BookCatalogItemDto[]
 }
-let booksCache: BooksCatalogDto | null = null
-export const getBooksCache = (): BooksCatalogDto | null => booksCache
-export async function fetchBooks(): Promise<BooksCatalogDto> {
-  const res = await fetch('/api/calculator/books')
-  if (!res.ok) throw new Error(`books failed: ${res.status}`)
-  booksCache = (await res.json()) as BooksCatalogDto
-  return booksCache
+let booksEntry: CacheEntry<BooksCatalogDto> | null = null
+export const getBooksCache = (): BooksCatalogDto | null => booksEntry?.data ?? null
+export function fetchBooks(): Promise<BooksCatalogDto> {
+  return swr(booksEntry, async () => {
+    const res = await fetch('/api/calculator/books')
+    if (!res.ok) throw new Error(`books failed: ${res.status}`)
+    return (await res.json()) as BooksCatalogDto
+  }, (e) => { booksEntry = e })
 }
 
 export interface BookQuoteDto {
@@ -318,7 +333,7 @@ export async function verifyEmailToken(token: string): Promise<boolean> {
 export async function logout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST' })
   meCache = null
-  dashboardCache = null
+  dashboardEntry = null
   fireAuthChanged()
 }
 
@@ -379,14 +394,15 @@ export interface DashboardDto {
   }>
 }
 
-let dashboardCache: DashboardDto | null = null
-export const getDashboardCache = (): DashboardDto | null => dashboardCache
+let dashboardEntry: CacheEntry<DashboardDto> | null = null
+export const getDashboardCache = (): DashboardDto | null => dashboardEntry?.data ?? null
 
-export async function fetchDashboard(): Promise<DashboardDto> {
-  const res = await fetch('/api/dashboard')
-  if (!res.ok) throw new Error(`dashboard failed: ${res.status}`)
-  dashboardCache = (await res.json()) as DashboardDto
-  return dashboardCache
+export function fetchDashboard(): Promise<DashboardDto> {
+  return swr(dashboardEntry, async () => {
+    const res = await fetch('/api/dashboard')
+    if (!res.ok) throw new Error(`dashboard failed: ${res.status}`)
+    return (await res.json()) as DashboardDto
+  }, (e) => { dashboardEntry = e })
 }
 
 export interface JobDto {

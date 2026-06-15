@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import {
   fetchOrders,
@@ -58,7 +58,7 @@ function FilePreview({ url, kind }: { url: string; kind: string | undefined }) {
   )
 }
 
-function ReviewRow({
+const ReviewRow = memo(function ReviewRow({
   order,
   item,
   onUpdated,
@@ -138,12 +138,12 @@ function ReviewRow({
       {item.has_file && <FilePreview url={orderItemFileUrl(order.id, item.id)} kind={item.file_kind} />}
     </div>
   )
-}
+})
 
 const BOOK_ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
 
 /** D31 书组件审稿行：与 ReviewRow 同口径，逐组件 approve/reject */
-function BookComponentReviewRow({
+const BookComponentReviewRow = memo(function BookComponentReviewRow({
   order,
   comp,
   onUpdated,
@@ -217,7 +217,7 @@ function BookComponentReviewRow({
       )}
     </div>
   )
-}
+})
 
 function BookReviewBlock({ order, books, onUpdated }: { order: OrderDto; books: OrderBookDto[]; onUpdated: (o: OrderDto) => void }) {
   return (
@@ -237,7 +237,7 @@ function BookReviewBlock({ order, books, onUpdated }: { order: OrderDto; books: 
   )
 }
 
-function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdated: (o: OrderDto) => void; onRefresh: () => void }) {
+const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdated: (o: OrderDto) => void; onRefresh: () => void }) {
   const [payKind, setPayKind] = useState<'deposit' | 'balance' | 'refund'>('deposit')
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState('')
@@ -473,7 +473,7 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
       </div>
     </div>
   )
-}
+})
 
 function KanbanBody() {
   const [orders, setOrders] = useState<OrderDto[] | null>(null)

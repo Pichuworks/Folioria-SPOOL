@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { memo, useCallback, useEffect, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
 import { Field, Leader, MagSec, PillBtn, Skeleton, SpecRow, specInput } from './spec'
@@ -215,7 +215,7 @@ function ProfileEditPanel({ printer, onDone }: { printer: PrinterDto; onDone: ()
   )
 }
 
-function PrinterCard({
+const PrinterCard = memo(function PrinterCard({
   printer,
   consumables,
   onChanged,
@@ -326,7 +326,7 @@ function PrinterCard({
       </div>
     </div>
   )
-}
+})
 
 function EquipmentBody() {
   const [printers, setPrinters] = useState<PrinterDto[] | null>(null)

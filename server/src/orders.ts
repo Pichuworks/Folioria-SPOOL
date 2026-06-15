@@ -174,21 +174,35 @@ export function getOrderBooks(db: DB, orderId: string): OrderBook[] {
     .prepare('SELECT * FROM order_books WHERE order_id = ? ORDER BY rowid')
     .all(orderId) as OrderBookRow[]
   if (books.length === 0) return []
-  const compStmt = db.prepare(
+  const ids = books.map((b) => b.id)
+  const ph = ids.map(() => '?').join(',')
+  const comps = db.prepare(
     `SELECT obc.*, p.name AS paper_name, s.label AS size_label
      FROM order_book_components obc
      JOIN papers p ON p.id = obc.paper_id
      JOIN sizes s ON s.key = obc.size_key
-     WHERE obc.order_book_id = ?
+     WHERE obc.order_book_id IN (${ph})
      ORDER BY obc.rowid`,
-  )
-  const finStmt = db.prepare(
-    'SELECT * FROM order_book_finishings WHERE order_book_id = ? ORDER BY rowid',
-  )
+  ).all(...ids) as OrderBookComponentRow[]
+  const fins = db.prepare(
+    `SELECT * FROM order_book_finishings WHERE order_book_id IN (${ph}) ORDER BY rowid`,
+  ).all(...ids) as OrderBookFinishingRow[]
+  const compMap = new Map<string, OrderBookComponentRow[]>()
+  for (const c of comps) {
+    const arr = compMap.get(c.order_book_id)
+    if (arr) arr.push(c)
+    else compMap.set(c.order_book_id, [c])
+  }
+  const finMap = new Map<string, OrderBookFinishingRow[]>()
+  for (const f of fins) {
+    const arr = finMap.get(f.order_book_id)
+    if (arr) arr.push(f)
+    else finMap.set(f.order_book_id, [f])
+  }
   return books.map((book) => ({
     book,
-    components: compStmt.all(book.id) as OrderBookComponentRow[],
-    finishings: finStmt.all(book.id) as OrderBookFinishingRow[],
+    components: compMap.get(book.id) ?? [],
+    finishings: finMap.get(book.id) ?? [],
   }))
 }
 

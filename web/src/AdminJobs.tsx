@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import {
   completeJob,
@@ -121,7 +121,7 @@ function ReassignPanel({ job, onChanged }: { job: JobDto; onChanged: () => void 
   )
 }
 
-function JobRow({ job, onChanged, highlight }: { job: JobDto; onChanged: () => void; highlight?: boolean }) {
+const JobRow = memo(function JobRow({ job, onChanged, highlight }: { job: JobDto; onChanged: () => void; highlight?: boolean }) {
   const rowRef = useRef<HTMLDivElement>(null)
   const [doneOpen, setDoneOpen] = useState(false)
   const [reassignOpen, setReassignOpen] = useState(false)
@@ -209,7 +209,7 @@ function JobRow({ job, onChanged, highlight }: { job: JobDto; onChanged: () => v
       )}
     </div>
   )
-}
+})
 
 const BOOK_ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
 
@@ -235,7 +235,7 @@ function groupByBook(list: JobDto[]): RenderUnit[] {
   return units
 }
 
-function BookJobGroup({ unit, onChanged, highlightId }: { unit: Extract<RenderUnit, { kind: 'book' }>; onChanged: () => void; highlightId?: string | null }) {
+const BookJobGroup = memo(function BookJobGroup({ unit, onChanged, highlightId }: { unit: Extract<RenderUnit, { kind: 'book' }>; onChanged: () => void; highlightId?: string | null }) {
   return (
     <div className="my-1.5 border-l-2 border-wine/40 pl-3">
       <div className="flex items-baseline gap-2 pt-1.5 text-[12.5px]">
@@ -250,11 +250,11 @@ function BookJobGroup({ unit, onChanged, highlightId }: { unit: Extract<RenderUn
       ))}
     </div>
   )
-}
+})
 
 const JOBS_PAGE_SIZE = 20
 
-function StatusGroup({ status, jobs, onChanged, highlightId }: { status: string; jobs: JobDto[]; onChanged: () => void; highlightId: string | null }) {
+const StatusGroup = memo(function StatusGroup({ status, jobs, onChanged, highlightId }: { status: string; jobs: JobDto[]; onChanged: () => void; highlightId: string | null }) {
   const units = useMemo(() => groupByBook(jobs), [jobs])
   const { page, totalPages, paged, setPage } = usePagination(units, JOBS_PAGE_SIZE)
 
@@ -281,7 +281,7 @@ function StatusGroup({ status, jobs, onChanged, highlightId }: { status: string;
       )}
     </div>
   )
-}
+})
 
 type PreviewState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
 
