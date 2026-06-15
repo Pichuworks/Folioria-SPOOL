@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, Leader, MagSec, Paginator, PillBtn, specInput, usePagination } from './spec'
+import { Field, Leader, MagSec, Paginator, PillBtn, Skeleton, specInput, usePagination } from './spec'
 
 interface StockDto {
   id: string
@@ -361,7 +361,7 @@ function InventoryBody() {
     [log, actionFilter],
   )
 
-  if (!stocks || !consumables || !log) return <p className="pt-13 text-[14px] text-dim">库存加载中…</p>
+  if (!stocks || !consumables || !log) return <Skeleton />
 
   return (
     <div>

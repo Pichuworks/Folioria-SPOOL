@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, Leader, MagSec, PillBtn, SpecRow, specInput } from './spec'
+import { Field, Leader, MagSec, PillBtn, Skeleton, SpecRow, specInput } from './spec'
 
 interface PrinterDto {
   id: number
@@ -338,7 +338,7 @@ function EquipmentBody() {
   }, [])
   useEffect(reload, [reload])
 
-  if (!printers || !consumables) return <p className="pt-13 text-[14px] text-dim">设备加载中…</p>
+  if (!printers || !consumables) return <Skeleton />
 
   return (
     <MagSec tag="设备" title="设备档案" note={`${printers.length} UNITS · DUAL-TRIGGER CALIBRATION`}>

@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import AdminGate from './AdminGate'
 import { fetchDashboard, getDashboardCache, send, type DashboardDto } from './api'
 import { CHART_COLORS, CHART_STYLE } from './chart-theme'
-import { MagSec, SpecRow } from './spec'
+import { MagSec, Skeleton, SpecRow } from './spec'
 
 interface TrendPoint {
   month: string
@@ -62,7 +62,7 @@ function DashboardBody() {
     void send<TrendPoint[]>('GET', '/api/reports/trend').then((r) => r.ok && setTrend(r.data))
   }, [])
 
-  if (!data) return <p className="pt-13 text-[14px] text-dim">加载中…</p>
+  if (!data) return <Skeleton />
 
   return (
     <div>

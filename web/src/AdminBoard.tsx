@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import { send, setHighlightJobId } from './api'
-import { MagSec } from './spec'
+import { MagSec, Skeleton } from './spec'
 
 interface BoardJob {
   id: string
@@ -35,7 +35,7 @@ function BoardBody() {
   useEffect(() => {
     void send<BoardLane[]>('GET', '/api/jobs/board').then((r) => r.ok && setLanes(r.data))
   }, [])
-  if (!lanes) return <p className="pt-13 text-[14px] text-dim">排产板加载中…</p>
+  if (!lanes) return <Skeleton />
 
   const totalActive = lanes.reduce((n, l) => n + l.jobs.length, 0)
   return (

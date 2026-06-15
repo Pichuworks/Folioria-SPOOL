@@ -17,7 +17,7 @@ import {
   type MachineRecDto,
   type OptionsDto,
 } from './api'
-import { Field, Leader, MagSec, Paginator, PillBtn, SpecRow, specInput, usePagination } from './spec'
+import { Field, Leader, MagSec, Paginator, PillBtn, Skeleton, SpecRow, specInput, usePagination } from './spec'
 
 const STATUS_ORDER = ['draft', 'queued', 'printing', 'done', 'cancelled'] as const
 const STATUS_LABEL: Record<JobDto['status'], string> = {
@@ -392,7 +392,7 @@ function JobsBody() {
   }
 
   if (optionsError) return <p className="pt-13 text-[14px] text-wine-ink">{optionsError}</p>
-  if (!options) return <p className="pt-13 text-[14px] text-dim">配置加载中…</p>
+  if (!options) return <Skeleton />
 
   const shortage = preview !== null && preview.available < quantity
 

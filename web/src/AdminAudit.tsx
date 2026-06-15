@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Leader, MagSec, Paginator, usePagination } from './spec'
+import { Leader, MagSec, Paginator, Skeleton, usePagination } from './spec'
 
 interface AuditEntry {
   id: string
@@ -26,7 +26,7 @@ function AuditBody() {
   useEffect(() => {
     void send<AuditEntry[]>('GET', '/api/admin/audit').then((r) => r.ok && setRows(r.data))
   }, [])
-  if (!rows) return <p className="pt-13 text-[14px] text-dim">加载中…</p>
+  if (!rows) return <Skeleton />
 
   const { page, totalPages, paged, setPage } = usePagination(rows, 50)
 

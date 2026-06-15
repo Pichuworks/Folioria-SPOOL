@@ -16,7 +16,7 @@ import {
   type OrderItemDto,
 } from './api'
 import { FILE_STATUS_LABEL, PrecheckNotes } from './OrderView'
-import { Field, Leader, MagSec, SpecRow, specInput } from './spec'
+import { Field, Leader, MagSec, Skeleton, SpecRow, specInput } from './spec'
 
 /** §3.2 看板六列：报价中→审稿→已确认→生产中→待取→已完成（cancelled 折叠在下方） */
 const COLUMNS: Array<{ label: string; statuses: Array<OrderDto['status']> }> = [
@@ -488,7 +488,7 @@ function KanbanBody() {
     refresh()
   }, [refresh])
 
-  if (!orders) return <p className="pt-13 text-[14px] text-dim">订单加载中…</p>
+  if (!orders) return <Skeleton />
 
   const selected = orders.find((o) => o.id === selectedId) ?? null
   const cancelled = orders.filter((o) => o.status === 'cancelled')

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, Leader, MagSec, PillBtn, specInput } from './spec'
+import { Field, Leader, MagSec, PillBtn, Skeleton, specInput } from './spec'
 
 interface QuoteDto {
   mode_id: number
@@ -1105,7 +1105,7 @@ function PricingBody() {
   useEffect(reload, [reload])
 
   if (!quotes || !combos || !modes || !papers || !sizes || !printers || !books || !finishings) {
-    return <p className="pt-13 text-[14px] text-dim">价目加载中…</p>
+    return <Skeleton />
   }
 
   return (

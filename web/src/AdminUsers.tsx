@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { ORDER_STATUS_LABEL, send, type OrderDto } from './api'
-import { Field, Leader, MagSec, Modal, Paginator, PillBtn, SpecRow, specInput, usePagination } from './spec'
+import { Field, Leader, MagSec, Modal, Paginator, PillBtn, Skeleton, SpecRow, specInput, usePagination } from './spec'
 
 interface UserDto {
   id: string
@@ -238,7 +238,7 @@ function UsersBody() {
 
   const { page, totalPages, paged, setPage } = usePagination(filtered, PAGE_SIZE)
 
-  if (!users) return <p className="pt-13 text-[14px] text-dim">加载中…</p>
+  if (!users) return <Skeleton />
 
   return (
     <div>

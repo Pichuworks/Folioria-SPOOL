@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, MagSec, PillBtn, SpecRow, specInput } from './spec'
+import { Field, MagSec, PillBtn, Skeleton, SpecRow, specInput } from './spec'
 
 interface SettingsDto {
   base_currency: string
@@ -30,7 +30,7 @@ function SettingsBody() {
     })
   }, [])
 
-  if (!settings || !form) return <p className="pt-13 text-[14px] text-dim">设置加载中…</p>
+  if (!settings || !form) return <Skeleton />
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()

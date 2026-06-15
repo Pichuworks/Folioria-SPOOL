@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useSyncExternalStore, useState, type ReactNode } from 'react'
 
 /* Asagaya modern·杂志语域 × eri 配色，全站统一壳：刊头 / 墨标签节头 / 点线行 / 直角控件 / 对折页码 */
 
@@ -6,6 +6,7 @@ export const Leader = () => <span className="mx-2.5 flex-1 -translate-y-1 border
 
 export const Shell = ({ nav, center, right, children }: { nav: ReactNode; center: string; right?: ReactNode; children: ReactNode }) => (
   <div className="min-h-screen bg-paper text-ink">
+    <LoadingBar />
     <div className="mx-auto max-w-[1200px] px-5 md:px-10">
       <Masthead nav={nav} />
       <main className="min-h-[60vh] pb-16">{children}</main>
@@ -143,6 +144,41 @@ export function Paginator({ page, totalPages, onPage }: { page: number; totalPag
         className="font-mono text-[11px] tracking-[.12em] text-dim enabled:hover:text-ink disabled:opacity-30">
         下页 ›
       </button>
+    </div>
+  )
+}
+
+/* ── Global loading bar ── */
+
+let _loadingCount = 0
+const _listeners = new Set<() => void>()
+const notify = () => _listeners.forEach((fn) => fn())
+
+export function startLoading() { _loadingCount++; notify() }
+export function stopLoading() { _loadingCount = Math.max(0, _loadingCount - 1); notify() }
+
+function LoadingBar() {
+  const loading = useSyncExternalStore(
+    useCallback((cb: () => void) => { _listeners.add(cb); return () => _listeners.delete(cb) }, []),
+    () => _loadingCount > 0,
+  )
+  if (!loading) return null
+  return (
+    <div className="fixed inset-x-0 top-0 z-[100] h-[2px] overflow-hidden bg-wine-dim">
+      <div className="h-full w-1/3 animate-[slide_1s_ease-in-out_infinite] bg-wine" style={{ animation: 'slide 1s ease-in-out infinite' }} />
+      <style>{`@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }`}</style>
+    </div>
+  )
+}
+
+/* ── Skeleton ── */
+
+export function Skeleton({ lines = 4 }: { lines?: number }) {
+  return (
+    <div className="animate-pulse pt-10 space-y-4">
+      {Array.from({ length: lines }, (_, i) => (
+        <div key={i} className="h-4 rounded bg-deep" style={{ width: `${70 + (i % 3) * 10}%` }} />
+      ))}
     </div>
   )
 }
