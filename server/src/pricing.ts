@@ -19,7 +19,7 @@ export interface Quote {
 }
 
 /** 整数对整数走精确 divmod half-up；REAL 面积参与时回落 roundHalfUp(num/den)（§2.3 公式钦定舍入点） */
-function divRoundHalfUp(num: number, den: number): number {
+export function divRoundHalfUp(num: number, den: number): number {
   if (!(den > 0) || num < 0) throw new RangeError(`divRoundHalfUp: invalid ${num}/${den}`)
   if (Number.isSafeInteger(num) && Number.isSafeInteger(den)) {
     const rem = num % den

@@ -529,14 +529,16 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             },
             from: { type: 'string' },
             to: { type: 'string' },
+            offset: { type: 'integer', minimum: 0, default: 0 },
+            limit: { type: 'integer', minimum: 1, maximum: 500, default: 100 },
           },
         },
       },
     },
     async (req) => {
-      const q = req.query as Partial<Record<'target_type' | 'target_id' | 'action' | 'from' | 'to', string>>
+      const q = req.query as Partial<Record<'target_type' | 'target_id' | 'action' | 'from' | 'to', string>> & { offset?: number; limit?: number }
       const where: string[] = []
-      const params: Record<string, string> = {}
+      const params: Record<string, string | number> = {}
       if (q.target_type) {
         where.push('target_type = @target_type')
         params['target_type'] = q.target_type
@@ -557,8 +559,12 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
         where.push('created_at <= @to')
         params['to'] = q.to
       }
-      const sql = `SELECT * FROM inventory_log ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 500`
-      return db.prepare(sql).all(params)
+      const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+      const total = (db.prepare(`SELECT COUNT(*) AS n FROM inventory_log ${clause}`).get(params) as { n: number }).n
+      params['_limit'] = q.limit ?? 100
+      params['_offset'] = q.offset ?? 0
+      const sql = `SELECT * FROM inventory_log ${clause} ORDER BY created_at DESC LIMIT @_limit OFFSET @_offset`
+      return { data: db.prepare(sql).all(params), total }
     },
   )
 

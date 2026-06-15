@@ -268,26 +268,50 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
-  // 趋势数据：最近 6 个月汇总（Dashboard 图表用）
+  // 趋势数据：最近 6 个月汇总（Dashboard 图表用）——单条 GROUP BY SQL
   app.get('/api/reports/trend', { preHandler: requireAdmin }, async () => {
     const now = new Date()
+    const startMonth = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().slice(0, 7)
     const months: string[] = []
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      months.push(d.toISOString().slice(0, 7))
+      months.push(new Date(now.getFullYear(), now.getMonth() - i, 1).toISOString().slice(0, 7))
     }
+
+    const rows = db
+      .prepare(
+        `SELECT substr(j.completed_at, 1, 7) AS month,
+                COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.quoted_price END), 0) AS revenue,
+                COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.total_cost END), 0) AS cost,
+                COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.profit END), 0) AS profit,
+                COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN j.total_cost END), 0) AS internal_cost
+         FROM jobs j
+         LEFT JOIN order_items oi ON oi.id = j.order_item_id
+         LEFT JOIN orders o ON o.id = oi.order_id
+         WHERE j.status = 'done' AND substr(j.completed_at, 1, 7) >= ?
+         GROUP BY substr(j.completed_at, 1, 7)
+         ORDER BY month`,
+      )
+      .all(startMonth) as Array<{
+      month: string; revenue: number; cost: number; profit: number; internal_cost: number
+    }>
+
+    const dataMap = new Map(rows.map((r) => [r.month, r]))
     const currency = baseCurrency(db)
     return months.map((m) => {
-      const r = monthlyReport(db, m)
+      const r = dataMap.get(m)
+      const revenue = r?.revenue ?? 0
+      const cost = r?.cost ?? 0
+      const profit = r?.profit ?? 0
+      const internal_cost = r?.internal_cost ?? 0
       return {
         month: m,
-        revenue: r.external.revenue,
-        cost: r.external.cost,
-        profit: r.external.profit,
-        internal_cost: r.internal.cost,
-        revenue_display: formatMoney(money(r.external.revenue), currency),
-        cost_display: formatMoney(money(r.external.cost), currency),
-        profit_display: formatMoney(money(r.external.profit), currency),
+        revenue,
+        cost,
+        profit,
+        internal_cost,
+        revenue_display: formatMoney(money(revenue), currency),
+        cost_display: formatMoney(money(cost), currency),
+        profit_display: formatMoney(money(profit), currency),
       }
     })
   })

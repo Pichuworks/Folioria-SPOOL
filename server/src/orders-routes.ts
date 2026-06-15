@@ -740,14 +740,15 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
                 'cancelled',
               ],
             },
+            offset: { type: 'integer', minimum: 0, default: 0 },
+            limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
           },
         },
-        response: { 200: ORDER_LIST_SCHEMA },
       },
     },
     async (req) => {
       const user = req.user as NonNullable<typeof req.user>
-      const { status } = req.query as { status?: string }
+      const { status, offset = 0, limit = 50 } = req.query as { status?: string; offset?: number; limit?: number }
       const currency = baseCurrency(db)
       const admin = user.role === 'admin'
       const where: string[] = []
@@ -760,13 +761,12 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         where.push('status = ?')
         params.push(status)
       }
+      const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+      const total = (db.prepare(`SELECT COUNT(*) AS n FROM orders ${clause}`).get(...params) as { n: number }).n
       const rows = db
-        .prepare(
-          `SELECT * FROM orders ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-           ORDER BY created_at DESC LIMIT 500`,
-        )
-        .all(...params) as OrderRow[]
-      return batchOrderDtos(db, rows, currency, { admin, includeToken: true })
+        .prepare(`SELECT * FROM orders ${clause} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+        .all(...params, limit, offset) as OrderRow[]
+      return { data: batchOrderDtos(db, rows, currency, { admin, includeToken: true }), total }
     },
   )
 

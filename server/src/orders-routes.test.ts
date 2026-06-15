@@ -236,7 +236,7 @@ describe('R2 access_token 防枚举（§5/§6）', () => {
     ).toBe(404)
     // A 列表里看不到 B 的单
     const list = await app.inject({ method: 'GET', url: '/api/orders', headers: { cookie: cookieA } })
-    expect((list.json() as OrderDto[]).length).toBe(0)
+    expect((list.json() as { data: OrderDto[] }).data.length).toBe(0)
     // 状态操作同理 404
     expect(
       (
@@ -275,8 +275,8 @@ describe('D23 访客下单 / 认领', () => {
     const adminCookie = await login('staff@folioria.jp')
     const list = (
       await app.inject({ method: 'GET', url: '/api/orders', headers: { cookie: adminCookie } })
-    ).json() as Array<OrderDto & { customer?: { email: string; role: string } }>
-    const guestOrder = list.find((x) => x.id === o.id)
+    ).json() as { data: Array<OrderDto & { customer?: { email: string; role: string } }> }
+    const guestOrder = list.data.find((x) => x.id === o.id)
     expect(guestOrder?.customer?.role).toBe('guest')
     expect(guestOrder?.customer?.email).toBe('walkin@x.example')
   })
@@ -307,8 +307,8 @@ describe('D23 访客下单 / 认领', () => {
     expect((claimed.json() as OrderDto & { is_guest?: boolean }).is_guest).toBe(false)
     const aList = (
       await app.inject({ method: 'GET', url: '/api/orders', headers: { cookie: cookieA } })
-    ).json() as OrderDto[]
-    expect(aList.some((x) => x.id === o.id)).toBe(true)
+    ).json() as { data: OrderDto[] }
+    expect(aList.data.some((x) => x.id === o.id)).toBe(true)
 
     const again = await app.inject({ method: 'POST', url: claimUrl, headers: { cookie: cookieA } })
     expect(again.statusCode).toBe(409)
@@ -857,12 +857,12 @@ describe('§6 双域权限与序列化白名单', () => {
     await placeOrder(cookieB, [A3_ITEM])
 
     const adminList = await app.inject({ method: 'GET', url: '/api/orders', headers: { cookie: adminCookie } })
-    const all = adminList.json() as Array<OrderDto & { customer?: { email: string } }>
+    const all = (adminList.json() as { data: Array<OrderDto & { customer?: { email: string } }> }).data
     expect(all.length).toBe(2)
     expect(all.every((o) => o.customer?.email)).toBe(true)
 
     const aList = await app.inject({ method: 'GET', url: '/api/orders', headers: { cookie: cookieA } })
-    expect((aList.json() as OrderDto[]).length).toBe(1)
+    expect((aList.json() as { data: OrderDto[] }).data.length).toBe(1)
   })
 })
 

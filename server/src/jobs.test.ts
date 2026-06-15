@@ -291,7 +291,7 @@ describe('作业其他', () => {
 
     const res = await app.inject({ method: 'GET', url: '/api/jobs', headers: { cookie: adminCookie } })
     expect(res.statusCode).toBe(200)
-    const rows = res.json() as Array<Record<string, unknown>>
+    const rows = (res.json() as { data: Array<Record<string, unknown>> }).data
     const done = rows.find((r) => r['id'] === jobId)
     // §3.1 基准：total_cost 71、profit 14 − 71 = −57
     expect(done?.['total_cost_display']).toBe('¥71')

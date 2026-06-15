@@ -1093,14 +1093,16 @@ function PricingBody() {
   const [finishings, setFinishings] = useState<FinishingDto[] | null>(null)
 
   const reload = useCallback(() => {
-    void send<QuoteDto[]>('GET', '/api/admin/pricing/quotes').then((r) => r.ok && setQuotes(r.data))
-    void send<ComboDto[]>('GET', '/api/pricing/combos').then((r) => r.ok && setCombos(r.data))
-    void send<ModeDto[]>('GET', '/api/pricing/modes').then((r) => r.ok && setModes(r.data))
-    void send<PaperDto[]>('GET', '/api/pricing/papers').then((r) => r.ok && setPapers(r.data))
-    void send<SizeDto[]>('GET', '/api/pricing/sizes').then((r) => r.ok && setSizes(r.data))
-    void send<PrinterDto[]>('GET', '/api/equipment').then((r) => r.ok && setPrinters(r.data))
-    void send<BookProductDto[]>('GET', '/api/pricing/books').then((r) => r.ok && setBooks(r.data))
-    void send<FinishingDto[]>('GET', '/api/pricing/finishings').then((r) => r.ok && setFinishings(r.data))
+    void Promise.all([
+      send<QuoteDto[]>('GET', '/api/admin/pricing/quotes').then((r) => r.ok && setQuotes(r.data)),
+      send<ComboDto[]>('GET', '/api/pricing/combos').then((r) => r.ok && setCombos(r.data)),
+      send<ModeDto[]>('GET', '/api/pricing/modes').then((r) => r.ok && setModes(r.data)),
+      send<PaperDto[]>('GET', '/api/pricing/papers').then((r) => r.ok && setPapers(r.data)),
+      send<SizeDto[]>('GET', '/api/pricing/sizes').then((r) => r.ok && setSizes(r.data)),
+      send<PrinterDto[]>('GET', '/api/equipment').then((r) => r.ok && setPrinters(r.data)),
+      send<BookProductDto[]>('GET', '/api/pricing/books').then((r) => r.ok && setBooks(r.data)),
+      send<FinishingDto[]>('GET', '/api/pricing/finishings').then((r) => r.ok && setFinishings(r.data)),
+    ])
   }, [])
   useEffect(reload, [reload])
 

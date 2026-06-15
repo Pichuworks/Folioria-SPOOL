@@ -24,13 +24,17 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
               type: 'string',
               enum: ['draft', 'queued', 'printing', 'done', 'cancelled'],
             },
+            offset: { type: 'integer', minimum: 0, default: 0 },
+            limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
           },
         },
       },
     },
     async (req) => {
-      const { status } = req.query as { status?: string }
-      // D27: LEFT JOIN 书行组件，暴露 order_book_id/book_name/book_role 供 AdminJobs 按书编组（item 作业为 NULL）
+      const { status, offset = 0, limit = 50 } = req.query as { status?: string; offset?: number; limit?: number }
+      const statusClause = status ? 'WHERE j.status = ?' : ''
+      const statusParams = status ? [status] : []
+      const total = (db.prepare(`SELECT COUNT(*) AS n FROM jobs j ${statusClause}`).get(...statusParams) as { n: number }).n
       const sql = `SELECT j.*, m.name AS mode_name, p.name AS paper_name,
                           obc.order_book_id AS order_book_id, ob.name AS book_name, obc.role AS book_role
                    FROM jobs j
@@ -38,18 +42,19 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
                    JOIN papers p ON p.id = j.paper_id
                    LEFT JOIN order_book_components obc ON obc.job_id = j.id
                    LEFT JOIN order_books ob ON ob.id = obc.order_book_id
-                   ${status ? 'WHERE j.status = ?' : ''}
-                   ORDER BY j.created_at DESC LIMIT 500`
-      const rows = (status ? db.prepare(sql).all(status) : db.prepare(sql).all()) as Array<
-        Record<string, unknown>
-      >
+                   ${statusClause}
+                   ORDER BY j.created_at DESC LIMIT ? OFFSET ?`
+      const rows = db.prepare(sql).all(...statusParams, limit, offset) as Array<Record<string, unknown>>
       const currency = baseCurrency(db)
-      return rows.map((r) => ({
-        ...r,
-        total_cost_display: displayOrNull(r['total_cost'], currency),
-        profit_display: displayOrNull(r['profit'], currency),
-        quoted_price_display: displayOrNull(r['quoted_price'], currency),
-      }))
+      return {
+        data: rows.map((r) => ({
+          ...r,
+          total_cost_display: displayOrNull(r['total_cost'], currency),
+          profit_display: displayOrNull(r['profit'], currency),
+          quoted_price_display: displayOrNull(r['quoted_price'], currency),
+        })),
+        total,
+      }
     },
   )
 

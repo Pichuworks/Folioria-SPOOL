@@ -1,16 +1,5 @@
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import Account, { AccountMenu } from './Account'
-import AdminAlerts from './AdminAlerts'
-import AdminAudit from './AdminAudit'
-import AdminBoard from './AdminBoard'
-import AdminEquipment from './AdminEquipment'
-import AdminInventory from './AdminInventory'
-import AdminJobs from './AdminJobs'
-import AdminOrders from './AdminOrders'
-import AdminPricing from './AdminPricing'
-import AdminReports from './AdminReports'
-import AdminSettings from './AdminSettings'
-import AdminUsers from './AdminUsers'
 import {
   AUTH_EVENT,
   fetchMe,
@@ -20,7 +9,6 @@ import {
   type MeDto,
   type PublicConfigDto,
 } from './api'
-import Dashboard from './Dashboard'
 import Home from './Home'
 import Login from './Login'
 import MyOrders from './MyOrders'
@@ -29,8 +17,21 @@ import PriceList from './PriceList'
 import Quote from './Quote'
 import ResetPassword from './ResetPassword'
 import Setup from './Setup'
-import { Shell } from './spec'
+import { Shell, Skeleton } from './spec'
 import VerifyEmail from './VerifyEmail'
+
+const Dashboard = lazy(() => import('./Dashboard'))
+const AdminAlerts = lazy(() => import('./AdminAlerts'))
+const AdminAudit = lazy(() => import('./AdminAudit'))
+const AdminBoard = lazy(() => import('./AdminBoard'))
+const AdminEquipment = lazy(() => import('./AdminEquipment'))
+const AdminInventory = lazy(() => import('./AdminInventory'))
+const AdminJobs = lazy(() => import('./AdminJobs'))
+const AdminOrders = lazy(() => import('./AdminOrders'))
+const AdminPricing = lazy(() => import('./AdminPricing'))
+const AdminReports = lazy(() => import('./AdminReports'))
+const AdminSettings = lazy(() => import('./AdminSettings'))
+const AdminUsers = lazy(() => import('./AdminUsers'))
 
 /** 下单域路由：公开导航三态（guest / 下单用户 / admin）都可见 */
 const STOREFRONT_ROUTES: Record<string, { nav: string; title: string; folio: string; view: ComponentType }> = {
@@ -173,7 +174,9 @@ export default function App() {
   return (
     <Shell center={resolved.folio} nav={nav}>
       <h1 className="sr-only">{resolved.title}</h1>
-      {resolved.node}
+      <Suspense fallback={<Skeleton />}>
+        {resolved.node}
+      </Suspense>
     </Shell>
   )
 }

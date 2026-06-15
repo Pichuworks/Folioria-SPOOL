@@ -326,7 +326,7 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
     const admin = await login('staff@folioria.jp')
     await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
     const res = await app.inject({ method: 'GET', url: '/api/jobs', headers: { cookie: admin } })
-    const jobs = res.json() as Array<{ order_book_id: string | null; book_name: string | null; book_role: string | null }>
+    const jobs = (res.json() as { data: Array<{ order_book_id: string | null; book_name: string | null; book_role: string | null }> }).data
     const bookJobs = jobs.filter((j) => j.order_book_id != null)
     expect(bookJobs).toHaveLength(2)
     expect(bookJobs.every((j) => j.book_name === '写真集')).toBe(true)

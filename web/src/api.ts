@@ -53,8 +53,8 @@ export interface AlertDto {
 }
 
 export async function fetchAlerts(all = false): Promise<AlertDto[]> {
-  const res = await send<AlertDto[]>('GET', `/api/alerts${all ? '?all=1' : ''}`)
-  return res.ok ? res.data : []
+  const res = await send<{ data: AlertDto[]; total: number }>('GET', `/api/alerts${all ? '?all=1' : ''}`)
+  return res.ok ? res.data.data : []
 }
 export const acknowledgeAlert = async (id: string): Promise<boolean> =>
   (await send('PATCH', `/api/alerts/${id}/acknowledge`)).ok
@@ -422,7 +422,8 @@ export const getJobsCache = (): JobDto[] | null => jobsCache
 export async function fetchJobs(): Promise<JobDto[]> {
   const res = await fetch('/api/jobs')
   if (!res.ok) throw new Error(`jobs failed: ${res.status}`)
-  jobsCache = (await res.json()) as JobDto[]
+  const body = (await res.json()) as { data: JobDto[]; total: number }
+  jobsCache = body.data
   return jobsCache
 }
 
@@ -683,8 +684,11 @@ export const createGuestOrder = (
 export const claimOrder = (token: string) =>
   send<OrderDto & { error?: string }>('POST', `/api/orders/by-token/${encodeURIComponent(token)}/claim`)
 
-export const fetchOrders = (status?: string) =>
-  send<OrderDto[]>('GET', `/api/orders${status ? `?status=${status}` : ''}`)
+export async function fetchOrders(status?: string) {
+  const res = await send<{ data: OrderDto[]; total: number }>('GET', `/api/orders${status ? `?status=${status}` : ''}`)
+  if (!res.ok) return { ok: false as const, status: res.status, data: [] as OrderDto[] }
+  return { ok: true as const, status: res.status, data: res.data.data }
+}
 
 export const fetchOrderByToken = (token: string) =>
   send<OrderDto>('GET', `/api/orders/by-token/${encodeURIComponent(token)}`)

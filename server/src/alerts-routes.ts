@@ -1,5 +1,5 @@
 import { type FastifyInstance } from 'fastify'
-import { checkCalibration, checkConsumableThreshold, raiseAlert, resolveAlert } from './alerts.js'
+import { calibrationDue, raiseAlert, resolveAlert } from './alerts.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
 
@@ -12,17 +12,24 @@ export function registerAlertsRoutes(app: FastifyInstance, db: DB): void {
         querystring: {
           type: 'object',
           additionalProperties: false,
-          properties: { all: { type: 'string' } },
+          properties: {
+            all: { type: 'string' },
+            offset: { type: 'integer', minimum: 0, default: 0 },
+            limit: { type: 'integer', minimum: 1, maximum: 500, default: 100 },
+          },
         },
       },
     },
     async (req) => {
-      const { all } = req.query as { all?: string }
-      return all === '1'
-        ? db.prepare('SELECT * FROM alerts ORDER BY created_at DESC LIMIT 500').all()
-        : db
-            .prepare('SELECT * FROM alerts WHERE resolved_at IS NULL ORDER BY created_at DESC')
-            .all()
+      const { all, offset = 0, limit = 100 } = req.query as { all?: string; offset?: number; limit?: number }
+      if (all === '1') {
+        const total = (db.prepare('SELECT COUNT(*) AS n FROM alerts').get() as { n: number }).n
+        const data = db.prepare('SELECT * FROM alerts ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset)
+        return { data, total }
+      }
+      const total = (db.prepare('SELECT COUNT(*) AS n FROM alerts WHERE resolved_at IS NULL').get() as { n: number }).n
+      const data = db.prepare('SELECT * FROM alerts WHERE resolved_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset)
+      return { data, total }
     },
   )
 
@@ -69,15 +76,15 @@ export function registerAlertsRoutes(app: FastifyInstance, db: DB): void {
     },
     async (req) => {
       const threshold = (req.body as { low_stock_threshold?: number }).low_stock_threshold ?? 50
-      let lowStock = 0
-      const stocks = db
-        .prepare(
-          `SELECT ps.id, ps.quantity, p.name, ps.size_key FROM paper_stocks ps
-           JOIN papers p ON p.id = ps.paper_id WHERE ps.archived = 0`,
-        )
-        .all() as Array<{ id: string; quantity: number; name: string; size_key: string }>
-      for (const s of stocks) {
-        if (s.quantity <= threshold) {
+      return db.transaction(() => {
+        let lowStock = 0
+        const stocks = db
+          .prepare(
+            `SELECT ps.id, ps.quantity, p.name, ps.size_key FROM paper_stocks ps
+             JOIN papers p ON p.id = ps.paper_id WHERE ps.archived = 0 AND ps.quantity <= ?`,
+          )
+          .all(threshold) as Array<{ id: string; quantity: number; name: string; size_key: string }>
+        for (const s of stocks) {
           raiseAlert(db, {
             type: 'low_stock',
             severity: s.quantity <= 0 ? 'critical' : 'warning',
@@ -87,25 +94,60 @@ export function registerAlertsRoutes(app: FastifyInstance, db: DB): void {
           })
           lowStock += 1
         }
-      }
 
-      let consumableLow = 0
-      const consumables = db
-        .prepare("SELECT id FROM consumables WHERE cost_model = 'per_page' AND archived = 0")
-        .all() as Array<{ id: string }>
-      for (const c of consumables) {
-        if (checkConsumableThreshold(db, c.id)) consumableLow += 1
-      }
+        let consumableLow = 0
+        const consumables = db
+          .prepare(
+            `SELECT id, name, rated_life_pages, current_usage_pages, alert_threshold_bp
+             FROM consumables WHERE cost_model = 'per_page' AND archived = 0
+               AND rated_life_pages IS NOT NULL AND rated_life_pages > 0`,
+          )
+          .all() as Array<{
+          id: string; name: string; rated_life_pages: number; current_usage_pages: number; alert_threshold_bp: number
+        }>
+        for (const c of consumables) {
+          const left = c.rated_life_pages - c.current_usage_pages
+          const num = Math.max(0, left) * 10000
+          const remainingBp = (num - (num % c.rated_life_pages)) / c.rated_life_pages
+          if (remainingBp <= c.alert_threshold_bp) {
+            raiseAlert(db, {
+              type: 'consumable_low',
+              severity: remainingBp === 0 ? 'critical' : 'warning',
+              target_type: 'consumable',
+              target_id: c.id,
+              message: `${c.name} 剩余 ${(remainingBp / 100).toFixed(2)}%（阈值 ${(c.alert_threshold_bp / 100).toFixed(2)}%）`,
+            })
+            consumableLow += 1
+          }
+        }
 
-      let calibration = 0
-      const printers = db.prepare('SELECT id FROM printers WHERE archived = 0').all() as Array<{
-        id: number
-      }>
-      for (const p of printers) {
-        if (checkCalibration(db, p.id)) calibration += 1
-      }
+        let calibration = 0
+        const now = new Date()
+        const printers = db
+          .prepare(
+            `SELECT id, code, total_pages, last_calibration_at, last_calibration_pages,
+                    calibration_interval_pages, calibration_interval_days
+             FROM printers WHERE archived = 0`,
+          )
+          .all() as Array<{
+          id: number; code: string; total_pages: number; last_calibration_at: string | null
+          last_calibration_pages: number; calibration_interval_pages: number | null; calibration_interval_days: number | null
+        }>
+        for (const p of printers) {
+          if (calibrationDue(p, now)) {
+            raiseAlert(db, {
+              type: 'calibration_due',
+              severity: 'warning',
+              target_type: 'printer',
+              target_id: String(p.id),
+              message: `${p.code} 校准到期（页数 ${p.total_pages - p.last_calibration_pages} / 上次 ${p.last_calibration_at ?? '未记录'}）`,
+            })
+            calibration += 1
+          }
+        }
 
-      return { low_stock: lowStock, consumable_low: consumableLow, calibration_due: calibration }
+        return { low_stock: lowStock, consumable_low: consumableLow, calibration_due: calibration }
+      })()
     },
   )
 }

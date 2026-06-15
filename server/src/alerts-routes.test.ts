@@ -41,7 +41,7 @@ describe('§4 提醒 API', () => {
     seedAlert()
     const open = await app.inject({ method: 'GET', url: '/api/alerts', headers: { cookie: adminCookie } })
     expect(open.statusCode).toBe(200)
-    expect((open.json() as unknown[]).length).toBe(1)
+    expect((open.json() as { data: unknown[] }).data.length).toBe(1)
   })
 
   it('GET /api/notifications：admin 可读通知日志，guest 401', async () => {
@@ -83,14 +83,14 @@ describe('§4 提醒 API', () => {
 
     expect(seedAlert()).toBe('created')
     const open = await app.inject({ method: 'GET', url: '/api/alerts', headers: { cookie: adminCookie } })
-    expect((open.json() as unknown[]).length).toBe(1)
+    expect((open.json() as { data: unknown[] }).data.length).toBe(1)
 
     const all = await app.inject({
       method: 'GET',
       url: '/api/alerts?all=1',
       headers: { cookie: adminCookie },
     })
-    expect((all.json() as unknown[]).length).toBe(2)
+    expect((all.json() as { data: unknown[] }).data.length).toBe(2)
   })
 
   it('重复 resolve → 409；未知 id → 404；guest → 401', async () => {

@@ -249,8 +249,8 @@ describe('inventory_log 查询', () => {
       headers: { cookie: adminCookie },
     })
     expect(res.statusCode).toBe(200)
-    const rows = res.json() as Array<{ action: string }>
-    expect(rows.length).toBe(1)
-    expect(rows[0]?.action).toBe('scrap')
+    const body = res.json() as { data: Array<{ action: string }> }
+    expect(body.data.length).toBe(1)
+    expect(body.data[0]?.action).toBe('scrap')
   })
 })

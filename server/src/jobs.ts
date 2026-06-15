@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { checkCalibration, checkConsumableThreshold, raiseAlert } from './alerts.js'
 import { type DB } from './db.js'
 import { lineTotal, moneyC } from './money.js'
-import { deriveUnitCost, overheadC } from './pricing.js'
+import { deriveUnitCost, divRoundHalfUp, overheadC } from './pricing.js'
 
 export class JobError extends Error {
   constructor(
@@ -87,7 +87,7 @@ const STATUS_RANK: Record<string, number> = { online: 0, standby: 1, maintenance
 /**
  * 机器推荐（③⑤）：给定 纸×尺寸（可选单/双面），列出所有「能做」的 mode/printer，
  * 按 在线优先 → 单张参考成本(含 overhead)升序 → 队列负载升序 排序。
- * 「能做」= deriveUnitCost 非空（尺寸≤max_size ∧ 有纸口径）。成本仅作参考，落账仍用实际机器。
+ * 「能做」= 尺寸≤max_size ∧ 有纸口径。成本仅作参考，落账仍用实际机器。
  */
 export function recommendMachines(
   db: DB,
@@ -97,42 +97,57 @@ export function recommendMachines(
 ): MachineRec[] {
   const modes = db
     .prepare(
-      `SELECT m.id, m.name, m.printer_id, m.duplex, p.code AS printer_code, p.status AS printer_status
-       FROM print_modes m JOIN printers p ON p.id = m.printer_id
-       WHERE m.archived = 0 AND p.archived = 0`,
+      `SELECT m.id, m.name, m.printer_id, m.duplex,
+              p.code AS printer_code, p.status AS printer_status, p.equipment_cost_c,
+              m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
+              rs.area AS ref_area, mx.area AS max_area, s.area AS size_area,
+              psc.pack_price_c, psc.pack_count
+       FROM print_modes m
+       JOIN printers p ON p.id = m.printer_id AND p.archived = 0
+       JOIN sizes rs ON rs.key = m.ref_size
+       JOIN sizes mx ON mx.key = m.max_size
+       JOIN sizes s ON s.key = @size
+       LEFT JOIN paper_size_costs psc ON psc.paper_id = @paper AND psc.size_key = @size
+       WHERE m.archived = 0 AND s.area <= mx.area AND psc.pack_price_c IS NOT NULL`,
     )
-    .all() as Array<{
-    id: number
-    name: string
-    printer_id: number
-    duplex: number
-    printer_code: string
-    printer_status: string
+    .all({ paper: paperId, size: sizeKey }) as Array<{
+    id: number; name: string; printer_id: number; duplex: number
+    printer_code: string; printer_status: string; equipment_cost_c: number
+    pricing_mode: string; ink_price_c: number; ml_per_batch: number | null; yield_sheets: number
+    ref_area: number; max_area: number; size_area: number
+    pack_price_c: number; pack_count: number
   }>
+
+  const queueRows = db
+    .prepare(
+      `SELECT pm.printer_id, COALESCE(SUM(j.quantity), 0) AS n
+       FROM print_modes pm
+       JOIN jobs j ON j.mode_id = pm.id AND j.status IN ('queued', 'printing')
+       GROUP BY pm.printer_id`,
+    )
+    .all() as Array<{ printer_id: number; n: number }>
+  const queueMap = new Map(queueRows.map((r) => [r.printer_id, r.n]))
+
+  const cfg = db
+    .prepare('SELECT overhead_dep_months, overhead_month_volume FROM system_config WHERE id = 1')
+    .get() as { overhead_dep_months: number; overhead_month_volume: number }
+  const depDen = cfg.overhead_dep_months * cfg.overhead_month_volume
 
   const recs: MachineRec[] = []
   for (const m of modes) {
     if (duplex !== undefined && m.duplex !== (duplex ? 1 : 0)) continue
-    const cost = deriveUnitCost(db, m.id, paperId, sizeKey)
-    if (!cost) continue
-    const overhead = overheadC(db, m.printer_id)
-    const queue = (
-      db
-        .prepare(
-          `SELECT COALESCE(SUM(quantity), 0) n FROM jobs
-           WHERE mode_id IN (SELECT id FROM print_modes WHERE printer_id = ?)
-             AND status IN ('queued', 'printing')`,
-        )
-        .get(m.printer_id) as { n: number }
-    ).n
+    const effInk = m.pricing_mode === 'ml' ? m.ink_price_c * (m.ml_per_batch as number) : m.ink_price_c
+    const ink = divRoundHalfUp(effInk * m.size_area, m.yield_sheets * m.ref_area)
+    const paper = divRoundHalfUp(m.pack_price_c, m.pack_count)
+    const overhead = divRoundHalfUp(m.equipment_cost_c, depDen)
     recs.push({
       mode_id: m.id,
       mode_name: m.name,
       printer_id: m.printer_id,
       printer_code: m.printer_code,
       printer_status: m.printer_status,
-      unit_cost_c: cost.total_c + overhead,
-      queue_pages: queue,
+      unit_cost_c: ink + paper + overhead,
+      queue_pages: queueMap.get(m.printer_id) ?? 0,
     })
   }
   recs.sort(

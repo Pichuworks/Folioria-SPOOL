@@ -324,15 +324,16 @@ function InventoryBody() {
   const reload = useCallback(() => {
     void send<StockDto[]>('GET', '/api/inventory/stocks').then((r) => r.ok && setStocks(r.data))
     void send<ConsumableDto[]>('GET', '/api/inventory/consumables').then((r) => r.ok && setConsumables(r.data))
-    void send<LogDto[]>('GET', '/api/inventory/log').then((r) => r.ok && setLog(r.data))
+    void send<{ data: LogDto[]; total: number }>('GET', '/api/inventory/log').then((r) => r.ok && setLog(r.data.data))
   }, [])
 
   useEffect(() => {
     reload()
-    void send<RefDto['papers']>('GET', '/api/pricing/papers').then((p) => {
-      void send<RefDto['sizes']>('GET', '/api/pricing/sizes').then((s) => {
-        if (p.ok && s.ok) setRefs({ papers: p.data, sizes: s.data })
-      })
+    void Promise.all([
+      send<RefDto['papers']>('GET', '/api/pricing/papers'),
+      send<RefDto['sizes']>('GET', '/api/pricing/sizes'),
+    ]).then(([p, s]) => {
+      if (p.ok && s.ok) setRefs({ papers: p.data, sizes: s.data })
     })
   }, [reload])
 
