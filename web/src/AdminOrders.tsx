@@ -40,7 +40,7 @@ const PAY_LABEL = { unpaid: '未付', deposit: '定金', paid: '付清' } as con
 const PAY_KIND_LABEL = { deposit: '押金', balance: '尾款', refund: '退款' } as const
 
 function FilePreview({ url, kind }: { url: string; kind: string | undefined }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   if (!kind || kind === 'tif' || kind === 'tiff') return null
   const src = `${url}?inline=1`
   return (
