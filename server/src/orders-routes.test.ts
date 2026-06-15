@@ -509,6 +509,32 @@ describe('R1 状态机（§2.5 + 审稿定点）', () => {
     expect((await advance('cancelled')).statusCode).toBe(409)
   })
 
+  it('全部作业已取消时，ready/delivered 被拒绝（no_completed_jobs）', async () => {
+    const adminCookie = await login('staff@folioria.jp')
+    const cookie = await login('a@cust.example')
+    const order = await placeOrder(cookie, [A4_ITEM])
+    stuffFiles(order.id)
+    await reviewAll(adminCookie, order, 'approved')
+
+    const advance = async (status: string) =>
+      app.inject({
+        method: 'PATCH',
+        url: `/api/orders/${order.id}/status`,
+        headers: { cookie: adminCookie },
+        payload: { status },
+      })
+
+    await advance('confirmed')
+    db.prepare(
+      `UPDATE jobs SET status = 'cancelled', completed_at = datetime('now')
+       WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
+    ).run(order.id)
+    await advance('in_production')
+    const ready = await advance('ready')
+    expect(ready.statusCode).toBe(409)
+    expect((ready.json() as { error: string }).error).toBe('no_completed_jobs')
+  })
+
   it('取消权限：customer 仅 confirm 前自己的单；confirmed 起仅 admin，连带取消未完成 Job', async () => {
     const adminCookie = await login('staff@folioria.jp')
     const cookie = await login('a@cust.example')

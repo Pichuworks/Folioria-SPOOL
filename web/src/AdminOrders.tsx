@@ -265,7 +265,9 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
           ? '报价已过期，不可确认（需重新下单）。'
           : code === 'jobs_not_completed'
             ? '尚有未完成的作业，请先在作业管理中结转全部作业。'
-            : `操作失败（${code}）`,
+            : code === 'no_completed_jobs'
+              ? '所有作业均已取消，没有实际完成的作业，不可推进到待取/已交付。'
+              : `操作失败（${code}）`,
       )
     }
   }

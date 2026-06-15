@@ -725,23 +725,35 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         if (!adminCanTransition(order.status, status)) {
           return reply.status(409).send({ error: `invalid_transition_${order.status}_to_${status}` })
         }
-        if (status === 'delivered') {
-          const pending = (
-            db
-              .prepare(
-                `SELECT COUNT(*) AS n FROM jobs
-                 WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)
-                   AND status NOT IN ('done', 'cancelled')`,
-              )
-              .get(id) as { n: number }
-          ).n
-          if (pending > 0) {
+        if (status === 'ready' || status === 'delivered') {
+          const jobCounts = db
+            .prepare(
+              `SELECT
+                 COUNT(*) FILTER (WHERE status NOT IN ('done','cancelled')) AS pending,
+                 COUNT(*) FILTER (WHERE status = 'done') AS done
+               FROM jobs
+               WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)
+                  OR id IN (
+                    SELECT obc.job_id FROM order_book_components obc
+                    JOIN order_books ob ON ob.id = obc.order_book_id
+                    WHERE ob.order_id = ? AND obc.job_id IS NOT NULL
+                  )`,
+            )
+            .get(id, id) as { pending: number; done: number }
+          if (jobCounts.pending > 0) {
             return reply.status(409).send({ error: 'jobs_not_completed' })
           }
-          db.prepare("UPDATE orders SET status = 'delivered', completed_at = ? WHERE id = ?").run(
-            new Date().toISOString(),
-            id,
-          )
+          if (jobCounts.done === 0) {
+            return reply.status(409).send({ error: 'no_completed_jobs' })
+          }
+          if (status === 'delivered') {
+            db.prepare("UPDATE orders SET status = 'delivered', completed_at = ? WHERE id = ?").run(
+              new Date().toISOString(),
+              id,
+            )
+          } else {
+            db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id)
+          }
         } else {
           db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id)
         }

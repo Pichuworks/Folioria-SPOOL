@@ -40,8 +40,13 @@ function DonePanel({ job, onDone }: { job: JobDto; onDone: () => void }) {
     const body: { waste_quantity: number; pages_consumed?: number } = { waste_quantity: waste }
     const p = Number(pages)
     if (pages.trim() !== '' && Number.isSafeInteger(p) && p >= 1) body.pages_consumed = p
-    if (await completeJob(job.id, body)) onDone()
-    else setError('落账失败：请确认该纸×尺寸存在库存档案')
+    const res = await completeJob(job.id, body)
+    if (res.ok) return onDone()
+    const msgs: Record<string, string> = {
+      no_stock_record: '落账失败：该纸×尺寸不存在库存档案，请先录入库存',
+      unit_cost_underivable: '落账失败：成本推导失败，请检查机台/纸张/尺寸配置',
+    }
+    setError(msgs[res.error] ?? `落账失败（${res.error}）`)
   }
 
   return (

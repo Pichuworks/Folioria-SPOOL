@@ -208,6 +208,10 @@ describe('业务事件接入（D6 事件枚举）', () => {
     expect(confirmed.statusCode).toBe(200)
     expect(logRows(db, 'order_confirmed').map((r) => r.recipient)).toEqual(['a@cust.example'])
 
+    db.prepare(
+      `UPDATE jobs SET status = 'done', completed_at = datetime('now')
+       WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
+    ).run(order.id)
     await app.inject({
       method: 'PATCH',
       url: `/api/orders/${order.id}/status`,

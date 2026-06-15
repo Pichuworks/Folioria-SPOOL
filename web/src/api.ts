@@ -516,13 +516,15 @@ export const reassignJobMode = async (id: string, modeId: number): Promise<boole
 export async function completeJob(
   id: string,
   body: { waste_quantity: number; pages_consumed?: number },
-): Promise<boolean> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const res = await fetch(`/api/jobs/${id}/done`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return res.ok
+  if (res.ok) return { ok: true }
+  const data = await res.json().catch(() => null)
+  return { ok: false, error: (data as { error?: string } | null)?.error ?? 'unknown' }
 }
 
 // ---------- 订单（R1–R6/R8） ----------
