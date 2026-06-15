@@ -13,6 +13,20 @@ export default defineConfig({
     __BUILD_NUMBER__: JSON.stringify(buildNumber),
   },
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+            return 'react-vendor'
+          }
+          if (id.includes('node_modules/recharts')) {
+            return 'recharts'
+          }
+        },
+      },
+    },
+  },
   server: {
     proxy: { '/api': 'http://127.0.0.1:3000' },
   },

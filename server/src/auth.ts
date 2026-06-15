@@ -88,7 +88,7 @@ export function revokeSession(db: DB, token: string): void {
 // S2: 未知邮箱也比对一次的哑 hash（cost 12，与真实账号一致）；预生成常量避免启动期现算
 const DUMMY_HASH = '$2b$12$USNoAd.LkznkSolTZdR9eOblhwfg.1kZ.ppLhoyc2Vk4dmMvhn7Ca'
 
-export function verifyLogin(db: DB, identifier: string, password: string): SessionUser | null {
+export async function verifyLogin(db: DB, identifier: string, password: string): Promise<SessionUser | null> {
   // D18: 单一标识符——含 '@' 即邮箱口径，否则用户名口径；两者皆 NOCASE（email 列本就 NOCASE）
   const row = db
     .prepare(
@@ -96,7 +96,7 @@ export function verifyLogin(db: DB, identifier: string, password: string): Sessi
        FROM users WHERE (email = ? OR username = ? COLLATE NOCASE) AND archived = 0`,
     )
     .get(identifier, identifier) as (SessionUser & { password_hash: string }) | undefined
-  const ok = bcrypt.compareSync(password, row?.password_hash ?? DUMMY_HASH)
+  const ok = await bcrypt.compare(password, row?.password_hash ?? DUMMY_HASH)
   if (!row || !ok) return null
   const { password_hash: _drop, ...user } = row
   void _drop
@@ -123,7 +123,7 @@ export function issuePasswordReset(db: DB, userId: string): string {
 }
 
 /** D19: 一次性消费重置 token，置新密码、清首登标志、撤销该用户全部会话与其它未消费 token。无效/过期/已用 → false */
-export function resetPassword(db: DB, token: string, newPassword: string): boolean {
+export async function resetPassword(db: DB, token: string, newPassword: string): Promise<boolean> {
   const now = new Date().toISOString()
   const row = db
     .prepare(
@@ -132,11 +132,10 @@ export function resetPassword(db: DB, token: string, newPassword: string): boole
     )
     .get(hashToken(token), now) as { user_id: string } | undefined
   if (!row) return false
-  const hash = bcrypt.hashSync(newPassword, 12)
+  const hash = await bcrypt.hash(newPassword, 12)
   db.transaction(() => {
     db.prepare('UPDATE password_reset_tokens SET consumed_at = ? WHERE token_hash = ?').run(now, hashToken(token))
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hash, row.user_id)
-    // 恢复场景：撤销全部会话（含攻击者可能持有的）与该用户其它未消费 reset token
     db.prepare('UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(now, row.user_id)
     db.prepare(
       'UPDATE password_reset_tokens SET consumed_at = ? WHERE user_id = ? AND consumed_at IS NULL',
@@ -146,18 +145,18 @@ export function resetPassword(db: DB, token: string, newPassword: string): boole
 }
 
 /** 改密成功清 must_change_password（D11）并吊销该用户其他 session */
-export function changePassword(
+export async function changePassword(
   db: DB,
   userId: string,
   oldPassword: string,
   newPassword: string,
   keepToken?: string,
-): boolean {
+): Promise<boolean> {
   const row = db.prepare('SELECT password_hash FROM users WHERE id = ? AND archived = 0').get(userId) as
     | { password_hash: string }
     | undefined
-  if (!row || !bcrypt.compareSync(oldPassword, row.password_hash)) return false
-  const hash = bcrypt.hashSync(newPassword, 12)
+  if (!row || !(await bcrypt.compare(oldPassword, row.password_hash))) return false
+  const hash = await bcrypt.hash(newPassword, 12)
   const keepHash = keepToken === undefined ? null : hashToken(keepToken)
   db.transaction(() => {
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(

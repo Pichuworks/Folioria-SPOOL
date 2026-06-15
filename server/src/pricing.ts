@@ -45,14 +45,22 @@ interface PricingConfig {
   overhead_month_volume: number
 }
 
+let configCache: PricingConfig | null = null
+
 function getConfig(db: DB): PricingConfig {
+  if (configCache) return configCache
   const cfg = db
     .prepare(
       'SELECT min_margin_bp, force_min_margin, overhead_dep_months, overhead_month_volume FROM system_config WHERE id = 1',
     )
     .get() as PricingConfig | undefined
   if (!cfg) throw new Error('pricing: system_config missing (run spool init)')
+  configCache = cfg
   return cfg
+}
+
+export function invalidateConfigCache(): void {
+  configCache = null
 }
 
 interface CostRow {
@@ -173,28 +181,72 @@ export function quote(
   }
 }
 
-/** 全部可选组合（三条件 SQL 同 quote 语义）按 combo id × size sort 序 */
-export function listQuotable(db: DB, opts?: QuoteOptions): Quote[] {
-  const rows = db
-    .prepare(
-      `SELECT c.mode_id, c.paper_id, s.key AS size_key
-       FROM combos c
-       JOIN print_modes m ON m.id = c.mode_id AND m.archived = 0
-       JOIN papers p ON p.id = c.paper_id AND p.archived = 0
-       JOIN sizes mx ON mx.key = m.max_size
-       JOIN sizes s ON s.area <= mx.area
-       JOIN paper_size_costs psc ON psc.paper_id = c.paper_id AND psc.size_key = s.key
-       WHERE c.archived = 0
-       ORDER BY c.id, s.sort`,
-    )
-    .all() as Array<{ mode_id: number; paper_id: number; size_key: string }>
+interface QuotableRow {
+  mode_id: number
+  paper_id: number
+  size_key: string
+  pricing_mode: string
+  ink_price_c: number
+  ml_per_batch: number | null
+  yield_sheets: number
+  ref_area: number
+  size_area: number
+  pack_price_c: number
+  pack_count: number
+  manual_sell_c: number | null
+  internal_sell_c: number | null
+}
 
-  const quotes: Quote[] = []
-  for (const r of rows) {
-    const q = quote(db, r.mode_id, r.paper_id, r.size_key, opts)
-    if (q) quotes.push(q)
+function deriveQuoteFromRow(r: QuotableRow, cfg: PricingConfig, internal?: boolean): Quote {
+  const effInk = r.pricing_mode === 'ml' ? r.ink_price_c * (r.ml_per_batch as number) : r.ink_price_c
+  const ink = divRoundHalfUp(effInk * r.size_area, r.yield_sheets * r.ref_area)
+  const paper = divRoundHalfUp(r.pack_price_c, r.pack_count)
+  const total = ink + paper
+
+  const auto = ceilDiv(total * 10000, 10000 - cfg.min_margin_bp)
+  const manual = internal ? (r.internal_sell_c ?? r.manual_sell_c) : r.manual_sell_c
+
+  let sell: number
+  let source: Quote['source']
+  let flag: Quote['flag']
+  if (manual == null) {
+    sell = auto; source = 'auto'; flag = 'auto'
+  } else if (cfg.force_min_margin !== 0 && manual < auto) {
+    sell = auto; source = 'manual'; flag = 'forced'
+  } else {
+    sell = manual; source = 'manual'
+    flag = manual < total ? 'LOSS' : manual < auto ? 'below_margin' : 'manual'
   }
-  return quotes
+
+  return {
+    mode_id: r.mode_id, paper_id: r.paper_id, size_key: r.size_key,
+    ink_c: moneyC(ink), paper_c: moneyC(paper), total_c: moneyC(total),
+    auto_sell_c: moneyC(auto), sell_c: moneyC(sell), source, flag,
+  }
+}
+
+const QUOTABLE_SQL = `
+  SELECT c.mode_id, c.paper_id, s.key AS size_key,
+         m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
+         rs.area AS ref_area, s.area AS size_area,
+         psc.pack_price_c, psc.pack_count,
+         cp.sell_c AS manual_sell_c, cp.internal_sell_c
+  FROM combos c
+  JOIN print_modes m ON m.id = c.mode_id AND m.archived = 0
+  JOIN papers p ON p.id = c.paper_id AND p.archived = 0
+  JOIN sizes rs ON rs.key = m.ref_size
+  JOIN sizes mx ON mx.key = m.max_size
+  JOIN sizes s ON s.area <= mx.area
+  JOIN paper_size_costs psc ON psc.paper_id = c.paper_id AND psc.size_key = s.key
+  LEFT JOIN combo_prices cp ON cp.combo_id = c.id AND cp.size_key = s.key
+  WHERE c.archived = 0
+  ORDER BY c.id, s.sort`
+
+/** 全部可选组合（三条件 SQL 同 quote 语义）按 combo id × size sort 序——单条 SQL + JS 侧定价 */
+export function listQuotable(db: DB, opts?: QuoteOptions): Quote[] {
+  const rows = db.prepare(QUOTABLE_SQL).all() as QuotableRow[]
+  const cfg = getConfig(db)
+  return rows.map((r) => deriveQuoteFromRow(r, cfg, opts?.internal))
 }
 
 export interface Product {
@@ -216,29 +268,28 @@ export function listProducts(db: DB, opts?: QuoteOptions): Product[] {
   const rows = db
     .prepare(
       `SELECT c.mode_id, c.paper_id, s.key AS size_key, m.duplex,
-              COALESCE(m.color_class, 'color') AS color_class, pr.type AS tech
+              COALESCE(m.color_class, 'color') AS color_class, pr.type AS tech,
+              m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
+              rs.area AS ref_area, s.area AS size_area,
+              psc.pack_price_c, psc.pack_count,
+              cp.sell_c AS manual_sell_c, cp.internal_sell_c
        FROM combos c
        JOIN print_modes m ON m.id = c.mode_id AND m.archived = 0
        JOIN printers pr ON pr.id = m.printer_id AND pr.archived = 0
        JOIN papers p ON p.id = c.paper_id AND p.archived = 0
+       JOIN sizes rs ON rs.key = m.ref_size
        JOIN sizes mx ON mx.key = m.max_size
        JOIN sizes s ON s.area <= mx.area
        JOIN paper_size_costs psc ON psc.paper_id = c.paper_id AND psc.size_key = s.key
+       LEFT JOIN combo_prices cp ON cp.combo_id = c.id AND cp.size_key = s.key
        WHERE c.archived = 0`,
     )
-    .all() as Array<{
-    mode_id: number
-    paper_id: number
-    size_key: string
-    duplex: number
-    color_class: string
-    tech: string
-  }>
+    .all() as Array<QuotableRow & { duplex: number; color_class: string; tech: string }>
 
+  const cfg = getConfig(db)
   const map = new Map<string, Product>()
   for (const r of rows) {
-    const q = quote(db, r.mode_id, r.paper_id, r.size_key, opts)
-    if (!q) continue
+    const q = deriveQuoteFromRow(r, cfg, opts?.internal)
     for (const category of r.color_class.split(',')) {
       const key = [category, r.tech, r.paper_id, r.size_key, r.duplex].join('|')
       const cur = map.get(key)

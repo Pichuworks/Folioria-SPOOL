@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type DB } from './db.js'
-import { listQuotable, overheadC, quote } from './pricing.js'
+import { invalidateConfigCache, listQuotable, overheadC, quote } from './pricing.js'
 import { importSeed } from './seed.js'
 import { makeTestDb, withSystemConfig } from './test-helpers.js'
 
 let db: DB
 beforeEach(() => {
+  invalidateConfigCache()
   db = makeTestDb()
   withSystemConfig(db)
   importSeed(db)
@@ -97,6 +98,7 @@ describe('§2.3 报价规则（D8 防翻案：手动价生效并警示，禁止�
 
   it('force ON：黑白×70g A4 → sell 19，forced', () => {
     db.prepare('UPDATE system_config SET force_min_margin = 1 WHERE id = 1').run()
+    invalidateConfigCache()
     const q = quote(db, 1, 1, 'A4')
     expect(q?.sell_c).toBe(19)
     expect(q?.flag).toBe('forced')

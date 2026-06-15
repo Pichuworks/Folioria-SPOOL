@@ -402,6 +402,154 @@ export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoO
   return base
 }
 
+function batchOrderDtos(db: DB, orders: OrderRow[], currency: Currency, opts: DtoOptions) {
+  if (orders.length === 0) return []
+  const ids = orders.map((o) => o.id)
+  const ph = ids.map(() => '?').join(',')
+
+  const allItems = db
+    .prepare(
+      `SELECT oi.*, m.name AS mode_name, p.name AS paper_name, s.label AS size_label,
+              COALESCE(m.color_class, 'color') AS color_class, pr.type AS tech, m.duplex
+       FROM order_items oi
+       JOIN print_modes m ON m.id = oi.mode_id
+       JOIN printers pr ON pr.id = m.printer_id
+       JOIN papers p ON p.id = oi.paper_id
+       JOIN sizes s ON s.key = oi.size_key
+       WHERE oi.order_id IN (${ph})
+       ORDER BY oi.rowid`,
+    )
+    .all(...ids) as OrderItemRow[]
+  const itemsByOrder = new Map<string, OrderItemRow[]>()
+  for (const it of allItems) {
+    let arr = itemsByOrder.get(it.order_id)
+    if (!arr) { arr = []; itemsByOrder.set(it.order_id, arr) }
+    arr.push(it)
+  }
+
+  const allBooks = db
+    .prepare(`SELECT * FROM order_books WHERE order_id IN (${ph}) ORDER BY rowid`)
+    .all(...ids) as import('./orders.js').OrderBookRow[]
+  const bookIds = allBooks.map((b) => b.id)
+  const booksByOrder = new Map<string, import('./orders.js').OrderBookRow[]>()
+  for (const b of allBooks) {
+    let arr = booksByOrder.get(b.order_id)
+    if (!arr) { arr = []; booksByOrder.set(b.order_id, arr) }
+    arr.push(b)
+  }
+
+  const compsByBook = new Map<string, import('./orders.js').OrderBookComponentRow[]>()
+  const finsByBook = new Map<string, import('./orders.js').OrderBookFinishingRow[]>()
+  if (bookIds.length > 0) {
+    const bph = bookIds.map(() => '?').join(',')
+    const allComps = db
+      .prepare(
+        `SELECT obc.*, p.name AS paper_name, s.label AS size_label
+         FROM order_book_components obc
+         JOIN papers p ON p.id = obc.paper_id
+         JOIN sizes s ON s.key = obc.size_key
+         WHERE obc.order_book_id IN (${bph})
+         ORDER BY obc.rowid`,
+      )
+      .all(...bookIds) as import('./orders.js').OrderBookComponentRow[]
+    for (const c of allComps) {
+      let arr = compsByBook.get(c.order_book_id)
+      if (!arr) { arr = []; compsByBook.set(c.order_book_id, arr) }
+      arr.push(c)
+    }
+    const allFins = db
+      .prepare(
+        `SELECT * FROM order_book_finishings WHERE order_book_id IN (${bph}) ORDER BY rowid`,
+      )
+      .all(...bookIds) as import('./orders.js').OrderBookFinishingRow[]
+    for (const f of allFins) {
+      let arr = finsByBook.get(f.order_book_id)
+      if (!arr) { arr = []; finsByBook.set(f.order_book_id, arr) }
+      arr.push(f)
+    }
+  }
+
+  let userMap: Map<string, { id: string; name: string; email: string; role: string }> | undefined
+  let paymentsByOrder: Map<string, PaymentRow[]> | undefined
+  if (opts.admin) {
+    const custIds = [...new Set(orders.map((o) => o.customer_id).filter((id) => id !== GUEST_SENTINEL_ID))]
+    userMap = new Map()
+    if (custIds.length > 0) {
+      const uph = custIds.map(() => '?').join(',')
+      const users = db
+        .prepare(`SELECT id, name, email, role FROM users WHERE id IN (${uph})`)
+        .all(...custIds) as Array<{ id: string; name: string; email: string; role: string }>
+      for (const u of users) userMap.set(u.id, u)
+    }
+    paymentsByOrder = new Map()
+    const allPayments = db
+      .prepare(`SELECT * FROM payments WHERE order_id IN (${ph}) ORDER BY created_at, rowid`)
+      .all(...ids) as PaymentRow[]
+    for (const p of allPayments) {
+      let arr = paymentsByOrder.get(p.order_id)
+      if (!arr) { arr = []; paymentsByOrder.set(p.order_id, arr) }
+      arr.push(p)
+    }
+  }
+
+  return orders.map((order) => {
+    const items = itemsByOrder.get(order.id) ?? []
+    const books: OrderBook[] = (booksByOrder.get(order.id) ?? []).map((book) => ({
+      book,
+      components: compsByBook.get(book.id) ?? [],
+      finishings: finsByBook.get(book.id) ?? [],
+    }))
+    const base = {
+      id: order.id,
+      order_number: order.order_number,
+      status: order.status,
+      contact_info: order.contact_info,
+      delivery_method: order.delivery_method,
+      delivery_address: order.delivery_address,
+      subtotal: order.subtotal,
+      subtotal_display: formatMoney(money(order.subtotal), currency),
+      discount: order.discount,
+      discount_display: formatMoney(money(order.discount), currency),
+      total: order.total,
+      total_display: formatMoney(money(order.total), currency),
+      payment_status: order.payment_status,
+      paid_amount: order.paid_amount,
+      paid_amount_display: formatMoney(money(order.paid_amount), currency),
+      payment_method: order.payment_method,
+      paid_at: order.paid_at,
+      quote_valid_until: order.quote_valid_until,
+      quote_expired:
+        ['quoted', 'file_pending', 'file_approved'].includes(order.status) &&
+        new Date().toISOString() > order.quote_valid_until,
+      created_at: order.created_at,
+      confirmed_at: order.confirmed_at,
+      due_date: order.due_date,
+      completed_at: order.completed_at,
+      notes: order.notes,
+      is_guest: order.customer_id === GUEST_SENTINEL_ID,
+      items: items.map((i) => itemDto(i, currency, opts)),
+      books: books.map((b) => bookDto(b, currency, opts)),
+    }
+    if (opts.includeToken) Object.assign(base, { access_token: order.access_token })
+    if (opts.admin) {
+      const customer =
+        order.customer_id === GUEST_SENTINEL_ID
+          ? { id: 'guest', name: order.guest_name ?? '访客', email: order.guest_email ?? '', role: 'guest' }
+          : userMap!.get(order.customer_id)
+      Object.assign(base, { is_internal: order.is_internal !== 0, customer })
+      Object.assign(base, {
+        payments: (paymentsByOrder!.get(order.id) ?? []).map((p) => paymentDto(p, currency)),
+      })
+      const refundDue = order.status === 'cancelled' ? order.paid_amount : 0
+      Object.assign(base, {
+        refund_due: refundDue,
+        refund_due_display: formatMoney(money(refundDue), currency),
+      })
+    }
+    return base
+  })
+}
+
 function paymentDto(p: PaymentRow, currency: Currency) {
   return {
     id: p.id,
@@ -618,8 +766,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
            ORDER BY created_at DESC LIMIT 500`,
         )
         .all(...params) as OrderRow[]
-      // owner 看自己的 token、admin 看全部——两类调用方都有资格拿 token
-      return rows.map((o) => orderDto(db, o, currency, { admin, includeToken: true }))
+      return batchOrderDtos(db, rows, currency, { admin, includeToken: true })
     },
   )
 

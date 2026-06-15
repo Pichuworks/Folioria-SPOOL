@@ -243,7 +243,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       }
       const who = identifier ?? email
       if (!who) return reply.status(422).send({ error: 'identifier_required' })
-      const user = verifyLogin(db, who, password)
+      const user = await verifyLogin(db, who, password)
       if (!user) return reply.status(401).send({ error: 'invalid_credentials' })
       const token = createSession(db, user.id)
       void reply.setCookie(SESSION_COOKIE, token, {
@@ -302,7 +302,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         db.prepare(
           `INSERT INTO users (id, email, username, password_hash, name, role, contact_info, created_at)
            VALUES (?, ?, ?, ?, ?, 'customer', ?, ?)`,
-        ).run(id, b.email, b.username ?? null, bcrypt.hashSync(b.password, 12), b.name, b.contact_info ?? null, new Date().toISOString())
+        ).run(id, b.email, b.username ?? null, await bcrypt.hash(b.password, 12), b.name, b.contact_info ?? null, new Date().toISOString())
       } catch (err) {
         // 部分唯一索引冲突报「index 'uniq_users_username'」，列约束报「users.email」；以 username 子串判别
         if (err instanceof Error && err.message.includes('username')) {
@@ -397,7 +397,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
     },
     async (req, reply) => {
       const { token, new_password } = req.body as { token: string; new_password: string }
-      if (!resetPassword(db, token, new_password)) {
+      if (!(await resetPassword(db, token, new_password))) {
         return reply.status(404).send({ error: 'invalid_or_expired_token' })
       }
       return reply.status(204).send()
@@ -572,7 +572,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         new_password: string
       }
       const token = req.cookies[SESSION_COOKIE]
-      if (!changePassword(db, req.user.id, old_password, new_password, token)) {
+      if (!(await changePassword(db, req.user.id, old_password, new_password, token))) {
         return reply.status(401).send({ error: 'invalid_credentials' })
       }
       return reply.status(204).send()
@@ -645,7 +645,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         db.prepare(
           `INSERT INTO users (id, email, username, password_hash, name, role, must_change_password, email_verified_at, created_at)
            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-        ).run(id, body.email, body.username ?? null, bcrypt.hashSync(body.password, 12), body.name, body.role, new Date().toISOString(), new Date().toISOString())
+        ).run(id, body.email, body.username ?? null, await bcrypt.hash(body.password, 12), body.name, body.role, new Date().toISOString(), new Date().toISOString())
       } catch (err) {
         // 部分唯一索引冲突报「index 'uniq_users_username'」，列约束报「users.email」；以 username 子串判别
         if (err instanceof Error && err.message.includes('username')) {

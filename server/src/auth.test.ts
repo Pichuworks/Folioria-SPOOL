@@ -122,14 +122,14 @@ describe('S6 cookie secure 配置化', () => {
 })
 
 describe('S2 登录恒时比对', () => {
-  it('未知邮箱与已知邮箱同样执行一次 bcrypt 比对（消除计时侧信道）', () => {
-    const spy = vi.spyOn(bcrypt, 'compareSync')
+  it('未知邮箱与已知邮箱同样执行一次 bcrypt 比对（消除计时侧信道）', async () => {
+    const spy = vi.spyOn(bcrypt, 'compare')
     try {
-      expect(verifyLogin(db, 'ghost@nowhere.jp', 'whatever')).toBeNull()
+      expect(await verifyLogin(db, 'ghost@nowhere.jp', 'whatever')).toBeNull()
       expect(spy).toHaveBeenCalledTimes(1)
 
       spy.mockClear()
-      expect(verifyLogin(db, ADMIN.email, 'wrong-password')).toBeNull()
+      expect(await verifyLogin(db, ADMIN.email, 'wrong-password')).toBeNull()
       expect(spy).toHaveBeenCalledTimes(1)
     } finally {
       spy.mockRestore()
