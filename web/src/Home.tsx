@@ -108,10 +108,10 @@ export default function Home({ me }: { me: MeDto | null }) {
           </span>
           <div className="max-w-[560px] py-10 md:absolute md:bottom-11 md:left-0 md:py-0">
             <div className="mb-3.5 font-mono text-[12.5px] tracking-[.3em] text-wine-ink">MAPLESCAPE FOLIORIA · 枫光映刻</div>
-            <h1 className="text-[56px] font-medium leading-[1.15] tracking-[.02em]">
+            <h1 className="text-[38px] font-medium leading-[1.15] tracking-[.02em] md:text-[56px]">
               这里是
               <br />
-              <span className="ink-press tracking-[.14em]">枫光映刻</span>。
+              <span className="ink-press whitespace-nowrap tracking-[.14em]">枫光映刻</span>
             </h1>
             <p className="mt-4 text-[16px] leading-[1.85] tracking-[.02em] text-dim">
               我们负责把创作纸质化。从一本同人志、一张无料、一套周边，到展会现场的每一份物料，枫光映刻会参与它们从屏幕到纸面的全过程。
