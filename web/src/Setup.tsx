@@ -46,7 +46,7 @@ export default function Setup({ onDone }: { onDone: (me: MeDto) => void }) {
         欢迎使用 S.P.O.O.L.。请设定实例基准货币并创建首位管理员。基准货币在产生业务数据后将锁定（换币种 = 新实例）。
       </p>
       <form onSubmit={(e) => void submit(e)} className="max-w-xl space-y-4 border border-ink bg-card p-6">
-        <Field label="基准货币（锁定后不可改）">
+        <Field label="基准货币">
           <select className={specInput} value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)}>
             <option value="JPY">JPY · 日元 ¥</option>
             <option value="CNY">CNY · 人民币 ￥</option>
@@ -59,7 +59,7 @@ export default function Setup({ onDone }: { onDone: (me: MeDto) => void }) {
         <Field label="管理员称呼">
           <input required maxLength={80} className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="管理员密码（≥8 位）">
+        <Field label="管理员密码">
           <input
             type="password"
             required

@@ -134,12 +134,10 @@ export default function BookConfigurator({ onAdd }: { onAdd: (line: BookCartLine
   if (error) return <p className="text-[14px] text-wine-ink">{error}</p>
   if (!data) return <p className="text-[13px] text-dim">册子目录加载中…</p>
   if (data.books.length === 0)
-    return <p className="text-[13px] leading-[1.85] text-dim">暂无册子成品——请联系工坊配置，或选「单页」自助下单。</p>
+    return <p className="text-[13px] text-dim">暂无册子成品。</p>
 
   return (
     <div className="space-y-5">
-      <div className="font-mono text-[10px] tracking-[.14em] text-dim">做哪种册子</div>
-
       <Field label="成品">
         <select
           className={specInput}

@@ -338,7 +338,7 @@ export default function Quote() {
     }`
 
   return (
-    <MagSec tag="下单" title="自助报价 · 在线下单" note="选内容 → 清单 → 下单">
+    <MagSec tag="下单" title="自助报价 · 在线下单">
       {me && <VerifyBanner me={me} />}
       <div className="mt-2 grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
         {/* 左栏：单页属性配置器 / 册子配置器 */}
@@ -355,8 +355,6 @@ export default function Quote() {
             <BookConfigurator onAdd={(line) => setCart((prev) => [...prev, line])} />
           ) : (
           <div className="space-y-5">
-          <div className="font-mono text-[10px] tracking-[.14em] text-dim">想打什么</div>
-
           <Field label="类别">
             <div className="flex gap-2">
               {hasBw && (
@@ -504,14 +502,12 @@ export default function Quote() {
 
         {/* 右栏：清单与提交 */}
         <div className="flex flex-col p-7">
-          <div className="font-mono text-[10px] tracking-[.14em] text-dim">ORDER LINES · {cart.length}</div>
+          <div className="font-mono text-[10px] tracking-[.14em] text-dim">清单 · {cart.length}</div>
           {reorderNotice && (
             <p className="mt-2 border border-warn bg-warn/10 px-3 py-2 text-[12px] text-warn">{reorderNotice}</p>
           )}
           {cart.length === 0 ? (
-            <p className="flex-1 py-12 text-[13px] leading-[1.85] text-dim">
-              清单为空——左侧选定内容后「加入订单清单」，可多行混排不同类别与纸张。
-            </p>
+            <p className="flex-1 py-12 text-[13px] text-dim">清单为空</p>
           ) : (
             <div className="mt-3 flex-1">
               {cart.map((line, idx) => (
@@ -533,21 +529,13 @@ export default function Quote() {
                   </button>
                 </div>
               ))}
-              <p className="mt-2 text-right font-mono text-[10px] tracking-[.12em] text-dim">
-                单行金额为预估快照 · 合计以提交后的订单为准
-              </p>
             </div>
           )}
 
           <div className="mt-6 space-y-4 border-t-2 border-ink pt-5">
             {!me && guestOpen && (
               <>
-                <p className="text-[11.5px] leading-[1.7] text-dim">
-                  可免登录下单——提交后凭订单链接查看进度（请妥善保存）。也可
-                  <a href="#/login" className="text-wine-ink hover:opacity-70"> 登录/注册 </a>
-                  以便在「我的订单」统一管理。
-                </p>
-                <Field label="邮箱（接收订单状态通知）">
+                <Field label="邮箱">
                   <input type="email" className={specInput} value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} />
                 </Field>
                 <Field label="称呼">
@@ -576,10 +564,10 @@ export default function Quote() {
                 />
               </Field>
             )}
-            <Field label="联系方式（取件/寄送沟通用，可留空）">
+            <Field label="联系方式">
               <input className={specInput} maxLength={200} value={contact} onChange={(e) => setContact(e.target.value)} />
             </Field>
-            <Field label="备注（可留空）">
+            <Field label="备注">
               <input className={specInput} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </Field>
             {submitError && <p className="text-[13px] text-wine-ink">{submitError}</p>}
@@ -591,9 +579,6 @@ export default function Quote() {
             >
               {submitting ? '提交中…' : me ? '提交订单 →' : guestOpen ? '以访客提交订单 →' : '登录并提交订单 →'}
             </button>
-            <p className="text-[11px] leading-[1.8] text-dim">
-              提交后单价定格（改价不影响已建订单）；随后逐行上传印刷文件，审稿通过并确认后排产。
-            </p>
           </div>
         </div>
       </div>

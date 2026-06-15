@@ -44,11 +44,11 @@ function NotifyPrefsSection() {
 
   if (!prefs) return null
   return (
-    <MagSec tag="04" title="通知偏好" note="目前仅 EMAIL 渠道">
+    <MagSec tag="04" title="通知偏好">
       <form onSubmit={(e) => void save(e)} className="max-w-xl space-y-4 border border-ink bg-card p-6">
         <label className="flex items-center gap-2 text-[13px] text-ink">
           <input type="checkbox" checked={emailOn} onChange={(e) => setEmailOn(e.target.checked)} />
-          接收邮件通知（订单确认 / 待取件 / 审稿驳回等）
+          接收邮件通知
         </label>
         <Field label={`通知邮箱（留空 = 账号邮箱 ${prefs.account_email}）`}>
           <input
@@ -159,7 +159,7 @@ function AccountBody({ me, onUpdate }: { me: MeDto; onUpdate: (m: MeDto) => void
           <Field label="称呼">
             <input required maxLength={80} className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="联系方式（LINE / 电话等，可留空）">
+          <Field label="联系方式">
             <input maxLength={200} className={specInput} value={contact} onChange={(e) => setContact(e.target.value)} />
           </Field>
           <PillBtn full>保存资料</PillBtn>
@@ -172,7 +172,7 @@ function AccountBody({ me, onUpdate }: { me: MeDto; onUpdate: (m: MeDto) => void
           <Field label="当前密码">
             <input type="password" required className={specInput} value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
           </Field>
-          <Field label="新密码（≥8 位）">
+          <Field label="新密码">
             <input type="password" required minLength={8} className={specInput} value={newPw} onChange={(e) => setNewPw(e.target.value)} />
           </Field>
           <PillBtn full>修改密码</PillBtn>

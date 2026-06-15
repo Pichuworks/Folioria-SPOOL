@@ -89,7 +89,6 @@ export default function PriceList() {
       </div>
       <div className="mt-5 flex items-center gap-4">
         <PillLink href="#/quote" kind="primary">按此价目在线下单 →</PillLink>
-        <span className="font-mono text-[10.5px] tracking-[.12em] text-dim">价格由成本模型实时推导 · 下单时单价定格</span>
       </div>
     </MagSec>
   )

@@ -101,20 +101,20 @@ export default function Home({ me }: { me: MeDto | null }) {
             aria-hidden="true"
             className="pointer-events-none absolute -top-[72px] right-20 hidden select-none text-[400px] font-medium leading-none text-transparent opacity-45 [-webkit-text-stroke:1.5px_var(--color-wine)] md:block"
           >
-            印
+            映
           </span>
           <span className="absolute bottom-9 right-7 top-9 hidden border-l border-line pl-4 text-[15px] tracking-[.42em] text-ink [writing-mode:vertical-rl] lg:block">
-            把作品落在纸上，颜色与层次都经得起细看。
+            枫林叶下，光影映成。文作入纸，时光刻上。
           </span>
           <div className="max-w-[560px] py-10 md:absolute md:bottom-11 md:left-0 md:py-0">
-            <div className="mb-3.5 font-mono text-[12.5px] tracking-[.3em] text-wine-ink">FOLIORIA · GICLÉE & DIGITAL PRESS</div>
+            <div className="mb-3.5 font-mono text-[12.5px] tracking-[.3em] text-wine-ink">MAPLESCAPE FOLIORIA · 枫光映刻</div>
             <h1 className="text-[56px] font-medium leading-[1.15] tracking-[.02em]">
-              数字时代的
+              这里是
               <br />
-              精细印刷
+              枫光映刻。
             </h1>
             <p className="mt-4 text-[16px] leading-[1.85] tracking-[.02em] text-dim">
-              从单张微喷到小批量图文，价格由成本模型实时推导——配置即报价，不必询价等待。
+              我们负责把创作纸质化。从一本同人志、一张无料、一套周边，到展会现场的每一份物料，枫光映刻会参与它们从屏幕到纸面的全过程。
             </p>
             <div className="mt-6 flex items-center gap-3">
               <PillLink href="#/quote" kind="primary">自助报价 · 在线下单 →</PillLink>
@@ -154,11 +154,6 @@ export default function Home({ me }: { me: MeDto | null }) {
                 </div>
               ))}
             </div>
-            <div className="mt-6 max-w-[300px] border-t border-ink pt-2">
-              <p className="text-[10.5px] leading-[1.9] text-dim">
-                ※ — 纸张口径与库存以报价页实时数据为准。
-              </p>
-            </div>
           </MagSec>
 
           <MagSec tag="03" title="价格" id="price">
@@ -181,7 +176,6 @@ export default function Home({ me }: { me: MeDto | null }) {
             <div className="mt-6 flex items-center gap-4">
               <PillLink href="#/quote" kind="primary">进入自助报价 →</PillLink>
               <PillLink href="#/price-list" kind="ghost">完整价目表 →</PillLink>
-              <span className="font-mono text-[10.5px] tracking-[.12em] text-dim">价格由成本模型实时推导 · 配置即报价 · 下单时单价定格</span>
             </div>
           </MagSec>
 

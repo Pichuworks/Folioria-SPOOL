@@ -47,7 +47,6 @@ function OrdersList() {
               <span className="font-mono text-[13.5px] text-wine-ink">{o.total_display}</span>
             </a>
           ))}
-          <p className="mt-3 text-[11.5px] text-dim">点击订单进入详情：上传文件、查看审稿意见、取消（确认前）。</p>
         </div>
       )}
     </MagSec>

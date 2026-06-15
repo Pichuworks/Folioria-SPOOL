@@ -19,8 +19,8 @@ export const Masthead = ({ nav }: { nav: ReactNode }) => (
     <a href="#/" className="flex items-end gap-5 text-ink">
       <span className="text-[44px] font-bold leading-none tracking-[.04em]">Folioria</span>
       <span className="pb-1">
-        <span className="block text-[15px] font-medium tracking-[.08em]">印刷工坊</span>
-        <span className="block font-garamond text-[13px] italic text-dim">Fine Print Atelier</span>
+        <span className="block text-[15px] font-medium tracking-[.08em]">枫光映刻</span>
+        <span className="block font-garamond text-[13px] italic text-dim">Maplescape</span>
       </span>
     </a>
     <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-1 text-[13px]">{nav}</nav>
