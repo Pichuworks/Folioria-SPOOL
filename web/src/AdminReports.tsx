@@ -43,6 +43,15 @@ interface ConsumptionDto {
   }>
 }
 
+interface SnapshotDto {
+  month: string
+  jobs_done: number
+  ext_revenue_display: string
+  ext_profit_display: string
+  int_cost_display: string
+  generated_at: string
+}
+
 /** Q2 CSV 导出链接：GET 带 cookie，浏览器直接下载（content-disposition attachment） */
 function ExportLink({ href }: { href: string }) {
   return (
@@ -60,6 +69,11 @@ function ReportsBody() {
   const [monthly, setMonthly] = useState<MonthlyDto | null>(null)
   const [usage, setUsage] = useState<UsageDto | null>(null)
   const [consumption, setConsumption] = useState<ConsumptionDto | null>(null)
+  const [snapshots, setSnapshots] = useState<SnapshotDto[] | null>(null)
+
+  useEffect(() => {
+    void send<SnapshotDto[]>('GET', '/api/reports/snapshots').then((r) => r.ok && setSnapshots(r.data))
+  }, [])
 
   const reload = useCallback((m: string) => {
     const qs = `?month=${m}`
@@ -158,6 +172,21 @@ function ReportsBody() {
           <ExportLink href={`/api/reports/paper-consumption/export?month=${month}`} />
         </div>
       </MagSec>
+
+      {snapshots && snapshots.length > 0 && (
+        <MagSec tag="04" title="历史快照" note="MONTHLY ARCHIVE">
+          {snapshots.map((s) => (
+            <div key={s.month} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[8px]">
+              <span className="min-w-16 font-mono text-[13px] font-medium text-ink">{s.month}</span>
+              <span className="text-[11.5px] text-dim">{s.jobs_done} 单</span>
+              <span className="text-[12px] text-dim">营收 {s.ext_revenue_display}</span>
+              <Leader />
+              <span className="font-mono text-[12px] text-wine-ink">毛利 {s.ext_profit_display}</span>
+              <span className="font-mono text-[10px] tracking-[.1em] text-dim">{s.generated_at.slice(0, 10)} 归档</span>
+            </div>
+          ))}
+        </MagSec>
+      )}
     </div>
   )
 }

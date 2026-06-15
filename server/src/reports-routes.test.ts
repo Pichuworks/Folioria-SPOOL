@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildApp, SESSION_COOKIE, type App } from './app.js'
 import { type DB } from './db.js'
 import { importSeed } from './seed.js'
+import { listSnapshots, snapshotMonth } from './reports-routes.js'
 import { createTestUser, makeTestDb, withSystemConfig } from './test-helpers.js'
 
 let db: DB
@@ -148,6 +149,60 @@ describe('F2 monthly（内部消耗单列）', () => {
     expect(body.jobs_done).toBe(0)
     expect(body.external.revenue).toBe(0)
     expect(body.writeoff).toMatchObject({ jobs: 0, cost: 0 })
+  })
+})
+
+describe('Q3 月度报表自动快照', () => {
+  it('snapshotMonth 落账：内外分列整数 + payload；列表端点倒序', async () => {
+    insertDoneJob({ quoted: 500, cost: 200, profit: 300, pages: 100, completedAt: '2026-06-05T10:00:00Z' })
+    insertDoneJob({ quoted: null, cost: 80, pages: 40, completedAt: '2026-06-07T10:00:00Z' })
+
+    const snap = snapshotMonth(db, '2026-06', '2026-07-01T05:00:00Z')
+    expect(snap).toMatchObject({ month: '2026-06', ext_revenue: 500, ext_cost: 200, ext_profit: 300, int_cost: 80, jobs_done: 2, pages: 140 })
+
+    const rows = db.prepare("SELECT * FROM report_snapshots WHERE month = '2026-06'").all() as Array<{
+      ext_revenue: number
+      payload: string
+      generated_at: string
+    }>
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.ext_revenue).toBe(500)
+    expect(rows[0]!.generated_at).toBe('2026-07-01T05:00:00Z')
+    // payload 是完整月报 JSON（含内外分列 display）
+    const payload = JSON.parse(rows[0]!.payload) as { external: { revenue: number; revenue_display: string } }
+    expect(payload.external.revenue).toBe(500)
+    expect(payload.external.revenue_display).toBe('¥500')
+
+    const list = listSnapshots(db)
+    expect(list[0]!.month).toBe('2026-06')
+  })
+
+  it('幂等 upsert：同月重算覆盖，不产生重复行', async () => {
+    insertDoneJob({ quoted: 500, cost: 200, profit: 300, pages: 100, completedAt: '2026-06-05T10:00:00Z' })
+    snapshotMonth(db, '2026-06', '2026-07-01T05:00:00Z')
+    // 又完成一单后重算
+    insertDoneJob({ quoted: 100, cost: 40, profit: 60, pages: 10, completedAt: '2026-06-09T10:00:00Z' })
+    const snap2 = snapshotMonth(db, '2026-06', '2026-07-02T05:00:00Z')
+
+    const count = (db.prepare("SELECT COUNT(*) AS n FROM report_snapshots WHERE month = '2026-06'").get() as { n: number }).n
+    expect(count).toBe(1) // 仍一行
+    expect(snap2.ext_revenue).toBe(600) // 覆盖为重算值
+    expect(snap2.jobs_done).toBe(2)
+    const gen = (db.prepare("SELECT generated_at FROM report_snapshots WHERE month = '2026-06'").get() as { generated_at: string }).generated_at
+    expect(gen).toBe('2026-07-02T05:00:00Z')
+  })
+
+  it('GET /api/reports/snapshots：admin 列表带 display；member 403 / guest 401', async () => {
+    snapshotMonth(db, '2026-05', '2026-06-01T05:00:00Z')
+    expect((await app.inject({ method: 'GET', url: '/api/reports/snapshots' })).statusCode).toBe(401)
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/reports/snapshots', headers: { cookie: memberCookie } })).statusCode,
+    ).toBe(403)
+    const res = await get('/api/reports/snapshots')
+    expect(res.statusCode).toBe(200)
+    const rows = res.json() as Array<{ month: string; ext_revenue_display: string }>
+    expect(rows.find((r) => r.month === '2026-05')).toBeTruthy()
+    expect(rows[0]).toHaveProperty('ext_revenue_display')
   })
 })
 

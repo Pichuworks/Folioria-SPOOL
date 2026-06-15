@@ -1,0 +1,10 @@
+[Unit]
+Description=Monthly S.P.O.O.L. report snapshot timer (1st of month, archives previous month)
+
+[Timer]
+OnCalendar=*-*-01 05:00:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

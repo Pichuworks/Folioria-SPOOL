@@ -132,6 +132,54 @@ export function paperConsumption(db: DB, month: string): { month: string; rows: 
   return { month, rows }
 }
 
+// ---------- D34 月度快照（CLI/timer 月初归档上月；按 month 幂等 upsert） ----------
+
+export interface SnapshotRow {
+  month: string
+  ext_revenue: number
+  ext_cost: number
+  ext_profit: number
+  int_cost: number
+  jobs_done: number
+  pages: number
+  generated_at: string
+}
+
+/** 计算 month 月度报表并幂等写入 report_snapshots（重算覆盖同月）。generatedAt 由调用方传入（CLI/测试可控） */
+export function snapshotMonth(db: DB, month: string, generatedAt: string): SnapshotRow {
+  const r = monthlyReport(db, month)
+  const row = {
+    month,
+    ext_revenue: r.external.revenue,
+    ext_cost: r.external.cost,
+    ext_profit: r.external.profit,
+    int_cost: r.internal.cost,
+    jobs_done: r.jobs_done,
+    pages: r.pages,
+    payload: JSON.stringify(r),
+    generated_at: generatedAt,
+  }
+  db.prepare(
+    `INSERT INTO report_snapshots (month, ext_revenue, ext_cost, ext_profit, int_cost, jobs_done, pages, payload, generated_at)
+     VALUES (@month, @ext_revenue, @ext_cost, @ext_profit, @int_cost, @jobs_done, @pages, @payload, @generated_at)
+     ON CONFLICT(month) DO UPDATE SET
+       ext_revenue = excluded.ext_revenue, ext_cost = excluded.ext_cost, ext_profit = excluded.ext_profit,
+       int_cost = excluded.int_cost, jobs_done = excluded.jobs_done, pages = excluded.pages,
+       payload = excluded.payload, generated_at = excluded.generated_at`,
+  ).run(row)
+  const { payload: _payload, ...rest } = row
+  return rest
+}
+
+export function listSnapshots(db: DB, limit = 36): SnapshotRow[] {
+  return db
+    .prepare(
+      `SELECT month, ext_revenue, ext_cost, ext_profit, int_cost, jobs_done, pages, generated_at
+       FROM report_snapshots ORDER BY month DESC LIMIT ?`,
+    )
+    .all(limit) as SnapshotRow[]
+}
+
 // ---------- CSV 导出（金额输出基准货币最小单位整数，不经 formatMoney 除法） ----------
 
 const csvCell = (v: string | number): string => {
@@ -219,4 +267,16 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
       return sendCsv(reply, `paper-consumption-${month}.csv`, csv)
     },
   )
+
+  // D34 历史快照列表（admin）：月初 timer 归档，按月倒序
+  app.get('/api/reports/snapshots', { preHandler: requireAdmin }, async () => {
+    const currency = baseCurrency(db)
+    return listSnapshots(db).map((s) => ({
+      ...s,
+      ext_revenue_display: formatMoney(money(s.ext_revenue), currency),
+      ext_cost_display: formatMoney(money(s.ext_cost), currency),
+      ext_profit_display: formatMoney(money(s.ext_profit), currency),
+      int_cost_display: formatMoney(money(s.int_cost), currency),
+    }))
+  })
 }

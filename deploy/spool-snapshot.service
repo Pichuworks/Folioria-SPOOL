@@ -1,0 +1,8 @@
+[Unit]
+Description=S.P.O.O.L. monthly report snapshot (archive previous month)
+
+[Service]
+Type=oneshot
+Environment=PATH=/home/neko/.local/node24/bin:/usr/bin:/bin
+WorkingDirectory=/home/neko/code/folioria-spool/server
+ExecStart=/home/neko/code/folioria-spool/server/node_modules/.bin/tsx src/cli.ts snapshot-month --db /home/neko/.local/share/spool/folioria.db

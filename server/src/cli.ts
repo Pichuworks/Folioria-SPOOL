@@ -4,7 +4,13 @@ import { parseArgs } from 'node:util'
 import { backupDb, verifyBackup } from './backup.js'
 import { migrate, openDb } from './db.js'
 import { spoolInit } from './init.js'
+import { snapshotMonth } from './reports-routes.js'
 import { importSeed } from './seed.js'
+
+/** 上一个自然月 'YYYY-MM'（月初 timer 跑当天，归档上月） */
+function prevMonth(now: Date): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7)
+}
 
 const USAGE = `spool <command>
 
@@ -14,6 +20,7 @@ commands:
   seed           导入 data/seed.json: --db <file>
   backup         VACUUM INTO 一致性快照: --db <file> --dest <dir> [--keep 30]（禁止直接 cp）
   verify-backup  恢复演练: --file <backup.db>（integrity / FK / user_version）
+  snapshot-month 月度报表归档: --db <file> [--month YYYY-MM]（缺省 = 上月; 幂等 upsert）
 `
 
 async function main(): Promise<void> {
@@ -86,6 +93,20 @@ async function main(): Promise<void> {
     const report = verifyBackup(values.file)
     console.log(JSON.stringify(report, null, 2))
     if (!report.ok) process.exitCode = 1
+  } else if (cmd === 'snapshot-month') {
+    const { values } = parseArgs({
+      args: rest,
+      options: { db: { type: 'string', default: 'folioria.db' }, month: { type: 'string' } },
+    })
+    const month = values.month ?? prevMonth(new Date())
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('spool snapshot-month: --month 须为 YYYY-MM')
+    const db = openDb(values.db)
+    migrate(db)
+    const snap = snapshotMonth(db, month, new Date().toISOString())
+    db.close()
+    console.log(
+      `snapshot ${month}: 作业 ${snap.jobs_done} · 外部营收 ${snap.ext_revenue} · 外部毛利 ${snap.ext_profit} · 内部成本 ${snap.int_cost}`,
+    )
   } else {
     console.log(USAGE)
     process.exitCode = cmd ? 1 : 0
