@@ -91,6 +91,11 @@ const ReviewRow = memo(function ReviewRow({
         <Leader />
         <span className="font-mono text-[13px] text-wine-ink">{item.line_total_display}</span>
       </div>
+      {item.finishings && item.finishings.length > 0 && (
+        <div className="mt-1 text-[12px] text-dim">
+          工艺：{item.finishings.map((f) => `${f.name}(${f.contribution_display})`).join('、')}
+        </div>
+      )}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px]">
         {item.has_file ? (
           <a className="text-dim underline hover:text-ink" href={orderItemFileUrl(order.id, item.id)}>
@@ -222,7 +227,7 @@ const BookComponentReviewRow = memo(function BookComponentReviewRow({
 function BookReviewBlock({ order, books, onUpdated }: { order: OrderDto; books: OrderBookDto[]; onUpdated: (o: OrderDto) => void }) {
   return (
     <div className="mt-4">
-      <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">审稿 · 册子 {books.length}</div>
+      <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">审稿 · 书册 {books.length}</div>
       {books.map((b) => (
         <div key={b.id} className="mb-2 border-b border-line pb-1 last:border-b-0">
           <div className="text-[13px] font-medium text-ink">

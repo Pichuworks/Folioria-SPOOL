@@ -16,9 +16,11 @@ import {
   getOrder,
   getOrderBooks,
   getOrderItems,
+  getOrderItemFinishings,
   GUEST_SENTINEL_ID,
   syncFileState,
   type OrderBook,
+  type OrderItemFinishingRow,
   type OrderItemRow,
   type OrderRow,
 } from './orders.js'
@@ -47,6 +49,20 @@ export const PRECHECK_SCHEMA = {
   },
 }
 
+const ORDER_ITEM_FINISHING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    finishing_id: { type: 'integer' },
+    name: { type: 'string' },
+    pricing: { type: 'string' },
+    price_c: { type: 'integer' },
+    price_display: { type: 'string' },
+    contribution_c: { type: 'integer' },
+    contribution_display: { type: 'string' },
+  },
+}
+
 export const ORDER_ITEM_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -70,6 +86,7 @@ export const ORDER_ITEM_SCHEMA = {
     file_status: { type: 'string' },
     file_note: { type: ['string', 'null'] },
     file_precheck: PRECHECK_SCHEMA,
+    finishings: { type: 'array', items: ORDER_ITEM_FINISHING_SCHEMA },
     job_id: { type: ['string', 'null'] }, // admin 视图专用
     file_kind: { type: 'string' }, // admin 视图专用
   },
@@ -218,6 +235,7 @@ const ITEM_LINE_SCHEMA = {
     paper_id: { type: 'integer', minimum: 1 },
     size_key: { type: 'string', minLength: 1, maxLength: 20 },
     quantity: { type: 'integer', minimum: 1, maximum: 1000000 },
+    finishing_ids: { type: 'array', maxItems: 20, items: { type: 'integer', minimum: 1 } },
   },
 }
 
@@ -275,7 +293,7 @@ function parsePrecheck(raw: string | null): unknown {
   }
 }
 
-function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
+function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions, finishings: OrderItemFinishingRow[] = []) {
   return {
     id: item.id,
     mode_id: item.mode_id,
@@ -295,6 +313,15 @@ function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
     file_status: item.file_status,
     file_note: item.file_note,
     file_precheck: parsePrecheck(item.file_precheck),
+    finishings: finishings.map((f) => ({
+      finishing_id: f.finishing_id,
+      name: f.name,
+      pricing: f.pricing,
+      price_c: f.price_c,
+      price_display: formatMoneyC(moneyC(f.price_c), currency),
+      contribution_c: f.contribution_c,
+      contribution_display: formatMoneyC(moneyC(f.contribution_c), currency),
+    })),
     ...(opts.admin
       ? { mode_name: item.mode_name, job_id: item.job_id, file_kind: item.file_url?.split('.').pop()?.toLowerCase() }
       : {}),
@@ -346,6 +373,13 @@ function bookDto(book: OrderBook, currency: Currency, opts: DtoOptions) {
 export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoOptions) {
   const items = getOrderItems(db, order.id)
   const books = getOrderBooks(db, order.id)
+  const itemFins = getOrderItemFinishings(db, order.id)
+  const finsByItem = new Map<string, OrderItemFinishingRow[]>()
+  for (const f of itemFins) {
+    let arr = finsByItem.get(f.order_item_id)
+    if (!arr) { arr = []; finsByItem.set(f.order_item_id, arr) }
+    arr.push(f)
+  }
   const base = {
     id: order.id,
     order_number: order.order_number,
@@ -375,7 +409,7 @@ export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoO
     completed_at: order.completed_at,
     notes: order.notes,
     is_guest: order.customer_id === GUEST_SENTINEL_ID,
-    items: items.map((i) => itemDto(i, currency, opts)),
+    items: items.map((i) => itemDto(i, currency, opts, finsByItem.get(i.id) ?? [])),
     books: books.map((b) => bookDto(b, currency, opts)),
   }
   if (opts.includeToken) Object.assign(base, { access_token: order.access_token })
@@ -425,6 +459,22 @@ function batchOrderDtos(db: DB, orders: OrderRow[], currency: Currency, opts: Dt
     let arr = itemsByOrder.get(it.order_id)
     if (!arr) { arr = []; itemsByOrder.set(it.order_id, arr) }
     arr.push(it)
+  }
+
+  const allItemFins = db
+    .prepare(
+      `SELECT oif.*
+       FROM order_item_finishings oif
+       JOIN order_items oi ON oi.id = oif.order_item_id
+       WHERE oi.order_id IN (${ph})
+       ORDER BY oif.rowid`,
+    )
+    .all(...ids) as OrderItemFinishingRow[]
+  const finsByItem = new Map<string, OrderItemFinishingRow[]>()
+  for (const f of allItemFins) {
+    let arr = finsByItem.get(f.order_item_id)
+    if (!arr) { arr = []; finsByItem.set(f.order_item_id, arr) }
+    arr.push(f)
   }
 
   const allBooks = db
@@ -527,7 +577,7 @@ function batchOrderDtos(db: DB, orders: OrderRow[], currency: Currency, opts: Dt
       completed_at: order.completed_at,
       notes: order.notes,
       is_guest: order.customer_id === GUEST_SENTINEL_ID,
-      items: items.map((i) => itemDto(i, currency, opts)),
+      items: items.map((i) => itemDto(i, currency, opts, finsByItem.get(i.id) ?? [])),
       books: books.map((b) => bookDto(b, currency, opts)),
     }
     if (opts.includeToken) Object.assign(base, { access_token: order.access_token })

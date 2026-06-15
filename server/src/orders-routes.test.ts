@@ -82,6 +82,7 @@ interface OrderDto {
     file_note: string | null
     has_file: boolean
     job_id?: string | null
+    finishings: Array<{ finishing_id: number; name: string; contribution_c: number }>
   }>
 }
 
@@ -931,5 +932,56 @@ describe('D30 配送方式/地址', () => {
       payload: { items: [A4_ITEM], delivery_method: 'shipping' },
     })
     expect(res.statusCode).toBe(422)
+  })
+})
+
+describe('单张 item 工艺', () => {
+  async function createFinishing(): Promise<{ id: number; name: string }> {
+    const adminCookie = await login('staff@folioria.jp')
+    const res = await app.inject({
+      method: 'POST', url: '/api/pricing/finishings', headers: { cookie: adminCookie },
+      payload: { name: '骑马钉', pricing: 'per_book', price_c: 500 },
+    })
+    return res.json() as { id: number; name: string }
+  }
+
+  it('下单含 finishing_ids → unit_price_c 含工艺贡献，order_item_finishings 快照存在', async () => {
+    const fin = await createFinishing()
+    const cookie = await login('a@cust.example')
+
+    const baseQuote = (await app.inject({
+      method: 'POST', url: '/api/calculator/quote',
+      payload: { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 100 },
+    })).json() as { unit_price_c: number }
+
+    const withFinQuote = (await app.inject({
+      method: 'POST', url: '/api/calculator/quote',
+      payload: { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 100, finishing_ids: [fin.id] },
+    })).json() as { unit_price_c: number }
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/orders', headers: { cookie },
+      payload: { items: [{ mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 100, finishing_ids: [fin.id] }] },
+    })
+    expect(res.statusCode).toBe(201)
+    const order = res.json() as OrderDto
+    const item = order.items[0]!
+    expect(item.unit_price_c).toBe(withFinQuote.unit_price_c)
+    expect(item.unit_price_c).toBeGreaterThan(baseQuote.unit_price_c)
+    expect(item.finishings).toHaveLength(1)
+    expect(item.finishings[0]!.finishing_id).toBe(fin.id)
+    expect(item.finishings[0]!.name).toBe('骑马钉')
+    expect(item.finishings[0]!.contribution_c).toBeGreaterThan(0)
+  })
+
+  it('下单不含 finishing_ids → 向后兼容，finishings 为空数组', async () => {
+    const cookie = await login('a@cust.example')
+    const res = await app.inject({
+      method: 'POST', url: '/api/orders', headers: { cookie },
+      payload: { items: [A4_ITEM] },
+    })
+    expect(res.statusCode).toBe(201)
+    const order = res.json() as OrderDto
+    expect(order.items[0]!.finishings).toEqual([])
   })
 })

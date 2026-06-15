@@ -525,3 +525,49 @@ describe('③⑤ /api/calculator/products（客户产品视图）', () => {
     expect(pick(mem)!).toBeLessThanOrEqual(pick(pub)!)
   })
 })
+
+describe('工艺目录 & 带工艺报价', () => {
+  it('GET /api/calculator/finishings 返回目录（含 admin 创建的工艺）', async () => {
+    await app.inject({
+      method: 'POST', url: '/api/pricing/finishings', headers: { cookie: adminCookie },
+      payload: { name: '骑马钉', pricing: 'per_book', price_c: 500 },
+    })
+    const res = await app.inject({ method: 'GET', url: '/api/calculator/finishings' })
+    expect(res.statusCode).toBe(200)
+    const body = res.json() as { currency: { code: string }; finishings: Array<{ id: number; name: string }> }
+    expect(body.currency.code).toBe('JPY')
+    expect(body.finishings.length).toBeGreaterThan(0)
+    expect(body.finishings.some((f) => f.name === '骑马钉')).toBe(true)
+  })
+
+  it('quote with finishing_ids bakes contribution into unit_price_c', async () => {
+    const created = await app.inject({
+      method: 'POST', url: '/api/pricing/finishings', headers: { cookie: adminCookie },
+      payload: { name: '覆膜', pricing: 'per_book', price_c: 300 },
+    })
+    const finId = (created.json() as { id: number }).id
+
+    const baseQuote = (await app.inject({
+      method: 'POST', url: '/api/calculator/quote',
+      payload: { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 100 },
+    })).json() as { unit_price_c: number; base_unit_price_c: number; finishings: Array<{ finishing_id: number; contribution_c: number }> }
+
+    const withFin = (await app.inject({
+      method: 'POST', url: '/api/calculator/quote',
+      payload: { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 100, finishing_ids: [finId] },
+    })).json() as { unit_price_c: number; base_unit_price_c: number; finishings: Array<{ finishing_id: number; contribution_c: number }> }
+
+    expect(withFin.base_unit_price_c).toBe(baseQuote.unit_price_c)
+    expect(withFin.finishings).toHaveLength(1)
+    expect(withFin.finishings[0]!.finishing_id).toBe(finId)
+    expect(withFin.unit_price_c).toBe(baseQuote.unit_price_c + withFin.finishings[0]!.contribution_c)
+  })
+
+  it('quote without finishing_ids returns empty finishings array', async () => {
+    const res = (await app.inject({
+      method: 'POST', url: '/api/calculator/quote',
+      payload: { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 100 },
+    })).json() as { finishings: unknown[] }
+    expect(res.finishings).toEqual([])
+  })
+})

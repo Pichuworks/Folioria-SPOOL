@@ -226,7 +226,7 @@ function groupByBook(list: JobDto[]): RenderUnit[] {
       if (at != null) (units[at] as Extract<RenderUnit, { kind: 'book' }>).jobs.push(j)
       else {
         idx.set(j.order_book_id, units.length)
-        units.push({ kind: 'book', bookId: j.order_book_id, bookName: j.book_name ?? '册子', jobs: [j] })
+        units.push({ kind: 'book', bookId: j.order_book_id, bookName: j.book_name ?? '书册', jobs: [j] })
       }
     } else {
       units.push({ kind: 'job', job: j })

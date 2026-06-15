@@ -1,5 +1,6 @@
 import { type DB } from './db.js'
-import { moneyC, roundHalfUp, type MoneyC } from './money.js'
+import { finishingContribution, type FinishingPricing } from './finishing.js'
+import { moneyC, type MoneyC } from './money.js'
 import { listProducts, priceComponentSpec, type QuoteOptions } from './pricing.js'
 
 /** 带 statusCode 抛出，由 app 全局 errorHandler 映射为 { error: message } */
@@ -12,7 +13,7 @@ export class BookError extends Error {
 }
 
 export type ComponentRole = 'cover' | 'inner' | 'insert'
-export type FinishingPricing = 'per_book' | 'per_page' | 'per_area'
+export type { FinishingPricing } from './finishing.js'
 
 export interface BookComponentRow {
   id: number
@@ -136,12 +137,10 @@ export function priceBook(db: DB, input: BookLineInput, opts?: QuoteOptions): Bo
     )
     .all(input.book_id) as Array<{ id: number; name: string; pricing: FinishingPricing; price_c: number }>
 
+  const finCtx = { pages: pagesPerBook, area: areaPerBook }
   const finishings: PricedBookFinishing[] = []
   for (const f of fins) {
-    let contribution: number
-    if (f.pricing === 'per_book') contribution = f.price_c
-    else if (f.pricing === 'per_page') contribution = f.price_c * pagesPerBook
-    else contribution = roundHalfUp(f.price_c * areaPerBook)
+    const contribution = finishingContribution(f, finCtx) as number
     unit += contribution
     finishings.push({
       finishing_id: f.id,

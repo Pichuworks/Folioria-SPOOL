@@ -4,6 +4,7 @@ import {
   createOrder,
   fetchBookQuote,
   fetchBooks,
+  fetchFinishingCatalog,
   fetchMe,
   fetchProducts,
   fetchPublicConfig,
@@ -12,6 +13,7 @@ import {
   getProductsCache,
   getPublicConfigCache,
   takeReorder,
+  type FinishingCatalogItem,
   type MeDto,
   type ProductDto,
   type ProductsDto,
@@ -49,6 +51,7 @@ interface ItemCartLine {
   paper_id: number
   size_key: string
   quantity: number
+  finishing_ids: number[]
   label: string
   unit_display: string
   line_total_display: string
@@ -70,6 +73,8 @@ export default function Quote() {
   const [quantity, setQuantity] = useState(100)
   const [quote, setQuote] = useState<QuoteDto | null>(null)
   const [quoteState, setQuoteState] = useState<QuoteState>('idle')
+  const [finishingCatalog, setFinishingCatalog] = useState<FinishingCatalogItem[]>([])
+  const [selectedFinishings, setSelectedFinishings] = useState<Set<number>>(new Set())
   const [cart, setCart] = useState<CartLine[]>([])
   const [contact, setContact] = useState('')
   const [notes, setNotes] = useState('')
@@ -92,10 +97,11 @@ export default function Quote() {
       })
     fetchMe().then(setMe).catch(() => setMe(null))
     fetchPublicConfig().then((c) => setGuestOpen(c.guest_orders_open)).catch(() => {})
+    fetchFinishingCatalog().then((c) => c && setFinishingCatalog(c.finishings)).catch(() => {})
   }, [])
 
-  // C1/D32 一键再下单：消费缓冲的单页行 + 册子行，按现价重报后填入购物车；
-  // 册子行对照实时目录——成品或任一组件已归档则跳过并提示
+  // C1/D32 一键再下单：消费缓冲的单页行 + 书册行，按现价重报后填入购物车；
+  // 书册行对照实时目录——成品或任一组件已归档则跳过并提示
   useEffect(() => {
     const buf = takeReorder()
     if (!buf || (buf.items.length === 0 && buf.books.length === 0)) return
@@ -112,6 +118,7 @@ export default function Quote() {
             paper_id: it.paper_id,
             size_key: it.size_key,
             quantity: it.quantity,
+            finishing_ids: [],
             label: it.label,
             unit_display: q.unit_display,
             line_total_display: q.line_total_display,
@@ -189,6 +196,7 @@ export default function Quote() {
     return c.length === 1 ? (c[0] as ProductDto) : null
   }, [effCat, category, afterSize, techs, tech, duplexes, duplex])
 
+  const finishingIds = useMemo(() => [...selectedFinishings].sort(), [selectedFinishings])
   useEffect(() => {
     setQuote(null)
     if (!resolved || quantity < 1) {
@@ -197,7 +205,10 @@ export default function Quote() {
     }
     setQuoteState('loading')
     const ctl = new AbortController()
-    fetchQuote({ mode_id: resolved.mode_id, paper_id: resolved.paper_id, size_key: resolved.size_key, quantity })
+    fetchQuote({
+      mode_id: resolved.mode_id, paper_id: resolved.paper_id, size_key: resolved.size_key, quantity,
+      ...(finishingIds.length > 0 ? { finishing_ids: finishingIds } : {}),
+    })
       .then((q) => {
         if (ctl.signal.aborted) return
         setQuote(q)
@@ -207,7 +218,7 @@ export default function Quote() {
         if (!ctl.signal.aborted) setQuoteState('error')
       })
     return () => ctl.abort()
-  }, [resolved, quantity])
+  }, [resolved, quantity, finishingIds])
 
   const pickCategory = (c: 'bw' | 'color' | 'photo') => {
     setCategory(c)
@@ -231,6 +242,7 @@ export default function Quote() {
         paper_id: resolved.paper_id,
         size_key: resolved.size_key,
         quantity: quote.quantity,
+        finishing_ids: finishingIds,
         label,
         unit_display: quote.unit_display,
         line_total_display: quote.line_total_display,
@@ -241,7 +253,10 @@ export default function Quote() {
   const items = () =>
     cart
       .filter((l): l is ItemCartLine => l.kind === 'item')
-      .map(({ mode_id, paper_id, size_key, quantity: qty }) => ({ mode_id, paper_id, size_key, quantity: qty }))
+      .map(({ mode_id, paper_id, size_key, quantity: qty, finishing_ids: fids }) => ({
+        mode_id, paper_id, size_key, quantity: qty,
+        ...(fids.length > 0 ? { finishing_ids: fids } : {}),
+      }))
   const books = () =>
     cart
       .filter((l): l is BookCartLine => l.kind === 'book')
@@ -342,14 +357,14 @@ export default function Quote() {
     <MagSec title="自助报价 · 在线下单">
       {me && <VerifyBanner me={me} />}
       <div className="mt-2 grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
-        {/* 左栏：单页属性配置器 / 册子配置器 */}
+        {/* 左栏：单页属性配置器 / 书册配置器 */}
         <div className="space-y-5 border-b border-ink p-7 md:border-b-0 md:border-r">
           <div className="flex gap-2">
             <button type="button" className={catBtn(mode === 'single')} onClick={() => setMode('single')}>
               单页
             </button>
             <button type="button" className={catBtn(mode === 'book')} onClick={() => setMode('book')}>
-              册子
+              书册
             </button>
           </div>
           {mode === 'book' ? (
@@ -470,6 +485,32 @@ export default function Quote() {
               onChange={(e) => setQuantity(Math.max(1, Math.trunc(Number(e.target.value) || 1)))}
             />
           </Field>
+
+          {finishingCatalog.length > 0 && resolved && (
+            <div className="pt-1">
+              <span className="block pb-1.5 text-[11px] font-medium tracking-[.06em] text-dim">工艺（可选）</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                {finishingCatalog.map((f) => (
+                  <label key={f.id} className="flex items-center gap-1.5 text-[13px] text-ink">
+                    <input
+                      type="checkbox"
+                      checked={selectedFinishings.has(f.id)}
+                      onChange={() =>
+                        setSelectedFinishings((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(f.id)) next.delete(f.id)
+                          else next.add(f.id)
+                          return next
+                        })
+                      }
+                    />
+                    {f.name}
+                    <span className="text-[11px] text-dim">({f.price_display})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="border-t border-line pt-4">
             {quoteState === 'ready' && quote ? (

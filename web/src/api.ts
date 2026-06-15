@@ -98,11 +98,34 @@ export interface QuoteDto {
   paper_id: number
   size_key: string
   quantity: number
+  base_unit_price_c?: number
+  base_unit_display?: string
   unit_price_c: number
   unit_display: string
   line_total: number
   line_total_display: string
   currency: string
+  finishings?: Array<{
+    finishing_id: number
+    name: string
+    pricing: string
+    price_c: number
+    contribution_c: number
+    contribution_display: string
+  }>
+}
+
+export interface FinishingCatalogItem {
+  id: number
+  name: string
+  pricing: string
+  price_c: number
+  price_display: string
+}
+
+export interface FinishingCatalogDto {
+  currency: CurrencyDto
+  finishings: FinishingCatalogItem[]
 }
 
 // 模块级缓存 + stale-while-revalidate（TTL 60s）
@@ -156,7 +179,7 @@ export function fetchProducts(): Promise<ProductsDto> {
   }, (e) => { productsEntry = e })
 }
 
-// ③⑤/D27 册子目录（机器对客户不可见）
+// ③⑤/D27 书册目录（机器对客户不可见）
 export interface BookComponentDto {
   id: number
   role: 'cover' | 'inner' | 'insert'
@@ -205,7 +228,7 @@ export interface BookQuoteDto {
   components: Array<{ component_id: number; role: string; sheets_per_book: number; unit_sell_c: number; unit_display: string }>
   finishings: Array<{ finishing_id: number; name: string; pricing: string; contribution_c: number; contribution_display: string }>
 }
-/** 册子实时报价：客户填内页/插图张数 + 本数 → 出价（机器不可见）。422 → { error } */
+/** 书册实时报价：客户填内页/插图张数 + 本数 → 出价（机器不可见）。422 → { error } */
 export const fetchBookQuote = (body: {
   book_id: number
   count: number
@@ -552,6 +575,16 @@ export interface FilePrecheckDto {
   items: Array<{ key: string; level: 'ok' | 'info' | 'warn'; message: string }>
 }
 
+export interface OrderItemFinishingDto {
+  finishing_id: number
+  name: string
+  pricing: string
+  price_c: number
+  price_display: string
+  contribution_c: number
+  contribution_display: string
+}
+
 export interface OrderItemDto {
   id: string
   mode_id: number
@@ -572,6 +605,7 @@ export interface OrderItemDto {
   file_status: 'pending' | 'approved' | 'rejected'
   file_note: string | null
   file_precheck?: FilePrecheckDto | null
+  finishings: OrderItemFinishingDto[]
   job_id?: string | null | undefined
   file_kind?: string | undefined
 }
@@ -677,7 +711,7 @@ export const ORDER_STATUS_LABEL: Record<OrderDto['status'], string> = {
 
 /** D27: items 与 books 均可选，至少一行 */
 export interface OrderLineBody {
-  items?: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
+  items?: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number; finishing_ids?: number[] }>
   books?: Array<{ book_id: number; count: number; components?: Array<{ component_id: number; sheets_per_book: number }> }>
 }
 
@@ -790,7 +824,7 @@ export async function uploadOrderBookComponentFile(
 export const orderBookComponentFileUrl = (orderId: string, compId: string): string =>
   `/api/orders/${orderId}/book-components/${compId}/file`
 
-// C1 一键再下单：跨视图传递预填行（module 级缓冲，hash 切换不重载）。D32 含册子行
+// C1 一键再下单：跨视图传递预填行（module 级缓冲，hash 切换不重载）。D32 含书册行
 export interface ReorderItem {
   mode_id: number
   paper_id: number
@@ -798,7 +832,7 @@ export interface ReorderItem {
   quantity: number
   label: string
 }
-/** D32 册子行预填：book_id + 本数 + 各非封面组件（source_component_id → 每本张数） */
+/** D32 书册行预填：book_id + 本数 + 各非封面组件（source_component_id → 每本张数） */
 export interface ReorderBook {
   book_id: number
   count: number
@@ -830,6 +864,7 @@ export async function fetchQuote(req: {
   paper_id: number
   size_key: string
   quantity: number
+  finishing_ids?: number[]
 }): Promise<QuoteDto | null> {
   const res = await fetch('/api/calculator/quote', {
     method: 'POST',
@@ -839,4 +874,10 @@ export async function fetchQuote(req: {
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`quote failed: ${res.status}`)
   return (await res.json()) as QuoteDto
+}
+
+export async function fetchFinishingCatalog(): Promise<FinishingCatalogDto | null> {
+  const res = await fetch('/api/calculator/finishings')
+  if (!res.ok) return null
+  return (await res.json()) as FinishingCatalogDto
 }

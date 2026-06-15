@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { priceBook, type BookLineInput } from './books.js'
 import { type DB } from './db.js'
-import { lineTotal, sumMoney } from './money.js'
+import { finishingContribution, type FinishingPricing } from './finishing.js'
+import { lineTotal, moneyC, sumMoney } from './money.js'
 import { quote } from './pricing.js'
 
 /** 带 statusCode 抛出，由 app 全局 errorHandler 映射为 { error: message }（<500 不落日志） */
@@ -206,6 +207,30 @@ export function getOrderBooks(db: DB, orderId: string): OrderBook[] {
   }))
 }
 
+// ---------- 单张 item 工艺快照读取 ----------
+
+export interface OrderItemFinishingRow {
+  id: string
+  order_item_id: string
+  finishing_id: number
+  name: string
+  pricing: string
+  price_c: number
+  contribution_c: number
+}
+
+export function getOrderItemFinishings(db: DB, orderId: string): OrderItemFinishingRow[] {
+  return db
+    .prepare(
+      `SELECT oif.*
+       FROM order_item_finishings oif
+       JOIN order_items oi ON oi.id = oif.order_item_id
+       WHERE oi.order_id = ?
+       ORDER BY oif.rowid`,
+    )
+    .all(orderId) as OrderItemFinishingRow[]
+}
+
 /** FOL-YYYY-NNNN：仅人类可读展示，不可用作查询键（查询走 access_token） */
 function nextOrderNumber(db: DB, now: Date): string {
   const year = now.getUTCFullYear()
@@ -222,6 +247,7 @@ export interface NewOrderItem {
   paper_id: number
   size_key: string
   quantity: number
+  finishing_ids?: number[]
 }
 
 /** 访客单的合成 customer_id（0007 哨兵用户，archived=1 永不登录） */
@@ -255,7 +281,31 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
   const priced = input.items.map((item, idx) => {
     const q = quote(db, item.mode_id, item.paper_id, item.size_key, { internal: input.internal })
     if (!q) throw new OrderError(422, `item_${idx}_not_quotable`)
-    return { ...item, unit_price_c: q.sell_c, line_total: lineTotal(q.sell_c, item.quantity) }
+
+    let unitC = q.sell_c as number
+    const itemFins: Array<{ finishing_id: number; name: string; pricing: FinishingPricing; price_c: number; contribution_c: number }> = []
+
+    if (item.finishing_ids && item.finishing_ids.length > 0) {
+      const mode = db.prepare('SELECT duplex FROM print_modes WHERE id = ?').get(item.mode_id) as { duplex: number } | undefined
+      const size = db.prepare('SELECT area FROM sizes WHERE key = ?').get(item.size_key) as { area: number } | undefined
+      if (mode && size) {
+        const ctx = { pages: mode.duplex ? 2 : 1, area: size.area }
+        const fins = db
+          .prepare(
+            `SELECT id, name, pricing, price_c FROM finishing_ops
+             WHERE id IN (${item.finishing_ids.map(() => '?').join(',')}) AND archived = 0`,
+          )
+          .all(...item.finishing_ids) as Array<{ id: number; name: string; pricing: FinishingPricing; price_c: number }>
+        for (const f of fins) {
+          const c = finishingContribution(f, ctx) as number
+          unitC += c
+          itemFins.push({ finishing_id: f.id, name: f.name, pricing: f.pricing, price_c: f.price_c, contribution_c: c })
+        }
+      }
+    }
+    if (!Number.isSafeInteger(unitC)) throw new OrderError(422, `item_${idx}_price_overflow`)
+    const sellC = moneyC(unitC)
+    return { ...item, unit_price_c: sellC, line_total: lineTotal(sellC, item.quantity), finishings: itemFins }
   })
 
   // D27 书行：priceBook 定格每本 unit_price_c（含组件 + 工艺），line_total 同唯一舍入点。
@@ -310,8 +360,16 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
                                 unit_price_c, line_total, file_status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
     )
+    const insertItemFin = db.prepare(
+      `INSERT INTO order_item_finishings (id, order_item_id, finishing_id, name, pricing, price_c, contribution_c)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
     for (const p of priced) {
-      insertItem.run(randomUUID(), orderId, p.mode_id, p.paper_id, p.size_key, p.quantity, p.unit_price_c, p.line_total)
+      const itemId = randomUUID()
+      insertItem.run(itemId, orderId, p.mode_id, p.paper_id, p.size_key, p.quantity, p.unit_price_c, p.line_total)
+      for (const f of p.finishings) {
+        insertItemFin.run(randomUUID(), itemId, f.finishing_id, f.name, f.pricing, f.price_c, f.contribution_c)
+      }
     }
 
     const insertBook = db.prepare(

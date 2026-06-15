@@ -58,7 +58,7 @@ function PriceEditPanel({
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-wrap items-end gap-3 border border-line bg-card p-3.5">
       <span className="w-full font-mono text-[10px] tracking-[.14em] text-dim">
-        {quote.size_key} · 成本 {quote.total_display} · 地板 {quote.auto_display}
+        {quote.size_key} · 墨耗 {quote.ink_display} + 纸张 {quote.paper_display} = 成本 {quote.total_display} · 地板 {quote.auto_display}
       </span>
       <Field label="手动售价 _c（留空 = 自动地板价）">
         <input type="number" min={0} className={specInput} value={sell} onChange={(e) => setSell(e.target.value)} />
@@ -370,6 +370,7 @@ export default function QuotesTab({
                         key={s.key}
                         className={`cursor-pointer px-2 py-[9px] text-center transition-colors ${FLAG_BG[q.flag] ?? ''} ${isEditing ? 'ring-2 ring-wine ring-inset' : 'hover:bg-deep/40'}`}
                         onClick={() => combo && setEditing(isEditing ? null : cellKey)}
+                        title={`墨耗 ${q.ink_display} + 纸张 ${q.paper_display} = 成本 ${q.total_display}\n地板价 ${q.auto_display} · 售价 ${q.sell_display} (${q.source})`}
                       >
                         <span className={`font-mono text-[12.5px] ${f.cls === 'text-dim' ? 'text-ink' : f.cls}`}>
                           {q.sell_display}

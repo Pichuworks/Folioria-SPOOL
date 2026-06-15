@@ -285,6 +285,11 @@ const ItemRow = memo(function ItemRow({
         <Leader />
         <span className="font-mono text-[13.5px] text-wine-ink">{item.line_total_display}</span>
       </div>
+      {item.finishings && item.finishings.length > 0 && (
+        <div className="mt-1 text-[12px] text-dim">
+          工艺：{item.finishings.map((f) => `${f.name}(${f.contribution_display})`).join('、')}
+        </div>
+      )}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
         {item.has_file ? (
           <>
@@ -390,7 +395,7 @@ export default function OrderView({ token }: { token: string }) {
   }
 
   const reorder = () => {
-    // C1/D32: 单页行（机器沿用原 mode_id）+ 册子行（按目录组件来源还原每本张数）预填购物车；
+    // C1/D32: 单页行（机器沿用原 mode_id）+ 书册行（按目录组件来源还原每本张数）预填购物车；
     // 封面固定 1 张由 priceBook 定，不入缓冲；无 source_component_id（迁移前老单）的书行交由 Quote 跳过提示
     setReorder({
       items: order.items.map((i) => ({
@@ -466,7 +471,7 @@ export default function OrderView({ token }: { token: string }) {
           )}
           {order.books && order.books.length > 0 && (
             <div className="mt-6">
-              <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">册子 · {order.books.length}</div>
+              <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">书册 · {order.books.length}</div>
               {order.books.map((b) => (
                 <BookLine
                   key={b.id}

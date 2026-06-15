@@ -3,6 +3,7 @@ import { audit } from './audit.js'
 import { BookError, priceBook } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { finishingContribution, type FinishingPricing } from './finishing.js'
 import { requireAdmin } from './guards.js'
 import { formatMoney, formatMoneyC, lineTotal, moneyC } from './money.js'
 import { listProducts, listQuotable, quote } from './pricing.js'
@@ -857,6 +858,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     const currency = baseCurrency(db)
     return listQuotable(db).map((q) => ({
       ...q,
+      ink_display: formatMoneyC(q.ink_c, currency),
+      paper_display: formatMoneyC(q.paper_c, currency),
       total_display: formatMoneyC(q.total_c, currency),
       auto_display: formatMoneyC(q.auto_sell_c, currency),
       sell_display: formatMoneyC(q.sell_c, currency),
@@ -1195,7 +1198,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
-  // ③⑤/D27 下单域: 册子目录（机器对客户不可见，组件含纸/尺寸/色彩档/单双面 + 工艺）
+  // ③⑤/D27 下单域: 书册目录（机器对客户不可见，组件含纸/尺寸/色彩档/单双面 + 工艺）
   app.get(
     '/api/calculator/books',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
@@ -1255,7 +1258,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
-  // ③⑤/D27 下单域: 册子实时报价（客户填内页/插图张数 + 本数 → 出价；机器不可见，仅售价侧）
+  // ③⑤/D27 下单域: 书册实时报价（客户填内页/插图张数 + 本数 → 出价；机器不可见，仅售价侧）
   app.post(
     '/api/calculator/book-quote',
     {
@@ -1377,6 +1380,28 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
+  // 下单域: 工艺目录（客户自选单张工艺）
+  app.get(
+    '/api/calculator/finishings',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async () => {
+      const currency = baseCurrency(db)
+      const fins = db
+        .prepare('SELECT id, name, pricing, price_c FROM finishing_ops WHERE archived = 0 ORDER BY id')
+        .all() as Array<{ id: number; name: string; pricing: string; price_c: number }>
+      return {
+        currency,
+        finishings: fins.map((f) => ({
+          id: f.id,
+          name: f.name,
+          pricing: f.pricing,
+          price_c: f.price_c,
+          price_display: formatMoneyC(moneyC(f.price_c), currency),
+        })),
+      }
+    },
+  )
+
   app.post(
     '/api/calculator/quote',
     {
@@ -1391,49 +1416,68 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
             paper_id: { type: 'integer', minimum: 1 },
             size_key: { type: 'string', minLength: 1 },
             quantity: { type: 'integer', minimum: 1, maximum: 1000000 },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              mode_id: { type: 'integer' },
-              paper_id: { type: 'integer' },
-              size_key: { type: 'string' },
-              quantity: { type: 'integer' },
-              unit_price_c: { type: 'integer' },
-              unit_display: { type: 'string' },
-              line_total: { type: 'integer' },
-              line_total_display: { type: 'string' },
-              currency: { type: 'string' },
-            },
-          },
-          404: {
-            type: 'object',
-            additionalProperties: false,
-            properties: { error: { type: 'string' } },
+            finishing_ids: { type: 'array', maxItems: 20, items: { type: 'integer', minimum: 1 } },
           },
         },
       },
     },
     async (req, reply) => {
-      const b = req.body as { mode_id: number; paper_id: number; size_key: string; quantity: number }
+      const b = req.body as {
+        mode_id: number; paper_id: number; size_key: string; quantity: number
+        finishing_ids?: number[]
+      }
       const internal = req.user?.role === 'member'
       const q = quote(db, b.mode_id, b.paper_id, b.size_key, { internal })
       if (!q) return reply.status(404).send({ error: 'not_quotable' })
       const currency = baseCurrency(db)
-      const total = lineTotal(q.sell_c, b.quantity)
+
+      let unitC = q.sell_c as number
+      const finishingsOut: Array<{
+        finishing_id: number; name: string; pricing: string
+        price_c: number; contribution_c: number; contribution_display: string
+      }> = []
+
+      if (b.finishing_ids && b.finishing_ids.length > 0) {
+        const mode = db.prepare('SELECT duplex, ref_size FROM print_modes WHERE id = ?').get(b.mode_id) as
+          { duplex: number; ref_size: string } | undefined
+        const size = db.prepare('SELECT area FROM sizes WHERE key = ?').get(b.size_key) as
+          { area: number } | undefined
+        if (mode && size) {
+          const pages = mode.duplex ? 2 : 1
+          const area = size.area
+          const fins = db
+            .prepare(
+              `SELECT id, name, pricing, price_c FROM finishing_ops
+               WHERE id IN (${b.finishing_ids.map(() => '?').join(',')}) AND archived = 0`,
+            )
+            .all(...b.finishing_ids) as Array<{ id: number; name: string; pricing: FinishingPricing; price_c: number }>
+          for (const f of fins) {
+            const c = finishingContribution(f, { pages, area }) as number
+            unitC += c
+            finishingsOut.push({
+              finishing_id: f.id, name: f.name, pricing: f.pricing,
+              price_c: f.price_c, contribution_c: c,
+              contribution_display: formatMoneyC(moneyC(c), currency),
+            })
+          }
+        }
+      }
+
+      const sellC = moneyC(unitC)
+      const total = lineTotal(sellC, b.quantity)
       return {
         mode_id: b.mode_id,
         paper_id: b.paper_id,
         size_key: b.size_key,
         quantity: b.quantity,
-        unit_price_c: q.sell_c,
-        unit_display: formatMoneyC(q.sell_c, currency),
+        base_unit_price_c: q.sell_c as number,
+        base_unit_display: formatMoneyC(q.sell_c, currency),
+        unit_price_c: unitC,
+        unit_display: formatMoneyC(sellC, currency),
         line_total: total,
         line_total_display: formatMoney(total, currency),
         currency: currency.code,
+        finishings: finishingsOut,
       }
     },
   )

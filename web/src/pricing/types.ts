@@ -2,11 +2,15 @@ export interface QuoteDto {
   mode_id: number
   paper_id: number
   size_key: string
+  ink_c: number
+  paper_c: number
   total_c: number
   auto_sell_c: number
   sell_c: number
   source: string
   flag: 'auto' | 'manual' | 'below_margin' | 'LOSS' | 'forced'
+  ink_display: string
+  paper_display: string
   total_display: string
   auto_display: string
   sell_display: string

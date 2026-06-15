@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
 import BooksTab from './pricing/BooksTab'
+import FinishingsTab from './pricing/FinishingsTab'
 import ModesTab from './pricing/ModesTab'
 import PapersTab from './pricing/PapersTab'
 import QuotesTab from './pricing/QuotesTab'
@@ -23,7 +24,8 @@ const TABS = [
   { key: 'papers', label: '纸张' },
   { key: 'modes', label: '模式' },
   { key: 'sizes', label: '尺寸' },
-  { key: 'books', label: '册子' },
+  { key: 'books', label: '书册' },
+  { key: 'finishings', label: '工艺' },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
@@ -63,6 +65,7 @@ function PricingBody() {
     modes: modes.filter((m) => m.archived === 0).length,
     sizes: sizes.length,
     books: books.filter((b) => b.archived === 0).length,
+    finishings: finishings.filter((f) => f.archived === 0).length,
   }
 
   const tabsWithCounts = TABS.map((t) => ({ ...t, count: counts[t.key] }))
@@ -85,6 +88,9 @@ function PricingBody() {
       )}
       {tab === 'books' && (
         <BooksTab books={books} finishings={finishings} papers={papers} sizes={sizes} onChanged={reload} />
+      )}
+      {tab === 'finishings' && (
+        <FinishingsTab finishings={finishings} onChanged={reload} />
       )}
     </MagSec>
   )
