@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
-/* Asagaya modern（杂志/规格书）× eri 配色 — 视觉方案见 docs/tasks-phase2.md R8 */
+/* Asagaya modern（杂志/规格书）× 秋枫配色 — 枫光映刻 */
 @theme {
-  --color-paper: #f6eff1; /* bg · 画布 */
-  --color-card: #fffdfb; /* bgCard · 内容面 */
-  --color-deep: #ecdde2; /* bgDeep · 下沉区 */
-  --color-line: #d6bec6; /* border · 永远一像素 */
-  --color-ink: #34292c; /* text */
-  --color-dim: #75656a; /* textDim */
-  --color-wine: #800020; /* accent · 态度与身份 */
-  --color-wine-ink: #5e1021; /* accentInk · 可读的主色 */
-  --color-wine-dim: #e8cdd5; /* accentDim · 悬停/标签底 */
-  --color-gold: #d9a11e; /* sideB */
-  --color-cream: #f7e8c1; /* accentContrast */
-  --color-warn: #b06a1f; /* warning · 谨慎使用 */
+  --color-paper: #f8f4ee; /* bg · 暖象牙 */
+  --color-card: #fefcf8; /* bgCard · 暖白 */
+  --color-deep: #ebe3d5; /* bgDeep · 暖砂 */
+  --color-line: #d0c2a7; /* border · 永远一像素 */
+  --color-ink: #302418; /* text · 胡桃 */
+  --color-dim: #6f5e48; /* textDim · 暖褐 */
+  --color-wine: #b84520; /* accent · 秋枫 */
+  --color-wine-ink: #873212; /* accentInk · 深锈 */
+  --color-wine-dim: #f2ddc8; /* accentDim · 蜜桃 */
+  --color-gold: #c89018; /* sideB · 琥珀 */
+  --color-cream: #fce8c8; /* accentContrast · 金奶 */
+  --color-warn: #a85e15; /* warning · 谨慎使用 */
 
   --font-serif: "Noto Serif SC", "Noto Serif JP", Georgia, serif;
   --font-garamond: "EB Garamond", Georgia, serif;
