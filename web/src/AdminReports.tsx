@@ -43,6 +43,18 @@ interface ConsumptionDto {
   }>
 }
 
+/** Q2 CSV 导出链接：GET 带 cookie，浏览器直接下载（content-disposition attachment） */
+function ExportLink({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      className="font-mono text-[10.5px] tracking-[.12em] text-dim underline hover:text-wine-ink"
+    >
+      导出 CSV ↧
+    </a>
+  )
+}
+
 function ReportsBody() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [monthly, setMonthly] = useState<MonthlyDto | null>(null)
@@ -100,6 +112,9 @@ function ReportsBody() {
             </div>
           </div>
         )}
+        <div className="mt-3 text-right">
+          <ExportLink href={`/api/reports/monthly/export?month=${month}`} />
+        </div>
       </MagSec>
 
       <MagSec tag="02" title="设备利用" note="PAGES BY UNIT">
@@ -118,6 +133,9 @@ function ReportsBody() {
             </div>
           ))
         )}
+        <div className="mt-3 text-right">
+          <ExportLink href={`/api/reports/equipment-usage/export?month=${month}`} />
+        </div>
       </MagSec>
 
       <MagSec tag="03" title="纸张消耗" note="CONSUME + SCRAP">
@@ -136,6 +154,9 @@ function ReportsBody() {
             </div>
           ))
         )}
+        <div className="mt-3 text-right">
+          <ExportLink href={`/api/reports/paper-consumption/export?month=${month}`} />
+        </div>
       </MagSec>
     </div>
   )

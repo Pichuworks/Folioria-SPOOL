@@ -188,6 +188,52 @@ describe('F2 equipment-usage（设备利用率）', () => {
   })
 })
 
+describe('Q2 CSV 导出', () => {
+  it.each(['monthly', 'equipment-usage', 'paper-consumption'])('%s/export: guest 401 / member 403', async (name) => {
+    expect((await app.inject({ method: 'GET', url: `/api/reports/${name}/export` })).statusCode).toBe(401)
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/reports/${name}/export`, headers: { cookie: memberCookie } })).statusCode,
+    ).toBe(403)
+  })
+
+  it('monthly/export: text/csv + attachment + BOM；金额为整数（基准货币最小单位）', async () => {
+    insertDoneJob({ quoted: 500, cost: 200, profit: 300, pages: 100, completedAt: '2026-06-05T10:00:00Z' })
+    insertDoneJob({ quoted: null, cost: 80, pages: 40, completedAt: '2026-06-07T10:00:00Z' })
+
+    const res = await get('/api/reports/monthly/export?month=2026-06')
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toMatch(/text\/csv/)
+    expect(String(res.headers['content-disposition'])).toContain('monthly-2026-06.csv')
+    const body = res.body
+    expect(body.charCodeAt(0)).toBe(0xfeff) // UTF-8 BOM（Excel 中文）
+    // 外部行：作业 1、营收 500、成本 200、毛利 300（整数，无 ¥ 符号、无小数）
+    expect(body).toMatch(/外部,1,500,200,300,/)
+    expect(body).toMatch(/内部消耗,1,,80,,40/)
+    expect(body).not.toContain('¥')
+  })
+
+  it('equipment-usage/export: 每机台一行 + 表头', async () => {
+    insertDoneJob({ quoted: 500, cost: 200, pages: 100, completedAt: '2026-06-05T10:00:00Z', modeId: 1 })
+    const res = await get('/api/reports/equipment-usage/export?month=2026-06')
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('机台,名称,状态,本月面数,累计面数,本月作业数')
+    const printerCode = (db.prepare('SELECT code FROM printers ORDER BY id LIMIT 1').get() as { code: string }).code
+    expect(res.body).toContain(printerCode)
+  })
+
+  it('paper-consumption/export: 消耗行 + 表头', async () => {
+    db.prepare("INSERT INTO paper_stocks (id, paper_id, size_key, quantity) VALUES ('ps-x', 1, 'A4', 1000)").run()
+    db.prepare(
+      `INSERT INTO inventory_log (id, target_type, target_id, action, quantity_delta, created_at)
+       VALUES ('il-x', 'paper_stock', 'ps-x', 'consume', -200, '2026-06-03T00:00:00Z')`,
+    ).run()
+    const res = await get('/api/reports/paper-consumption/export?month=2026-06')
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('纸张ID,名称,尺寸,消耗(张),废品(张),合计(张)')
+    expect(res.body).toMatch(/,A4,200,0,200/)
+  })
+})
+
 describe('F2 paper-consumption（纸张消耗排行）', () => {
   it('consume+scrap 计入、purchase 不计、按总量降序、跨月不计', async () => {
     db.prepare(

@@ -179,7 +179,7 @@
 > 接 P8 收尾。系统功能已闭合，本组提升「好用度」。测试先行；combos/§2.5 基线（187/43）不回归。
 
 - [x] Q1 客户侧退款可见性：OrderView 对已取消且 paid_amount>0 的单显示「待退款 ¥X」（下单域投影派生，不暴露 admin refund_due）。
-- [ ] Q2 报表 CSV 导出：`/api/reports/{monthly,equipment-usage,paper-consumption}` 加 CSV 导出端点（admin，text/csv attachment，整数金额）；AdminReports 加导出按钮。
+- [x] Q2 报表 CSV 导出：`/api/reports/{monthly,equipment-usage,paper-consumption}/export` CSV 端点（admin，text/csv attachment，UTF-8 BOM，整数金额）；AdminReports 三段各加「导出 CSV」链接。数据层抽 monthlyReport/equipmentUsage/paperConsumption 复用。
 - [ ] Q3 月度报表自动快照（附录A D__）：migration report_snapshots；CLI `spool snapshot-month`；`GET /api/reports/snapshots`；systemd 月度 timer（deploy）。
 - [ ] Q4 文件自动预检（Phase 3 提前，附录A D__）：sharp（图片 DPI/色彩空间）+ pdf-lib（PDF 页数/加密/页尺寸）接 storeUpload choke-point；advisory 落 file_precheck 不阻断人工审稿；书组件与单页 item 同口径。
 
