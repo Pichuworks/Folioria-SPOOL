@@ -25,8 +25,11 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   // ---------- 管理域: sizes ----------
 
   app.get('/api/pricing/sizes', { preHandler: requireAdmin }, async () =>
-    db.prepare('SELECT key, label, area, sort FROM sizes ORDER BY sort').all(),
+    db.prepare('SELECT key, label, area, sort, width_mm, height_mm FROM sizes ORDER BY sort').all(),
   )
+
+  // D36 物理尺寸（mm）：供文件预检尺寸/出血匹配；可空（未配则预检跳过尺寸项）
+  const MM = { type: ['integer', 'null'], minimum: 1 } as const
 
   app.post(
     '/api/pricing/sizes',
@@ -42,18 +45,22 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
             label: { type: 'string', minLength: 1 },
             area: { type: 'number', exclusiveMinimum: 0 },
             sort: { type: 'integer' },
+            width_mm: MM,
+            height_mm: MM,
           },
         },
       },
     },
     async (req, reply) => {
-      const b = req.body as { key: string; label: string; area: number; sort?: number }
+      const b = req.body as { key: string; label: string; area: number; sort?: number; width_mm?: number | null; height_mm?: number | null }
       try {
-        db.prepare('INSERT INTO sizes (key, label, area, sort) VALUES (?, ?, ?, ?)').run(
+        db.prepare('INSERT INTO sizes (key, label, area, sort, width_mm, height_mm) VALUES (?, ?, ?, ?, ?, ?)').run(
           b.key,
           b.label,
           b.area,
           b.sort ?? 0,
+          b.width_mm ?? null,
+          b.height_mm ?? null,
         )
       } catch (err) {
         if (isConstraint(err, 'UNIQUE') || isConstraint(err, 'PRIMARY')) {
@@ -79,6 +86,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
             label: { type: 'string', minLength: 1 },
             area: { type: 'number', exclusiveMinimum: 0 },
             sort: { type: 'integer' },
+            width_mm: MM,
+            height_mm: MM,
           },
         },
       },
@@ -86,14 +95,16 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     async (req, reply) => {
       const { key } = req.params as { key: string }
       const existing = db.prepare('SELECT * FROM sizes WHERE key = ?').get(key) as
-        | { label: string; area: number; sort: number }
+        | { label: string; area: number; sort: number; width_mm: number | null; height_mm: number | null }
         | undefined
       if (!existing) return reply.status(404).send({ error: 'not_found' })
-      const b = req.body as Partial<{ label: string; area: number; sort: number }>
-      db.prepare('UPDATE sizes SET label = ?, area = ?, sort = ? WHERE key = ?').run(
+      const b = req.body as Partial<{ label: string; area: number; sort: number; width_mm: number | null; height_mm: number | null }>
+      db.prepare('UPDATE sizes SET label = ?, area = ?, sort = ?, width_mm = ?, height_mm = ? WHERE key = ?').run(
         b.label ?? existing.label,
         b.area ?? existing.area,
         b.sort ?? existing.sort,
+        'width_mm' in b ? (b.width_mm ?? null) : existing.width_mm,
+        'height_mm' in b ? (b.height_mm ?? null) : existing.height_mm,
         key,
       )
       logEdit(req.user?.id ?? null, 'pricing.size', key, `改尺寸 ${key}`)

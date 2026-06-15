@@ -115,6 +115,60 @@ describe('定价四表 CRUD', () => {
     ).toBe(409)
   })
 
+  it('D36 sizes 物理 mm：回填标准尺寸、A3P 留空、PATCH 可填、POST 可带', async () => {
+    const sizes = (
+      await app.inject({ method: 'GET', url: '/api/pricing/sizes', headers: { cookie: adminCookie } })
+    ).json() as Array<{ key: string; width_mm: number | null; height_mm: number | null }>
+    const a4 = sizes.find((s) => s.key === 'A4')!
+    expect(a4.width_mm).toBe(210)
+    expect(a4.height_mm).toBe(297)
+    expect(sizes.find((s) => s.key === 'A3')).toMatchObject({ width_mm: 297, height_mm: 420 })
+    expect(sizes.find((s) => s.key === 'SRA3')).toMatchObject({ width_mm: 320, height_mm: 450 })
+    // A3P（A3+）回填留 NULL，待 admin 填
+    expect(sizes.find((s) => s.key === 'A3P')).toMatchObject({ width_mm: null, height_mm: null })
+
+    // admin 给 A3P 配 mm
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: '/api/pricing/sizes/A3P',
+      headers: { cookie: adminCookie },
+      payload: { width_mm: 329, height_mm: 483 },
+    })
+    expect(patched.statusCode).toBe(200)
+    expect(patched.json()).toMatchObject({ width_mm: 329, height_mm: 483 })
+
+    // 清空（设回 null）
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: '/api/pricing/sizes/A3P',
+      headers: { cookie: adminCookie },
+      payload: { width_mm: null, height_mm: null },
+    })
+    expect(cleared.json()).toMatchObject({ width_mm: null, height_mm: null })
+
+    // 新建带 mm
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/pricing/sizes',
+      headers: { cookie: adminCookie },
+      payload: { key: 'B4', label: 'B4', area: 140, width_mm: 257, height_mm: 364 },
+    })
+    expect(created.statusCode).toBe(201)
+    expect(created.json()).toMatchObject({ width_mm: 257, height_mm: 364 })
+
+    // 非整数 mm → schema 422
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/pricing/sizes',
+          headers: { cookie: adminCookie },
+          payload: { key: 'X9', label: 'X9', area: 10, width_mm: 12.5 },
+        })
+      ).statusCode,
+    ).toBe(422)
+  })
+
   it('modes：ml 计价缺 ml_per_batch → 422；archive 后报价与 options 同步消失', async () => {
     const bad = await app.inject({
       method: 'POST',

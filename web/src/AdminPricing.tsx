@@ -56,6 +56,8 @@ interface SizeDto {
   label: string
   area: number
   sort: number
+  width_mm: number | null
+  height_mm: number | null
 }
 
 interface PrinterDto {
@@ -624,8 +626,56 @@ function ModesSection({
   )
 }
 
+/** D36 物理尺寸（mm）行内编辑：供文件预检尺寸/出血匹配；留空 = 未配（预检跳过尺寸项） */
+function SizeMmEditor({ size, onChanged }: { size: SizeDto; onChanged: () => void }) {
+  const [w, setW] = useState(size.width_mm == null ? '' : String(size.width_mm))
+  const [h, setH] = useState(size.height_mm == null ? '' : String(size.height_mm))
+  const [msg, setMsg] = useState<string | null>(null)
+  const dirty = w !== (size.width_mm == null ? '' : String(size.width_mm)) || h !== (size.height_mm == null ? '' : String(size.height_mm))
+
+  const save = async () => {
+    const num = (s: string) => (s.trim() === '' ? null : Math.trunc(Number(s)))
+    const wv = num(w)
+    const hv = num(h)
+    if ((wv !== null && !(wv >= 1)) || (hv !== null && !(hv >= 1))) {
+      setMsg('mm 须为正整数或留空')
+      return
+    }
+    const res = await send('PATCH', `/api/pricing/sizes/${size.key}`, { width_mm: wv, height_mm: hv })
+    if (res.ok) {
+      setMsg(null)
+      onChanged()
+    } else setMsg('保存失败')
+  }
+
+  return (
+    <span className="flex items-center gap-1 font-mono text-[11px] text-dim">
+      <input
+        className="w-12 border border-line bg-card px-1 py-0.5 text-center text-ink outline-none focus:border-wine"
+        value={w}
+        placeholder="W"
+        onChange={(e) => setW(e.target.value)}
+      />
+      ×
+      <input
+        className="w-12 border border-line bg-card px-1 py-0.5 text-center text-ink outline-none focus:border-wine"
+        value={h}
+        placeholder="H"
+        onChange={(e) => setH(e.target.value)}
+      />
+      mm
+      {dirty && (
+        <button type="button" className="text-wine-ink hover:opacity-70" onClick={() => void save()}>
+          存
+        </button>
+      )}
+      {msg && <span className="text-wine-ink">{msg}</span>}
+    </span>
+  )
+}
+
 function SizesSection({ sizes, onChanged }: { sizes: SizeDto[]; onChanged: () => void }) {
-  const [form, setForm] = useState({ key: '', label: '', area: '', sort: '' })
+  const [form, setForm] = useState({ key: '', label: '', area: '', sort: '', width_mm: '', height_mm: '' })
   const [notice, setNotice] = useState<string | null>(null)
 
   const submit = async (e: FormEvent) => {
@@ -635,27 +685,31 @@ function SizesSection({ sizes, onChanged }: { sizes: SizeDto[]; onChanged: () =>
       setNotice('key / 标签非空，相对面积为正数')
       return
     }
+    const mm = (s: string) => (s.trim() === '' ? null : Math.trunc(Number(s)))
     const res = await send('POST', '/api/pricing/sizes', {
       key: form.key.trim(),
       label: form.label.trim(),
       area,
       sort: form.sort.trim() === '' ? 0 : Math.trunc(Number(form.sort)),
+      width_mm: mm(form.width_mm),
+      height_mm: mm(form.height_mm),
     })
     if (res.ok) {
-      setForm({ key: '', label: '', area: '', sort: '' })
+      setForm({ key: '', label: '', area: '', sort: '', width_mm: '', height_mm: '' })
       setNotice(null)
       onChanged()
     } else setNotice(res.status === 409 ? '该 key 已存在' : '创建失败')
   }
 
   return (
-    <MagSec tag="04" title="尺寸" note="RELATIVE AREA">
+    <MagSec tag="04" title="尺寸" note="RELATIVE AREA + 物理 mm">
       {sizes.map((s) => (
-        <div key={s.key} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[7px]">
+        <div key={s.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-[7px]">
           <span className="min-w-12 text-[13px] font-medium text-ink">{s.key}</span>
           <span className="text-[12px] text-dim">{s.label}</span>
+          <span className="font-mono text-[11px] text-dim">area {s.area}</span>
+          <SizeMmEditor size={s} onChanged={onChanged} />
           <Leader />
-          <span className="font-mono text-[11px] text-dim">area {s.area} · sort {s.sort}</span>
           <button
             type="button"
             className={`${actionBtn} text-dim`}
@@ -684,6 +738,12 @@ function SizesSection({ sizes, onChanged }: { sizes: SizeDto[]; onChanged: () =>
         </Field>
         <Field label="排序">
           <input type="number" className={specInput} value={form.sort} onChange={(e) => setForm((f) => ({ ...f, sort: e.target.value }))} />
+        </Field>
+        <Field label="宽 mm（可空）">
+          <input type="number" min={1} className={specInput} value={form.width_mm} onChange={(e) => setForm((f) => ({ ...f, width_mm: e.target.value }))} />
+        </Field>
+        <Field label="高 mm（可空）">
+          <input type="number" min={1} className={specInput} value={form.height_mm} onChange={(e) => setForm((f) => ({ ...f, height_mm: e.target.value }))} />
         </Field>
         <PillBtn>新增尺寸</PillBtn>
         {notice && <p className="w-full text-[12px] text-wine-ink">{notice}</p>}

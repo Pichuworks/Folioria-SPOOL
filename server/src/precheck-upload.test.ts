@@ -101,6 +101,20 @@ describe('D35 上传集成：file_precheck 落账 + DTO 暴露', () => {
     const dto = res.json() as { items: ItemDto[] }
     expect(dto.items[0]!.file_precheck?.level).toBe('info')
     expect(dto.items[0]!.file_precheck?.items.some((i) => i.key === 'page_size' && /210×297mm/.test(i.message))).toBe(true)
+    // D36: A4 下单尺寸已回填 210×297 → size 项命中（恰好尺寸 → info）
+    expect(dto.items[0]!.file_precheck?.items.some((i) => i.key === 'size' && i.level === 'info')).toBe(true)
+  })
+
+  it('D36 上传尺寸不符（A3 文件 vs A4 下单）→ file_precheck 含 size warn，整体 warn', async () => {
+    const cookie = await login('a@cust.example')
+    const doc = await PDFDocument.create()
+    doc.addPage([(297 / 25.4) * 72, (420 / 25.4) * 72]) // A3 物理尺寸
+    const pdf = Buffer.from(await doc.save())
+    const { res } = await placeAndUpload(cookie, 'a3-for-a4.pdf', pdf)
+    expect(res.statusCode).toBe(201)
+    const dto = res.json() as { items: ItemDto[] }
+    expect(dto.items[0]!.file_precheck?.items.some((i) => i.key === 'size' && i.level === 'warn')).toBe(true)
+    expect(dto.items[0]!.file_precheck?.level).toBe('warn')
   })
 
   it('重传刷新预检：低 DPI → 高 DPI 后 file_precheck 由 warn 转非 warn', async () => {
@@ -118,7 +132,8 @@ describe('D35 上传集成：file_precheck 落账 + DTO 暴露', () => {
       payload,
     })
     const reDto = re.json() as { items: ItemDto[] }
+    // dpi 项由 warn 转 ok（整体 level 仍可能因小图尺寸不符而 warn——那是另一项，此处只验 dpi 刷新）
     expect(reDto.items[0]!.file_precheck?.items.find((i) => i.key === 'dpi')?.level).toBe('ok')
-    expect(reDto.items[0]!.file_precheck?.level).not.toBe('warn')
+    expect(reDto.items[0]!.file_precheck?.items.some((i) => i.key === 'dpi' && i.level === 'warn')).toBe(false)
   })
 })

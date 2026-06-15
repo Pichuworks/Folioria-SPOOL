@@ -60,3 +60,58 @@ describe('D35 文件预检', () => {
     expect(r.items.find((i) => i.key === 'parse')?.level).toBe('warn')
   })
 })
+
+describe('D36 尺寸/出血匹配', () => {
+  async function pdfAt(wPt: number, hPt: number, name: string): Promise<string> {
+    const doc = await PDFDocument.create()
+    doc.addPage([wPt, hPt])
+    const p = path.join(dir, name)
+    writeFileSync(p, await doc.save())
+    return p
+  }
+  const mmToPt = (mm: number) => (mm / 25.4) * 72
+  const A4 = { width_mm: 210, height_mm: 297 }
+
+  it('PDF 恰好下单尺寸 → size info「未见出血」', async () => {
+    const r = await precheckFile(await pdfAt(mmToPt(210), mmToPt(297), 'exact.pdf'), 'pdf', A4)
+    const sz = r.items.find((i) => i.key === 'size')
+    expect(sz?.level).toBe('info')
+    expect(sz?.message).toContain('未见出血')
+  })
+
+  it('PDF 含 3mm 出血（216×303）→ size ok「含出血」', async () => {
+    const r = await precheckFile(await pdfAt(mmToPt(216), mmToPt(303), 'bleed.pdf'), 'pdf', A4)
+    const sz = r.items.find((i) => i.key === 'size')
+    expect(sz?.level).toBe('ok')
+    expect(sz?.message).toContain('含出血')
+  })
+
+  it('PDF 尺寸不符（A4 文件 vs A3 下单）→ size warn，整体 warn', async () => {
+    const r = await precheckFile(await pdfAt(mmToPt(210), mmToPt(297), 'a4.pdf'), 'pdf', { width_mm: 297, height_mm: 420 })
+    const sz = r.items.find((i) => i.key === 'size')
+    expect(sz?.level).toBe('warn')
+    expect(r.level).toBe('warn')
+  })
+
+  it('orientation-agnostic：横向文件对纵向下单仍匹配', async () => {
+    const r = await precheckFile(await pdfAt(mmToPt(297), mmToPt(210), 'landscape.pdf'), 'pdf', A4)
+    expect(r.items.find((i) => i.key === 'size')?.level).toBe('info') // 长短边比对，方向无关
+  })
+
+  it('target 为 NULL（未配 mm）→ 不产 size 项（回退仅报告尺寸）', async () => {
+    const r = await precheckFile(await pdfAt(mmToPt(210), mmToPt(297), 'noTarget.pdf'), 'pdf', { width_mm: null, height_mm: null })
+    expect(r.items.find((i) => i.key === 'size')).toBeUndefined()
+    expect(r.items.find((i) => i.key === 'page_size')).toBeTruthy() // 尺寸仍报告
+  })
+
+  it('图片按 px÷DPI 比对：300×300@300dpi=25mm 对 target 25mm → info', async () => {
+    const buf = await sharp({ create: { width: 300, height: 300, channels: 3, background: '#fff' } })
+      .withMetadata({ density: 300 })
+      .png()
+      .toBuffer()
+    const p = path.join(dir, 'sq.png')
+    writeFileSync(p, buf)
+    const r = await precheckFile(p, 'png', { width_mm: 25, height_mm: 25 })
+    expect(r.items.find((i) => i.key === 'size')?.level).toBe('info')
+  })
+})

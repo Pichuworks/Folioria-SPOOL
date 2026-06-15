@@ -12,7 +12,7 @@ import { requireUser } from './guards.js'
 import { notifyAdmins, templates } from './notify.js'
 import { getOrder, OrderError, syncFileState, type OrderRow } from './orders.js'
 import { ERROR_SCHEMA, ORDER_SCHEMA, orderDto } from './orders-routes.js'
-import { precheckFile, type PrecheckResult } from './precheck.js'
+import { precheckFile, type PrecheckResult, type PrecheckTarget } from './precheck.js'
 
 /** R5: 类型白名单——扩展名与 magic bytes 双查，二者一致才收（PDF/TIFF/PNG，PRD §2.5） */
 const EXT_TO_KIND: Record<string, 'pdf' | 'png' | 'tiff'> = {
@@ -50,6 +50,7 @@ const UPLOADABLE: readonly string[] = ['quoted', 'file_pending']
 async function storeUpload(
   data: MultipartFile | undefined,
   uploadDir: string,
+  target?: PrecheckTarget,
 ): Promise<{ storedName: string; precheck: PrecheckResult }> {
   if (!data) throw new OrderError(422, 'file_required')
   const ext = path.extname(data.filename ?? '').slice(1).toLowerCase()
@@ -89,7 +90,7 @@ async function storeUpload(
   }
   const finalPath = path.join(uploadDir, storedName)
   await rename(partPath, finalPath)
-  const precheck = await precheckFile(finalPath, kind)
+  const precheck = await precheckFile(finalPath, kind, target)
   return { storedName, precheck }
 }
 
@@ -169,7 +170,11 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
         throw new OrderError(409, `not_uploadable_from_${order.status}`)
       }
 
-      const { storedName, precheck } = await storeUpload(await req.file(), uploadDir)
+      // D36 下单尺寸（mm）供预检尺寸/出血匹配（未配 mm → undefined 跳过）
+      const target = db
+        .prepare('SELECT s.width_mm, s.height_mm FROM order_items oi JOIN sizes s ON s.key = oi.size_key WHERE oi.id = ?')
+        .get(iid) as PrecheckTarget | undefined
+      const { storedName, precheck } = await storeUpload(await req.file(), uploadDir, target)
 
       // 重传：旧文件清理 + file_status 重置 pending、驳回意见清空、预检刷新（R5/D35 定点）
       if (item.file_url != null) {
@@ -222,7 +227,12 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
         throw new OrderError(409, `not_uploadable_from_${order.status}`)
       }
 
-      const { storedName, precheck } = await storeUpload(await req.file(), uploadDir)
+      const target = db
+        .prepare(
+          'SELECT s.width_mm, s.height_mm FROM order_book_components obc JOIN sizes s ON s.key = obc.size_key WHERE obc.id = ?',
+        )
+        .get(cid) as PrecheckTarget | undefined
+      const { storedName, precheck } = await storeUpload(await req.file(), uploadDir, target)
 
       if (comp.file_url != null) {
         await rm(path.join(uploadDir, comp.file_url), { force: true })

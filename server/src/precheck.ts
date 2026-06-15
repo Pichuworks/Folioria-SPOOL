@@ -19,7 +19,16 @@ export interface PrecheckResult {
   items: PrecheckItem[]
 }
 
+/** D36 下单尺寸（绝对 mm）；任一为 NULL（未配 mm）则跳过尺寸匹配 */
+export interface PrecheckTarget {
+  width_mm: number | null
+  height_mm: number | null
+}
+
 const MIN_DPI = 300
+const BLEED_MM = 3
+const SIZE_EXACT_TOL_MM = 2 // 与目标吻合容差（含出血判定）
+const BLEED_SLACK_MM = 4 * BLEED_MM // 出血上限松弛（每边最多 ~2×bleed）
 /** 超过此大小的 PDF 跳过解析（pdf-lib 全量载入内存，避免大文件内存尖峰） */
 const PDF_PARSE_MAX_BYTES = 64 * 1024 * 1024
 
@@ -29,7 +38,30 @@ const worst = (items: PrecheckItem[]): PrecheckLevel =>
 
 const ptToMm = (pt: number): number => Math.round((pt / 72) * 25.4)
 
-async function precheckImage(filePath: string): Promise<PrecheckResult> {
+/**
+ * D36 文件物理尺寸 vs 下单尺寸（orientation-agnostic：长边比长边、短边比短边）。
+ * 含出血(目标..目标+slack)→ok；吻合(±tol)→info 提示补出血；超界→warn。target 不全则返回 null（跳过）。
+ */
+function sizeCheck(fileWmm: number, fileHmm: number, target: PrecheckTarget | undefined): PrecheckItem | null {
+  if (!target || target.width_mm == null || target.height_mm == null) return null
+  const fLong = Math.max(fileWmm, fileHmm)
+  const fShort = Math.min(fileWmm, fileHmm)
+  const tLong = Math.max(target.width_mm, target.height_mm)
+  const tShort = Math.min(target.width_mm, target.height_mm)
+  const dLong = fLong - tLong
+  const dShort = fShort - tShort
+  const inBand = (d: number) => d >= -SIZE_EXACT_TOL_MM && d <= BLEED_SLACK_MM
+  const label = `${tLong}×${tShort}mm`
+  if (inBand(dLong) && inBand(dShort)) {
+    if (Math.abs(dLong) <= SIZE_EXACT_TOL_MM && Math.abs(dShort) <= SIZE_EXACT_TOL_MM) {
+      return { key: 'size', level: 'info', message: `尺寸吻合 ${label}，未见出血（建议每边 +${BLEED_MM}mm）` }
+    }
+    return { key: 'size', level: 'ok', message: `尺寸匹配（含出血，下单 ${label}）` }
+  }
+  return { key: 'size', level: 'warn', message: `文件 ${fLong}×${fShort}mm 与下单尺寸 ${label} 不符` }
+}
+
+async function precheckImage(filePath: string, target?: PrecheckTarget): Promise<PrecheckResult> {
   // limitInputPixels:false 仅为读元数据放开像素上限（不解码像素，header-only，快且省内存）
   const meta = await sharp(filePath, { limitInputPixels: false }).metadata()
   const items: PrecheckItem[] = []
@@ -43,6 +75,11 @@ async function precheckImage(filePath: string): Promise<PrecheckResult> {
   }
   if (meta.width && meta.height) {
     items.push({ key: 'dimensions', level: 'info', message: `像素尺寸 ${meta.width}×${meta.height}` })
+    // 物理尺寸 = 像素 ÷ DPI（仅 DPI 已知时可比对下单尺寸）
+    if (dpi != null && dpi > 1) {
+      const sc = sizeCheck(Math.round((meta.width / dpi) * 25.4), Math.round((meta.height / dpi) * 25.4), target)
+      if (sc) items.push(sc)
+    }
   }
   if (meta.space) {
     // 艺术微喷常用 RGB，故色彩空间仅作 info 报告，不判警告
@@ -51,7 +88,7 @@ async function precheckImage(filePath: string): Promise<PrecheckResult> {
   return { level: worst(items), items }
 }
 
-async function precheckPdf(filePath: string): Promise<PrecheckResult> {
+async function precheckPdf(filePath: string, target?: PrecheckTarget): Promise<PrecheckResult> {
   const { size } = await stat(filePath)
   if (size > PDF_PARSE_MAX_BYTES) {
     return { level: 'info', items: [{ key: 'size', level: 'info', message: '文件较大，已存盘但跳过 PDF 预检' }] }
@@ -66,7 +103,11 @@ async function precheckPdf(filePath: string): Promise<PrecheckResult> {
   if (pages > 0) {
     items.push({ key: 'pages', level: 'info', message: `共 ${pages} 页` })
     const { width, height } = doc.getPage(0).getSize()
-    items.push({ key: 'page_size', level: 'info', message: `首页 ${ptToMm(width)}×${ptToMm(height)}mm` })
+    const wmm = ptToMm(width)
+    const hmm = ptToMm(height)
+    items.push({ key: 'page_size', level: 'info', message: `首页 ${wmm}×${hmm}mm` })
+    const sc = sizeCheck(wmm, hmm, target)
+    if (sc) items.push(sc)
   } else {
     items.push({ key: 'pages', level: 'warn', message: '无可读页面' })
   }
@@ -74,9 +115,13 @@ async function precheckPdf(filePath: string): Promise<PrecheckResult> {
 }
 
 /** 落盘文件预检入口。任何解析失败都收敛为 warn（不抛错，上传已成功，仅提示人工复核） */
-export async function precheckFile(filePath: string, kind: 'pdf' | 'png' | 'tiff'): Promise<PrecheckResult> {
+export async function precheckFile(
+  filePath: string,
+  kind: 'pdf' | 'png' | 'tiff',
+  target?: PrecheckTarget,
+): Promise<PrecheckResult> {
   try {
-    return kind === 'pdf' ? await precheckPdf(filePath) : await precheckImage(filePath)
+    return kind === 'pdf' ? await precheckPdf(filePath, target) : await precheckImage(filePath, target)
   } catch {
     return {
       level: 'warn',

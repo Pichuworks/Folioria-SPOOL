@@ -183,8 +183,11 @@
 - [x] Q3 月度报表自动快照（附录A D34）：migration 0016 report_snapshots；snapshotMonth 幂等 upsert（复用 monthlyReport）；CLI `spool snapshot-month`；`GET /api/reports/snapshots`（admin）；AdminReports「历史快照」段；deploy/remote-snapshot-setup.sh 月度 timer。
 - [x] Q4 文件自动预检（Phase 3 提前，附录A D35）：sharp（图片 DPI/色彩空间/像素尺寸）+ pdf-lib（PDF 页数/加密/首页 mm）接 storeUpload choke-point；
       advisory 落 file_precheck（migration 0017）best-effort 不阻断；OrderView/AdminOrders 渲染 PrecheckNotes；书组件与单页 item 同口径。
-      已知缺口：sizes 无绝对 mm → 暂只报告文件尺寸、不做「vs 订单尺寸+出血」匹配（follow-up：先给 sizes 配 mm 数据）。
+      已知缺口（已闭合,见 F1–F5）：sizes 无绝对 mm → 暂只报告文件尺寸、不做「vs 订单尺寸+出血」匹配。
       —— P9（Q1–Q4）全部完成：退款可见性 / 报表导出 / 月度快照 / 文件预检闭合。
+- [x] F1–F5 预检尺寸/出血匹配 follow-up（附录A D36）：migration 0018 给 sizes 加 width_mm/height_mm（迁移回填既有库 +
+      seed.ts 回填新库:6/A5/A4/A3/SRA3,A3+留 NULL）；precheckFile 接 target，PDF 用页 mm/图片用 px÷DPI orientation-agnostic
+      比对——含出血 ok / 吻合无出血 info / 超界 warn；files-routes 按 size_key 查 mm 传入；AdminPricing 尺寸行内 mm 编辑 + 新建带 mm。
 
 ## P4 Phase 3 远期（PRD 立项，不急）
 
