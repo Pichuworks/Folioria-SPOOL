@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import AdminGate from './AdminGate'
 import { send } from './api'
+import { CHART_COLORS, CHART_STYLE } from './chart-theme'
 import { Field, Leader, MagSec, SpecRow, specInput } from './spec'
 
 interface MonthlyDto {
@@ -9,6 +11,8 @@ interface MonthlyDto {
   pages: number
   external: {
     jobs: number
+    revenue: number
+    cost: number
     profit: number
     revenue_display: string
     cost_display: string
@@ -52,7 +56,6 @@ interface SnapshotDto {
   generated_at: string
 }
 
-/** Q2 CSV 导出链接：GET 带 cookie，浏览器直接下载（content-disposition attachment） */
 function ExportLink({ href }: { href: string }) {
   return (
     <a
@@ -61,6 +64,75 @@ function ExportLink({ href }: { href: string }) {
     >
       导出 CSV ↧
     </a>
+  )
+}
+
+const tooltipStyle = {
+  ...CHART_STYLE,
+  background: CHART_COLORS.bg,
+  border: `1px solid ${CHART_COLORS.grid}`,
+}
+
+function MonthlyChart({ data }: { data: MonthlyDto }) {
+  const chartData = [
+    { name: '收入', value: data.external.revenue },
+    { name: '成本', value: data.external.cost },
+    { name: '毛利', value: data.external.profit },
+  ]
+  if (chartData.every((d) => d.value === 0)) return null
+  const colors = [CHART_COLORS.revenue, CHART_COLORS.cost, CHART_COLORS.profit]
+  return (
+    <ResponsiveContainer width="100%" height={180}>
+      <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.grid} />
+        <XAxis dataKey="name" tick={{ ...CHART_STYLE, fill: CHART_COLORS.text }} />
+        <YAxis tick={{ ...CHART_STYLE, fill: CHART_COLORS.text }} width={50} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="value" name="金额" radius={[2, 2, 0, 0]}>
+          {chartData.map((_entry, i) => (
+            <rect key={i} fill={colors[i % colors.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function UsageChart({ data }: { data: UsageDto }) {
+  if (data.printers.length === 0 || data.printers.every((p) => p.month_pages === 0)) return null
+  const chartData = data.printers.map((p) => ({ name: p.code, pages: p.month_pages }))
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(120, data.printers.length * 36)}>
+      <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.grid} />
+        <XAxis type="number" tick={{ ...CHART_STYLE, fill: CHART_COLORS.text }} />
+        <YAxis type="category" dataKey="name" tick={{ ...CHART_STYLE, fill: CHART_COLORS.text }} width={50} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="pages" name="本月面数" fill={CHART_COLORS.revenue} radius={[0, 2, 2, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function ConsumptionChart({ data }: { data: ConsumptionDto }) {
+  if (data.rows.length === 0) return null
+  const top10 = data.rows.slice(0, 10)
+  const chartData = top10.map((r) => ({
+    name: `${r.name} ${r.size_key}`,
+    consumed: r.consumed,
+    scrapped: r.scrapped,
+  }))
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(140, top10.length * 36)}>
+      <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.grid} />
+        <XAxis type="number" tick={{ ...CHART_STYLE, fill: CHART_COLORS.text }} />
+        <YAxis type="category" dataKey="name" tick={{ ...CHART_STYLE, fill: CHART_COLORS.text }} width={100} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="consumed" name="消耗" stackId="a" fill={CHART_COLORS.revenue} />
+        <Bar dataKey="scrapped" name="废品" stackId="a" fill={CHART_COLORS.cost} radius={[0, 2, 2, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
   )
 }
 
@@ -98,33 +170,36 @@ function ReportsBody() {
         {!monthly ? (
           <p className="py-2 text-[13px] text-dim">加载中…</p>
         ) : (
-          <div className="grid grid-cols-1 gap-x-12 md:grid-cols-2">
-            <div>
-              <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">EXTERNAL · 对外</div>
-              <SpecRow label="完成作业" value={monthly.external.jobs} />
-              <SpecRow label="收入" value={monthly.external.revenue_display} />
-              <SpecRow label="成本" value={monthly.external.cost_display} />
-              <div className="flex items-baseline gap-3.5 py-[11px]">
-                <span className="min-w-24 text-[15px] font-medium text-ink">毛利</span>
-                <Leader />
-                <span className={`font-mono text-[15px] tracking-[.05em] ${monthly.external.profit < 0 ? 'text-warn' : 'text-wine-ink'}`}>
-                  {monthly.external.profit_display}
-                </span>
+          <>
+            <div className="grid grid-cols-1 gap-x-12 md:grid-cols-2">
+              <div>
+                <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">EXTERNAL · 对外</div>
+                <SpecRow label="完成作业" value={monthly.external.jobs} />
+                <SpecRow label="收入" value={monthly.external.revenue_display} />
+                <SpecRow label="成本" value={monthly.external.cost_display} />
+                <div className="flex items-baseline gap-3.5 py-[11px]">
+                  <span className="min-w-24 text-[15px] font-medium text-ink">毛利</span>
+                  <Leader />
+                  <span className={`font-mono text-[15px] tracking-[.05em] ${monthly.external.profit < 0 ? 'text-warn' : 'text-wine-ink'}`}>
+                    {monthly.external.profit_display}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">INTERNAL · 内部消耗</div>
+                <SpecRow label="内部作业" value={monthly.internal.jobs} />
+                <SpecRow label="内部页数" value={`${monthly.internal.pages} 面`} />
+                <SpecRow label="内部成本" value={monthly.internal.cost_display} strong />
+                <SpecRow
+                  label="作废核销"
+                  note="取消单已发生成本"
+                  value={`${monthly.writeoff.jobs} 单 · ${monthly.writeoff.cost_display}`}
+                />
+                <SpecRow label="全月合计" note="含内外" value={`${monthly.jobs_done} 单 · ${monthly.pages} 面`} />
               </div>
             </div>
-            <div>
-              <div className="mb-1 font-mono text-[10px] tracking-[.14em] text-dim">INTERNAL · 内部消耗</div>
-              <SpecRow label="内部作业" value={monthly.internal.jobs} />
-              <SpecRow label="内部页数" value={`${monthly.internal.pages} 面`} />
-              <SpecRow label="内部成本" value={monthly.internal.cost_display} strong />
-              <SpecRow
-                label="作废核销"
-                note="取消单已发生成本"
-                value={`${monthly.writeoff.jobs} 单 · ${monthly.writeoff.cost_display}`}
-              />
-              <SpecRow label="全月合计" note="含内外" value={`${monthly.jobs_done} 单 · ${monthly.pages} 面`} />
-            </div>
-          </div>
+            <MonthlyChart data={monthly} />
+          </>
         )}
         <div className="mt-3 text-right">
           <ExportLink href={`/api/reports/monthly/export?month=${month}`} />
@@ -135,17 +210,20 @@ function ReportsBody() {
         {!usage ? (
           <p className="py-2 text-[13px] text-dim">加载中…</p>
         ) : (
-          usage.printers.map((p) => (
-            <div key={p.id} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[8px]">
-              <span className="min-w-16 text-[14px] font-medium text-ink">{p.code}</span>
-              <span className="font-mono text-[10px] tracking-[.1em] text-dim">{p.status.toUpperCase()}</span>
-              <span className="text-[11.5px] text-dim">{p.month_jobs} 单</span>
-              <Leader />
-              <span className="font-mono text-[12px] text-ink">
-                本月 {p.month_pages}P / 累计 {p.total_pages}P
-              </span>
-            </div>
-          ))
+          <>
+            {usage.printers.map((p) => (
+              <div key={p.id} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[8px]">
+                <span className="min-w-16 text-[14px] font-medium text-ink">{p.code}</span>
+                <span className="font-mono text-[10px] tracking-[.1em] text-dim">{p.status.toUpperCase()}</span>
+                <span className="text-[11.5px] text-dim">{p.month_jobs} 单</span>
+                <Leader />
+                <span className="font-mono text-[12px] text-ink">
+                  本月 {p.month_pages}P / 累计 {p.total_pages}P
+                </span>
+              </div>
+            ))}
+            <UsageChart data={usage} />
+          </>
         )}
         <div className="mt-3 text-right">
           <ExportLink href={`/api/reports/equipment-usage/export?month=${month}`} />
@@ -158,15 +236,18 @@ function ReportsBody() {
         ) : consumption.rows.length === 0 ? (
           <p className="py-2 text-[13px] text-dim">本月无出库记录</p>
         ) : (
-          consumption.rows.map((r) => (
-            <div key={`${r.paper_id}:${r.size_key}`} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[8px]">
-              <span className="text-[14px] font-medium text-ink">{r.name}</span>
-              <span className="text-[12px] text-dim">{r.size_key}</span>
-              {r.scrapped > 0 && <span className="font-mono text-[10px] tracking-[.1em] text-warn">废 {r.scrapped}</span>}
-              <Leader />
-              <span className="font-mono text-[13px] text-ink">{r.total} 张</span>
-            </div>
-          ))
+          <>
+            {consumption.rows.map((r) => (
+              <div key={`${r.paper_id}:${r.size_key}`} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[8px]">
+                <span className="text-[14px] font-medium text-ink">{r.name}</span>
+                <span className="text-[12px] text-dim">{r.size_key}</span>
+                {r.scrapped > 0 && <span className="font-mono text-[10px] tracking-[.1em] text-warn">废 {r.scrapped}</span>}
+                <Leader />
+                <span className="font-mono text-[13px] text-ink">{r.total} 张</span>
+              </div>
+            ))}
+            <ConsumptionChart data={consumption} />
+          </>
         )}
         <div className="mt-3 text-right">
           <ExportLink href={`/api/reports/paper-consumption/export?month=${month}`} />

@@ -268,6 +268,30 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
+  // 趋势数据：最近 6 个月汇总（Dashboard 图表用）
+  app.get('/api/reports/trend', { preHandler: requireAdmin }, async () => {
+    const now = new Date()
+    const months: string[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push(d.toISOString().slice(0, 7))
+    }
+    const currency = baseCurrency(db)
+    return months.map((m) => {
+      const r = monthlyReport(db, m)
+      return {
+        month: m,
+        revenue: r.external.revenue,
+        cost: r.external.cost,
+        profit: r.external.profit,
+        internal_cost: r.internal.cost,
+        revenue_display: formatMoney(money(r.external.revenue), currency),
+        cost_display: formatMoney(money(r.external.cost), currency),
+        profit_display: formatMoney(money(r.external.profit), currency),
+      }
+    })
+  })
+
   // D34 历史快照列表（admin）：月初 timer 归档，按月倒序
   app.get('/api/reports/snapshots', { preHandler: requireAdmin }, async () => {
     const currency = baseCurrency(db)
