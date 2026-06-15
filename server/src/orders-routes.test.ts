@@ -491,6 +491,10 @@ describe('R1 状态机（§2.5 + 审稿定点）', () => {
     expect((await advance('ready')).statusCode).toBe(409)
 
     await advance('confirmed')
+    db.prepare(
+      `UPDATE jobs SET status = 'done', completed_at = datetime('now')
+       WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
+    ).run(order.id)
     await advance('in_production')
     await advance('ready')
     const delivered = await advance('delivered')

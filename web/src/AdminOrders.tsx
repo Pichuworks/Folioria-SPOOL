@@ -260,7 +260,13 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
       onRefresh()
     } else {
       const code = (res.data as { error?: string })?.error ?? String(res.status)
-      setErr(code === 'quote_expired' ? '报价已过期，不可确认（需重新下单）。' : `操作失败（${code}）`)
+      setErr(
+        code === 'quote_expired'
+          ? '报价已过期，不可确认（需重新下单）。'
+          : code === 'jobs_not_completed'
+            ? '尚有未完成的作业，请先在作业管理中结转全部作业。'
+            : `操作失败（${code}）`,
+      )
     }
   }
 

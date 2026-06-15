@@ -726,6 +726,18 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
           return reply.status(409).send({ error: `invalid_transition_${order.status}_to_${status}` })
         }
         if (status === 'delivered') {
+          const pending = (
+            db
+              .prepare(
+                `SELECT COUNT(*) AS n FROM jobs
+                 WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)
+                   AND status NOT IN ('done', 'cancelled')`,
+              )
+              .get(id) as { n: number }
+          ).n
+          if (pending > 0) {
+            return reply.status(409).send({ error: 'jobs_not_completed' })
+          }
           db.prepare("UPDATE orders SET status = 'delivered', completed_at = ? WHERE id = ?").run(
             new Date().toISOString(),
             id,
