@@ -439,24 +439,26 @@ function OrderDetail({ order, onUpdated, onRefresh }: { order: OrderDto; onUpdat
               </div>
             </div>
 
-            <div className="border-t border-line pt-3">
-              <div className="mb-2 font-mono text-[10px] tracking-[.14em] text-dim">折扣（整数减额）</div>
-              <div className="flex items-center gap-2">
-                <input
-                  className={`${specInput} w-32`}
-                  inputMode="numeric"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => void saveDiscount()}
-                  className="rounded-full border border-ink px-4 py-2 text-[13px] text-ink hover:bg-paper"
-                >
-                  保存
-                </button>
+            {['quoted', 'file_pending', 'file_approved'].includes(order.status) && (
+              <div className="border-t border-line pt-3">
+                <div className="mb-2 font-mono text-[10px] tracking-[.14em] text-dim">折扣（整数减额）</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    className={`${specInput} w-32`}
+                    inputMode="numeric"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void saveDiscount()}
+                    className="border border-ink px-4 py-2 text-[13px] text-ink hover:bg-card"
+                  >
+                    保存
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
             {err && <p className="text-[13px] text-wine-ink">{err}</p>}
           </div>
         </div>
