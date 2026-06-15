@@ -89,6 +89,7 @@ export interface OrderItemRow {
   file_url: string | null
   file_status: 'pending' | 'approved' | 'rejected'
   file_note: string | null
+  file_precheck: string | null
   job_id: string | null
   mode_name: string
   paper_name: string
@@ -141,6 +142,7 @@ export interface OrderBookComponentRow {
   file_url: string | null
   file_status: 'pending' | 'approved' | 'rejected'
   file_note: string | null
+  file_precheck: string | null
   paper_name: string
   size_label: string
 }

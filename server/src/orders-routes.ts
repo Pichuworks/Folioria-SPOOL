@@ -26,6 +26,27 @@ import { getPayments, PaymentError, projectStatus, recordPayment, type PaymentRo
 
 // ---------- 序列化白名单（D5/§6）：下单域响应仅含售价侧字段，cost/profit/margin 不进 schema ----------
 
+// D35 文件预检（advisory；两域售价侧——无 cost/profit/margin 字段，owner 自查用）
+export const PRECHECK_SCHEMA = {
+  type: ['object', 'null'],
+  additionalProperties: false,
+  properties: {
+    level: { type: 'string' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          key: { type: 'string' },
+          level: { type: 'string' },
+          message: { type: 'string' },
+        },
+      },
+    },
+  },
+}
+
 export const ORDER_ITEM_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -45,6 +66,7 @@ export const ORDER_ITEM_SCHEMA = {
     has_file: { type: 'boolean' },
     file_status: { type: 'string' },
     file_note: { type: ['string', 'null'] },
+    file_precheck: PRECHECK_SCHEMA,
     job_id: { type: ['string', 'null'] }, // admin 视图专用
   },
 }
@@ -69,6 +91,7 @@ export const ORDER_BOOK_COMPONENT_SCHEMA = {
     has_file: { type: 'boolean' }, // D31 组件文件上传/审稿（两域售价侧；文件内容下载仍 owner/admin）
     file_status: { type: 'string' },
     file_note: { type: ['string', 'null'] },
+    file_precheck: PRECHECK_SCHEMA, // D35 文件预检（advisory）
     source_component_id: { type: ['integer', 'null'] }, // D32 目录组件来源（中性引用，供再下单还原）
     mode_id: { type: 'integer' }, // admin 视图专用（机器对客户不可见）
     job_id: { type: ['string', 'null'] }, // admin 视图专用
@@ -237,6 +260,16 @@ export interface DtoOptions {
   includeToken: boolean
 }
 
+/** file_precheck 存 JSON TEXT；解析回对象（坏数据收敛为 null，不抛错） */
+function parsePrecheck(raw: string | null): unknown {
+  if (raw == null) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
 function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
   return {
     id: item.id,
@@ -254,6 +287,7 @@ function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
     has_file: item.file_url != null,
     file_status: item.file_status,
     file_note: item.file_note,
+    file_precheck: parsePrecheck(item.file_precheck),
     ...(opts.admin ? { job_id: item.job_id } : {}),
   }
 }
@@ -284,6 +318,7 @@ function bookDto(book: OrderBook, currency: Currency, opts: DtoOptions) {
       has_file: c.file_url != null,
       file_status: c.file_status,
       file_note: c.file_note,
+      file_precheck: parsePrecheck(c.file_precheck),
       source_component_id: c.source_component_id,
       ...(opts.admin ? { mode_id: c.mode_id, job_id: c.job_id } : {}),
     })),

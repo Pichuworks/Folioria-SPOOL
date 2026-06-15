@@ -24,6 +24,21 @@ export const FILE_STATUS_LABEL: Record<OrderItemDto['file_status'], string> = {
   rejected: '已驳回',
 }
 
+/** D35 文件预检提示（advisory）：警告标橙、其余作灰；空则不渲染。OrderView 与 AdminOrders 共用 */
+export function PrecheckNotes({ precheck }: { precheck?: OrderItemDto['file_precheck'] }) {
+  if (!precheck || precheck.items.length === 0) return null
+  return (
+    <div className="mt-0.5 flex flex-wrap gap-x-2.5 gap-y-0.5">
+      {precheck.items.map((it, i) => (
+        <span key={i} className={`text-[10.5px] leading-[1.5] ${it.level === 'warn' ? 'text-warn' : 'text-dim'}`}>
+          {it.level === 'warn' ? '⚠ ' : '· '}
+          {it.message}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 const BOOK_ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
 
 const fmtTime = (t: string) => t.slice(0, 16).replace('T', ' ')
@@ -142,6 +157,7 @@ function BookCompFile({
         </>
       )}
       {err && <span className="text-[11.5px] text-wine-ink">{err}</span>}
+      {comp.has_file && <PrecheckNotes precheck={comp.file_precheck} />}
     </div>
   )
 }
@@ -303,6 +319,7 @@ function ItemRow({
         )}
         {err && <span className="text-[12px] text-wine-ink">{err}</span>}
       </div>
+      {item.has_file && <PrecheckNotes precheck={item.file_precheck} />}
     </div>
   )
 }

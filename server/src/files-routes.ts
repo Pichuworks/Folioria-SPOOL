@@ -12,6 +12,7 @@ import { requireUser } from './guards.js'
 import { notifyAdmins, templates } from './notify.js'
 import { getOrder, OrderError, syncFileState, type OrderRow } from './orders.js'
 import { ERROR_SCHEMA, ORDER_SCHEMA, orderDto } from './orders-routes.js'
+import { precheckFile, type PrecheckResult } from './precheck.js'
 
 /** R5: 类型白名单——扩展名与 magic bytes 双查，二者一致才收（PDF/TIFF/PNG，PRD §2.5） */
 const EXT_TO_KIND: Record<string, 'pdf' | 'png' | 'tiff'> = {
@@ -43,9 +44,13 @@ const UPLOADABLE: readonly string[] = ['quoted', 'file_pending']
 
 /**
  * R5 落盘核心（order_item 与书组件共用）：白名单扩展 + magic bytes 双查，randomUUID 存储名
- * （不落原始名，路径穿越/编码一并消除）。超限 413 半截清掉，伪装 415 不落盘。成功返回存储名。
+ * （不落原始名，路径穿越/编码一并消除）。超限 413 半截清掉，伪装 415 不落盘。
+ * 成功后跑 D35 文件预检（advisory，best-effort 不阻断）；返回存储名 + 预检结果。
  */
-async function storeUpload(data: MultipartFile | undefined, uploadDir: string): Promise<string> {
+async function storeUpload(
+  data: MultipartFile | undefined,
+  uploadDir: string,
+): Promise<{ storedName: string; precheck: PrecheckResult }> {
   if (!data) throw new OrderError(422, 'file_required')
   const ext = path.extname(data.filename ?? '').slice(1).toLowerCase()
   const kind = EXT_TO_KIND[ext]
@@ -82,8 +87,10 @@ async function storeUpload(data: MultipartFile | undefined, uploadDir: string): 
     await rm(partPath, { force: true })
     throw new OrderError(415, 'file_content_mismatch')
   }
-  await rename(partPath, path.join(uploadDir, storedName))
-  return storedName
+  const finalPath = path.join(uploadDir, storedName)
+  await rename(partPath, finalPath)
+  const precheck = await precheckFile(finalPath, kind)
+  return { storedName, precheck }
 }
 
 /** 经 randomUUID 存储名取下载流（basename 兜底防穿越）；缺文件/打不开 → 404 */
@@ -162,16 +169,15 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
         throw new OrderError(409, `not_uploadable_from_${order.status}`)
       }
 
-      const storedName = await storeUpload(await req.file(), uploadDir)
+      const { storedName, precheck } = await storeUpload(await req.file(), uploadDir)
 
-      // 重传：旧文件清理 + file_status 重置 pending、驳回意见清空（R5 定点）
+      // 重传：旧文件清理 + file_status 重置 pending、驳回意见清空、预检刷新（R5/D35 定点）
       if (item.file_url != null) {
         await rm(path.join(uploadDir, item.file_url), { force: true })
       }
-      db.prepare("UPDATE order_items SET file_url = ?, file_status = 'pending', file_note = NULL WHERE id = ?").run(
-        storedName,
-        iid,
-      )
+      db.prepare(
+        "UPDATE order_items SET file_url = ?, file_status = 'pending', file_note = NULL, file_precheck = ? WHERE id = ?",
+      ).run(storedName, JSON.stringify(precheck), iid)
       const sync = syncFileState(db, id)
       // R7: 文件传齐进入审稿 → 通知 admin（分发永不抛错）
       if (sync.changed && sync.status === 'file_pending') {
@@ -216,14 +222,14 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
         throw new OrderError(409, `not_uploadable_from_${order.status}`)
       }
 
-      const storedName = await storeUpload(await req.file(), uploadDir)
+      const { storedName, precheck } = await storeUpload(await req.file(), uploadDir)
 
       if (comp.file_url != null) {
         await rm(path.join(uploadDir, comp.file_url), { force: true })
       }
       db.prepare(
-        "UPDATE order_book_components SET file_url = ?, file_status = 'pending', file_note = NULL WHERE id = ?",
-      ).run(storedName, cid)
+        "UPDATE order_book_components SET file_url = ?, file_status = 'pending', file_note = NULL, file_precheck = ? WHERE id = ?",
+      ).run(storedName, JSON.stringify(precheck), cid)
       const sync = syncFileState(db, id)
       if (sync.changed && sync.status === 'file_pending') {
         await notifyAdmins(db, 'order_file_pending', templates.orderFilePending(order.order_number))

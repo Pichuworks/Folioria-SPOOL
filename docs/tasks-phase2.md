@@ -181,7 +181,10 @@
 - [x] Q1 客户侧退款可见性：OrderView 对已取消且 paid_amount>0 的单显示「待退款 ¥X」（下单域投影派生，不暴露 admin refund_due）。
 - [x] Q2 报表 CSV 导出：`/api/reports/{monthly,equipment-usage,paper-consumption}/export` CSV 端点（admin，text/csv attachment，UTF-8 BOM，整数金额）；AdminReports 三段各加「导出 CSV」链接。数据层抽 monthlyReport/equipmentUsage/paperConsumption 复用。
 - [x] Q3 月度报表自动快照（附录A D34）：migration 0016 report_snapshots；snapshotMonth 幂等 upsert（复用 monthlyReport）；CLI `spool snapshot-month`；`GET /api/reports/snapshots`（admin）；AdminReports「历史快照」段；deploy/remote-snapshot-setup.sh 月度 timer。
-- [ ] Q4 文件自动预检（Phase 3 提前，附录A D__）：sharp（图片 DPI/色彩空间）+ pdf-lib（PDF 页数/加密/页尺寸）接 storeUpload choke-point；advisory 落 file_precheck 不阻断人工审稿；书组件与单页 item 同口径。
+- [x] Q4 文件自动预检（Phase 3 提前，附录A D35）：sharp（图片 DPI/色彩空间/像素尺寸）+ pdf-lib（PDF 页数/加密/首页 mm）接 storeUpload choke-point；
+      advisory 落 file_precheck（migration 0017）best-effort 不阻断；OrderView/AdminOrders 渲染 PrecheckNotes；书组件与单页 item 同口径。
+      已知缺口：sizes 无绝对 mm → 暂只报告文件尺寸、不做「vs 订单尺寸+出血」匹配（follow-up：先给 sizes 配 mm 数据）。
+      —— P9（Q1–Q4）全部完成：退款可见性 / 报表导出 / 月度快照 / 文件预检闭合。
 
 ## P4 Phase 3 远期（PRD 立项，不急）
 

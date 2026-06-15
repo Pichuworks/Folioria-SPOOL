@@ -15,7 +15,7 @@ import {
   type OrderDto,
   type OrderItemDto,
 } from './api'
-import { FILE_STATUS_LABEL } from './OrderView'
+import { FILE_STATUS_LABEL, PrecheckNotes } from './OrderView'
 import { Field, Leader, MagSec, SpecRow, specInput } from './spec'
 
 /** §3.2 看板六列：报价中→审稿→已确认→生产中→待取→已完成（cancelled 折叠在下方） */
@@ -115,6 +115,7 @@ function ReviewRow({
         )}
         {err && <span className="text-wine-ink">{err}</span>}
       </div>
+      {item.has_file && <PrecheckNotes precheck={item.file_precheck} />}
     </div>
   )
 }
@@ -188,6 +189,11 @@ function BookComponentReviewRow({
         </span>
       )}
       {err && <span className="text-wine-ink">{err}</span>}
+      {comp.has_file && (
+        <div className="w-full">
+          <PrecheckNotes precheck={comp.file_precheck} />
+        </div>
+      )}
     </div>
   )
 }

@@ -520,6 +520,12 @@ export async function completeJob(
 
 // ---------- 订单（R1–R6/R8） ----------
 
+// D35 文件预检（advisory；两域售价侧）
+export interface FilePrecheckDto {
+  level: 'ok' | 'info' | 'warn'
+  items: Array<{ key: string; level: 'ok' | 'info' | 'warn'; message: string }>
+}
+
 export interface OrderItemDto {
   id: string
   mode_id: number
@@ -536,6 +542,7 @@ export interface OrderItemDto {
   has_file: boolean
   file_status: 'pending' | 'approved' | 'rejected'
   file_note: string | null
+  file_precheck?: FilePrecheckDto | null
   job_id?: string | null | undefined
 }
 
@@ -555,6 +562,7 @@ export interface OrderBookComponentDto {
   has_file: boolean
   file_status: 'pending' | 'approved' | 'rejected'
   file_note: string | null
+  file_precheck?: FilePrecheckDto | null
   source_component_id: number | null
   mode_id?: number
   job_id?: string | null
