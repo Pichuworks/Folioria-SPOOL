@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, Leader, MagSec, PillBtn, specInput } from './spec'
+import { Field, Leader, MagSec, Paginator, PillBtn, specInput, usePagination } from './spec'
 
 interface StockDto {
   id: string
@@ -53,6 +53,64 @@ const ACTION_LABEL: Record<string, string> = {
   scrap: '报废',
   return: '退回入库',
   convert: '裁切转换',
+}
+
+interface LogDto {
+  id: string
+  target_type: string
+  target_id: string
+  action: string
+  quantity_delta: number
+  convert_group: string | null
+  reason: string | null
+  created_at: string
+}
+
+function TimelineSection({ filteredLog, actionFilter, setActionFilter, targetLabel }: {
+  filteredLog: LogDto[]
+  actionFilter: string
+  setActionFilter: (v: string) => void
+  targetLabel: Map<string, string>
+}) {
+  const { page, totalPages, paged, setPage } = usePagination(filteredLog, 50)
+
+  return (
+    <MagSec tag="03" title="出入库时间线" note={`${filteredLog.length} 条`}>
+      <div className="mb-3 max-w-56">
+        <Field label="按动作筛选">
+          <select className={specInput} value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setPage(0) }}>
+            <option value="">全部</option>
+            {Object.entries(ACTION_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      {filteredLog.length === 0 ? (
+        <p className="py-2 text-[13px] text-dim">暂无记录</p>
+      ) : (
+        <>
+          {paged.map((l) => (
+            <div key={l.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line py-[8px]">
+              <span className="font-mono text-[10px] tracking-[.08em] text-dim">{l.created_at.slice(0, 16).replace('T', ' ')}</span>
+              <span className="min-w-16 text-[13px] font-medium text-ink">{ACTION_LABEL[l.action] ?? l.action}</span>
+              <span className="text-[12px] text-dim">{targetLabel.get(l.target_id) ?? l.target_id.slice(0, 8)}</span>
+              {l.convert_group && <span className="font-mono text-[9.5px] tracking-[.1em] text-dim">成对 {l.convert_group.slice(0, 8)}</span>}
+              {l.reason && <span className="text-[11.5px] text-dim">{l.reason}</span>}
+              <Leader />
+              <span className={`font-mono text-[13px] ${l.quantity_delta < 0 ? 'text-warn' : 'text-wine-ink'}`}>
+                {l.quantity_delta > 0 ? `+${l.quantity_delta}` : l.quantity_delta}
+              </span>
+            </div>
+          ))}
+          <Paginator page={page} totalPages={totalPages} onPage={setPage} />
+        </>
+      )}
+      <div className="mt-3 text-right">
+        <a href="/api/inventory/log/export" className="font-mono text-[10.5px] tracking-[.12em] text-dim underline hover:text-wine-ink">导出 XLSX ↧</a>
+      </div>
+    </MagSec>
+  )
 }
 
 const actionBtn = 'font-mono text-[10px] tracking-[.14em] hover:opacity-70'
@@ -319,6 +377,9 @@ function InventoryBody() {
           ))}
         </div>
         {refs && <NewStockForm refs={refs} onCreated={reload} />}
+        <div className="mt-3 text-right">
+          <a href="/api/inventory/stocks/export" className="font-mono text-[10.5px] tracking-[.12em] text-dim underline hover:text-wine-ink">导出 XLSX ↧</a>
+        </div>
       </MagSec>
 
       <MagSec tag="02" title="耗材" note="LIFE GAUGE">
@@ -340,37 +401,12 @@ function InventoryBody() {
             </div>
           ))
         )}
+        <div className="mt-3 text-right">
+          <a href="/api/inventory/consumables/export" className="font-mono text-[10.5px] tracking-[.12em] text-dim underline hover:text-wine-ink">导出 XLSX ↧</a>
+        </div>
       </MagSec>
 
-      <MagSec tag="03" title="出入库时间线" note={`LATEST ${filteredLog.length}`}>
-        <div className="mb-3 max-w-56">
-          <Field label="按动作筛选">
-            <select className={specInput} value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
-              <option value="">全部</option>
-              {Object.entries(ACTION_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        {filteredLog.length === 0 ? (
-          <p className="py-2 text-[13px] text-dim">暂无记录</p>
-        ) : (
-          filteredLog.map((l) => (
-            <div key={l.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line py-[8px]">
-              <span className="font-mono text-[10px] tracking-[.08em] text-dim">{l.created_at.slice(0, 16).replace('T', ' ')}</span>
-              <span className="min-w-16 text-[13px] font-medium text-ink">{ACTION_LABEL[l.action] ?? l.action}</span>
-              <span className="text-[12px] text-dim">{targetLabel.get(l.target_id) ?? l.target_id.slice(0, 8)}</span>
-              {l.convert_group && <span className="font-mono text-[9.5px] tracking-[.1em] text-dim">成对 {l.convert_group.slice(0, 8)}</span>}
-              {l.reason && <span className="text-[11.5px] text-dim">{l.reason}</span>}
-              <Leader />
-              <span className={`font-mono text-[13px] ${l.quantity_delta < 0 ? 'text-warn' : 'text-wine-ink'}`}>
-                {l.quantity_delta > 0 ? `+${l.quantity_delta}` : l.quantity_delta}
-              </span>
-            </div>
-          ))
-        )}
-      </MagSec>
+      <TimelineSection filteredLog={filteredLog} actionFilter={actionFilter} setActionFilter={setActionFilter} targetLabel={targetLabel} />
     </div>
   )
 }

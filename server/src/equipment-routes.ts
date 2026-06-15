@@ -5,6 +5,7 @@ import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
 import { formatMoney, formatMoneyC, money, moneyC, type Currency } from './money.js'
+import { sendXlsx } from './xlsx.js'
 
 interface PrinterRow {
   id: number
@@ -234,4 +235,32 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
         .send(db.prepare('SELECT * FROM maintenance_events WHERE id = ?').get(eventId))
     },
   )
+
+  app.get('/api/equipment/export', { preHandler: requireAdmin }, async (_req, reply) => {
+    const now = new Date()
+    const currency = baseCurrency(db)
+    const rows = db.prepare('SELECT * FROM printers WHERE archived = 0 ORDER BY id').all() as PrinterRow[]
+    return sendXlsx(reply, 'equipment.xlsx', [
+      {
+        name: '设备档案',
+        columns: [
+          { header: '编号', key: 'code', width: 10 },
+          { header: '名称', key: 'name', width: 18 },
+          { header: '类型', key: 'type', width: 8 },
+          { header: '状态', key: 'status', width: 12 },
+          { header: '位置', key: 'location', width: 15 },
+          { header: '累计页数', key: 'total_pages', width: 12 },
+          { header: '设备成本', key: 'equipment_cost_display', width: 14 },
+          { header: '月费用', key: 'monthly_cost_display', width: 12 },
+          { header: '需要校准', key: 'calibration_due', width: 10 },
+        ],
+        rows: rows.map((p) => ({
+          ...p,
+          equipment_cost_display: formatMoneyC(moneyC(p.equipment_cost_c), currency),
+          monthly_cost_display: formatMoneyC(moneyC(p.monthly_cost_c), currency),
+          calibration_due: calibrationDue(p, now) ? '是' : '否',
+        })),
+      },
+    ])
+  })
 }

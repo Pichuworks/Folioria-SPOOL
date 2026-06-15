@@ -17,8 +17,8 @@ function DashboardBody() {
   return (
     <div className="grid grid-cols-1 gap-x-12 md:grid-cols-2">
       <MagSec tag="01" title="待办" note="ACTIVE">
-        <SpecRow label="进行中作业" value={data.todo.jobs_active} />
-        <SpecRow label="进行中订单" value={data.todo.orders_active} />
+        <SpecRow label="活跃作业" note="草稿/排队/打印中" value={data.todo.jobs_active} />
+        <SpecRow label="在途订单" note="报价至待取" value={data.todo.orders_active} />
         <SpecRow label="维护提醒" value={data.todo.maintenance_alerts} />
       </MagSec>
 

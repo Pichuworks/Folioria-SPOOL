@@ -4,6 +4,7 @@ import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
 import { formatMoneyC, moneyC } from './money.js'
+import { sendXlsx } from './xlsx.js'
 
 const MOVEMENT_ACTIONS = ['purchase', 'consume', 'adjust', 'scrap', 'return'] as const
 type MovementAction = (typeof MOVEMENT_ACTIONS)[number]
@@ -560,4 +561,105 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
       return db.prepare(sql).all(params)
     },
   )
+
+  // ---------- xlsx exports ----------
+
+  app.get('/api/inventory/stocks/export', { preHandler: requireAdmin }, async (_req, reply) => {
+    const rows = db
+      .prepare(
+        `SELECT ps.id, p.name AS paper_name, s.label AS size_label, ps.quantity,
+                ps.location_id, l.moisture_status, ps.opened, ps.opened_at, ps.notes
+         FROM paper_stocks ps
+         JOIN papers p ON p.id = ps.paper_id
+         JOIN sizes s ON s.key = ps.size_key
+         LEFT JOIN locations l ON l.id = ps.location_id
+         WHERE ps.archived = 0
+         ORDER BY p.name, s.sort`,
+      )
+      .all()
+    return sendXlsx(reply, 'stocks.xlsx', [
+      {
+        name: '纸张库存',
+        columns: [
+          { header: '纸张', key: 'paper_name', width: 20 },
+          { header: '尺寸', key: 'size_label', width: 10 },
+          { header: '数量(张)', key: 'quantity', width: 12 },
+          { header: '存放位置', key: 'location_id', width: 18 },
+          { header: '湿度状态', key: 'moisture_status', width: 10 },
+          { header: '已拆封', key: 'opened', width: 8 },
+          { header: '拆封时间', key: 'opened_at', width: 20 },
+          { header: '备注', key: 'notes', width: 25 },
+        ],
+        rows,
+      },
+    ])
+  })
+
+  app.get('/api/inventory/consumables/export', { preHandler: requireAdmin }, async (_req, reply) => {
+    const currency = baseCurrency(db)
+    const rows = db
+      .prepare(
+        `SELECT c.name, c.type, p.code AS printer_code, c.quantity,
+                c.cost_model, c.rated_life_pages, c.current_usage_pages,
+                c.unit_cost_c, c.supplier, c.alert_threshold_bp
+         FROM consumables c
+         JOIN printers p ON p.id = c.printer_id
+         WHERE c.archived = 0
+         ORDER BY p.id, c.name`,
+      )
+      .all() as Array<{
+      unit_cost_c: number
+      cost_model: string
+      rated_life_pages: number | null
+      current_usage_pages: number
+    }>
+    return sendXlsx(reply, 'consumables.xlsx', [
+      {
+        name: '耗材库存',
+        columns: [
+          { header: '名称', key: 'name', width: 20 },
+          { header: '类型', key: 'type', width: 10 },
+          { header: '关联设备', key: 'printer_code', width: 12 },
+          { header: '备品数', key: 'quantity', width: 8 },
+          { header: '计费模式', key: 'cost_model', width: 12 },
+          { header: '额定寿命(页)', key: 'rated_life_pages', width: 14 },
+          { header: '已用(页)', key: 'current_usage_pages', width: 10 },
+          { header: '单价', key: 'unit_cost_display', width: 12 },
+          { header: '供应商', key: 'supplier', width: 15 },
+        ],
+        rows: rows.map((r) => ({
+          ...r,
+          unit_cost_display: formatMoneyC(moneyC(r.unit_cost_c), currency),
+        })),
+      },
+    ])
+  })
+
+  app.get('/api/inventory/log/export', { preHandler: requireAdmin }, async (req, reply) => {
+    const q = req.query as Partial<Record<'target_type' | 'target_id' | 'action' | 'from' | 'to', string>>
+    const where: string[] = []
+    const params: Record<string, string> = {}
+    if (q.target_type) { where.push('target_type = @target_type'); params['target_type'] = q.target_type }
+    if (q.target_id) { where.push('target_id = @target_id'); params['target_id'] = q.target_id }
+    if (q.action) { where.push('action = @action'); params['action'] = q.action }
+    if (q.from) { where.push('created_at >= @from'); params['from'] = q.from }
+    if (q.to) { where.push('created_at <= @to'); params['to'] = q.to }
+    const sql = `SELECT * FROM inventory_log ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 5000`
+    const rows = db.prepare(sql).all(params)
+    return sendXlsx(reply, 'inventory-log.xlsx', [
+      {
+        name: '出入库记录',
+        columns: [
+          { header: '时间', key: 'created_at', width: 20 },
+          { header: '操作', key: 'action', width: 10 },
+          { header: '对象类型', key: 'target_type', width: 14 },
+          { header: '对象ID', key: 'target_id', width: 20 },
+          { header: '数量变化', key: 'quantity_delta', width: 12 },
+          { header: '转换组', key: 'convert_group', width: 20 },
+          { header: '原因', key: 'reason', width: 25 },
+        ],
+        rows,
+      },
+    ])
+  })
 }

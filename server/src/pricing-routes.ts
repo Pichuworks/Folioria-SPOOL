@@ -6,6 +6,7 @@ import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
 import { formatMoney, formatMoneyC, lineTotal, moneyC } from './money.js'
 import { listProducts, listQuotable, quote } from './pricing.js'
+import { sendXlsx } from './xlsx.js'
 
 const MONEY_C = { type: 'integer', minimum: 0 }
 const ID_PARAM = {
@@ -836,6 +837,49 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       auto_display: formatMoneyC(q.auto_sell_c, currency),
       sell_display: formatMoneyC(q.sell_c, currency),
     }))
+  })
+
+  app.get('/api/admin/pricing/export', { preHandler: requireAdmin }, async (_req, reply) => {
+    const currency = baseCurrency(db)
+    const quotes = listQuotable(db)
+    const modes = new Map(
+      (db.prepare('SELECT id, name FROM print_modes').all() as Array<{ id: number; name: string }>).map((m) => [m.id, m.name]),
+    )
+    const papers = new Map(
+      (db.prepare('SELECT id, name FROM papers').all() as Array<{ id: number; name: string }>).map((p) => [p.id, p.name]),
+    )
+    const sizes = new Map(
+      (db.prepare('SELECT key, label FROM sizes').all() as Array<{ key: string; label: string }>).map((s) => [s.key, s.label]),
+    )
+    return sendXlsx(reply, 'pricing.xlsx', [
+      {
+        name: '价目表',
+        columns: [
+          { header: '打印模式', key: 'mode_name', width: 20 },
+          { header: '纸张', key: 'paper_name', width: 18 },
+          { header: '尺寸', key: 'size_label', width: 10 },
+          { header: '墨耗成本', key: 'ink_display', width: 12 },
+          { header: '纸张成本', key: 'paper_display', width: 12 },
+          { header: '总成本', key: 'total_display', width: 12 },
+          { header: '自动地板价', key: 'auto_display', width: 14 },
+          { header: '售价', key: 'sell_display', width: 12 },
+          { header: '来源', key: 'source', width: 8 },
+          { header: '标记', key: 'flag', width: 14 },
+        ],
+        rows: quotes.map((q) => ({
+          mode_name: modes.get(q.mode_id) ?? String(q.mode_id),
+          paper_name: papers.get(q.paper_id) ?? String(q.paper_id),
+          size_label: sizes.get(q.size_key) ?? q.size_key,
+          ink_display: formatMoneyC(q.ink_c, currency),
+          paper_display: formatMoneyC(q.paper_c, currency),
+          total_display: formatMoneyC(q.total_c, currency),
+          auto_display: formatMoneyC(q.auto_sell_c, currency),
+          sell_display: formatMoneyC(q.sell_c, currency),
+          source: q.source,
+          flag: q.flag,
+        })),
+      },
+    ])
   })
 
   // ---------- 下单域: 计算器 ----------

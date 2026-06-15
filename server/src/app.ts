@@ -35,6 +35,7 @@ import { registerOrdersRoutes } from './orders-routes.js'
 import { registerPricingRoutes } from './pricing-routes.js'
 import { registerReportsRoutes } from './reports-routes.js'
 import { registerSettingsRoutes } from './settings-routes.js'
+import { sendXlsx } from './xlsx.js'
 
 export const SESSION_COOKIE = 'spool_session'
 
@@ -753,6 +754,24 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       created_at: a.created_at,
     })),
   )
+
+  app.get('/api/admin/audit/export', { preHandler: requireAdmin }, async (_req, reply) => {
+    const rows = listAudit(db, 5000)
+    return sendXlsx(reply, 'audit.xlsx', [
+      {
+        name: '操作审计',
+        columns: [
+          { header: '时间', key: 'created_at', width: 20 },
+          { header: '操作', key: 'action', width: 18 },
+          { header: '操作人', key: 'actor_name', width: 14 },
+          { header: '目标类型', key: 'target_type', width: 12 },
+          { header: '目标ID', key: 'target_id', width: 20 },
+          { header: '摘要', key: 'summary', width: 35 },
+        ],
+        rows,
+      },
+    ])
+  })
 
   // B2 客户 CRM 钻取（只读 join）：订单史 + 累计已收 + 欠款 + 联系方式
   app.get(

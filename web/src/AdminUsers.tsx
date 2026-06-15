@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { ORDER_STATUS_LABEL, send, type OrderDto } from './api'
-import { Field, Leader, MagSec, PillBtn, SpecRow, specInput } from './spec'
+import { Field, Leader, MagSec, Modal, Paginator, PillBtn, SpecRow, specInput, usePagination } from './spec'
 
 interface UserDto {
   id: string
@@ -40,7 +40,15 @@ const ROLE_LABEL: Record<UserDto['role'], string> = {
   admin: '管理员',
 }
 
-function Drilldown({ userId }: { userId: string }) {
+const ROLE_DESC: Record<UserDto['role'], string> = {
+  customer: '外部客户，下单域可见，适用对外价格',
+  member: '内部成员，下单域可见，适用内部价格',
+  admin: '管理员，全部数据可见，全部操作可执行',
+}
+
+const PAGE_SIZE = 20
+
+function UserDetail({ userId }: { userId: string }) {
   const [data, setData] = useState<CustomerSummary | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -52,7 +60,7 @@ function Drilldown({ userId }: { userId: string }) {
   }, [userId])
 
   if (err) return <p className="mt-2 text-[12px] text-wine-ink">{err}</p>
-  if (!data) return <p className="mt-2 text-[12px] text-dim">钻取中…</p>
+  if (!data) return <p className="mt-2 text-[12px] text-dim">加载中…</p>
 
   return (
     <div className="mt-2 border border-line bg-card p-4">
@@ -88,7 +96,7 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
   const patch = async (body: { role?: string; archived?: boolean }) => {
     const res = await send<{ error?: string }>('PATCH', `/api/admin/users/${user.id}`, body)
     if (res.ok) onChanged()
-    else setError(res.data.error === 'last_admin' ? '最后一个活跃管理员，禁止降格/归档' : '操作失败')
+    else setError(res.data.error === 'last_admin' ? '最后一个活跃管理员，禁止降格/停用' : '操作失败')
   }
 
   return (
@@ -105,13 +113,14 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
           className="font-mono text-[10px] tracking-[.14em] text-wine-ink hover:opacity-70"
           onClick={() => setOpen((v) => !v)}
         >
-          {open ? '收起' : '钻取'}
+          {open ? '收起' : '详情'}
         </button>
         <select
           className="border border-line bg-card px-2 py-1 font-mono text-[11px] text-ink outline-none"
           value={user.role}
           disabled={user.archived}
           onChange={(e) => void patch({ role: e.target.value })}
+          title={ROLE_DESC[user.role]}
         >
           {Object.entries(ROLE_LABEL).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
@@ -121,97 +130,161 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
           type="button"
           className="font-mono text-[10px] tracking-[.14em] text-dim hover:opacity-70"
           onClick={() => {
-            if (user.archived || window.confirm(`归档「${user.name}」？其登录将被拒绝。`)) {
+            if (user.archived || window.confirm(`停用「${user.name}」？其登录将被拒绝。`)) {
               void patch({ archived: !user.archived })
             }
           }}
         >
-          {user.archived ? '恢复' : '归档'}
+          {user.archived ? '恢复' : '停用'}
         </button>
       </div>
-      {open && <Drilldown userId={user.id} />}
+      {open && <UserDetail userId={user.id} />}
       {error && <p className="mt-1 text-[12px] text-wine-ink">{error}</p>}
     </div>
   )
 }
 
-function UsersBody() {
-  const [users, setUsers] = useState<UserDto[] | null>(null)
+function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({ email: '', name: '', password: '', role: 'member' })
   const [notice, setNotice] = useState<string | null>(null)
-
-  const reload = useCallback(() => {
-    void send<UserDto[]>('GET', '/api/admin/users').then((r) => r.ok && setUsers(r.data))
-  }, [])
-  useEffect(reload, [reload])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const res = await send<{ error?: string }>('POST', '/api/admin/users', form)
     if (res.ok) {
       setForm({ email: '', name: '', password: '', role: 'member' })
-      setNotice('已创建——初始密码首登强制更换')
-      reload()
+      setNotice(null)
+      onCreated()
+      onClose()
     } else {
       setNotice(res.data.error === 'email_exists' ? '该邮箱已注册' : '创建失败（密码 ≥ 8 位）')
     }
   }
 
-  if (!users) return <p className="pt-13 text-[14px] text-dim">用户加载中…</p>
+  return (
+    <Modal open={open} onClose={onClose} title="添加用户">
+      <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
+        <Field label="邮箱">
+          <input
+            type="email"
+            required
+            className={specInput}
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          />
+        </Field>
+        <Field label="姓名">
+          <input
+            type="text"
+            required
+            className={specInput}
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          />
+        </Field>
+        <Field label="初始密码（≥8 位，对方首登须更换）">
+          <input
+            type="text"
+            required
+            minLength={8}
+            className={specInput}
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+          />
+        </Field>
+        <Field label="角色">
+          <select
+            className={specInput}
+            value={form.role}
+            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+          >
+            {Object.entries(ROLE_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11px] text-dim">{ROLE_DESC[form.role as UserDto['role']]}</span>
+        </Field>
+        <PillBtn full>创建用户</PillBtn>
+        {notice && <p className="text-[12.5px] text-wine-ink">{notice}</p>}
+      </form>
+    </Modal>
+  )
+}
+
+const filterInput = 'border border-line bg-card px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-wine'
+
+function UsersBody() {
+  const [users, setUsers] = useState<UserDto[] | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('active')
+
+  const reload = useCallback(() => {
+    void send<UserDto[]>('GET', '/api/admin/users').then((r) => r.ok && setUsers(r.data))
+  }, [])
+  useEffect(reload, [reload])
+
+  const filtered = useMemo(() => {
+    if (!users) return []
+    return users.filter((u) => {
+      if (search && !u.name.toLowerCase().includes(search.toLowerCase()) && !u.email.toLowerCase().includes(search.toLowerCase())) return false
+      if (roleFilter !== 'all' && u.role !== roleFilter) return false
+      if (statusFilter === 'active' && u.archived) return false
+      if (statusFilter === 'disabled' && !u.archived) return false
+      return true
+    })
+  }, [users, search, roleFilter, statusFilter])
+
+  const { page, totalPages, paged, setPage } = usePagination(filtered, PAGE_SIZE)
+
+  if (!users) return <p className="pt-13 text-[14px] text-dim">加载中…</p>
 
   return (
     <div>
-      <MagSec tag="01" title="账号名册" note={`${users.length} ACCOUNTS · B1 双域`}>
-        {users.map((u) => (
-          <UserRow key={u.id} user={u} onChanged={reload} />
-        ))}
+      <MagSec tag="01" title="用户管理" note={`${users.length} ACCOUNTS · B1 双域`}>
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <input
+            type="text"
+            placeholder="搜索姓名 / 邮箱…"
+            className={`${filterInput} min-w-[180px] flex-1`}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0) }}
+          />
+          <select className={filterInput} value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(0) }}>
+            <option value="all">全部角色</option>
+            {Object.entries(ROLE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <select className={filterInput} value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(0) }}>
+            <option value="all">全部状态</option>
+            <option value="active">活跃</option>
+            <option value="disabled">已停用</option>
+          </select>
+          <button
+            type="button"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-wine bg-wine px-4 py-1.5 text-[12px] font-medium tracking-[.02em] text-cream hover:opacity-90"
+            onClick={() => setShowCreate(true)}
+          >
+            + 添加用户
+          </button>
+        </div>
+
+        {filtered.length === 0 ? (
+          <p className="py-6 text-center text-[13px] text-dim">无匹配用户。</p>
+        ) : (
+          <>
+            <div className="mb-1 font-mono text-[10px] tracking-[.12em] text-dim">
+              {filtered.length === users.length ? `${users.length} 用户` : `${filtered.length} / ${users.length} 用户`}
+            </div>
+            {paged.map((u) => (
+              <UserRow key={u.id} user={u} onChanged={reload} />
+            ))}
+            <Paginator page={page} totalPages={totalPages} onPage={setPage} />
+          </>
+        )}
       </MagSec>
 
-      <MagSec tag="02" title="添加账号" note="ADMIN PROVISION ONLY">
-        <form onSubmit={(e) => void submit(e)} className="flex max-w-xl flex-col gap-4 border border-ink bg-card p-6">
-          <Field label="邮箱">
-            <input
-              type="email"
-              required
-              className={specInput}
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            />
-          </Field>
-          <Field label="姓名">
-            <input
-              type="text"
-              required
-              className={specInput}
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-          </Field>
-          <Field label="初始密码（≥8 位，对方首登须更换）">
-            <input
-              type="text"
-              required
-              minLength={8}
-              className={specInput}
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            />
-          </Field>
-          <Field label="角色">
-            <select
-              className={specInput}
-              value={form.role}
-              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-            >
-              {Object.entries(ROLE_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-          </Field>
-          <PillBtn full>创建账号</PillBtn>
-          {notice && <p className="text-[12.5px] text-wine-ink">{notice}</p>}
-        </form>
-      </MagSec>
+      <CreateUserModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={reload} />
     </div>
   )
 }

@@ -791,6 +791,11 @@ export const takeReorder = (): ReorderBuffer | null => {
   return b
 }
 
+/** Board → Jobs 穿透：临时存储待高亮的 job ID，由 AdminJobs 消费 */
+let _highlightJobId: string | null = null
+export function setHighlightJobId(id: string) { _highlightJobId = id }
+export function consumeHighlightJobId() { const id = _highlightJobId; _highlightJobId = null; return id }
+
 export async function fetchQuote(req: {
   mode_id: number
   paper_id: number

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Leader, MagSec } from './spec'
+import { Leader, MagSec, Paginator, usePagination } from './spec'
 
 interface AuditEntry {
   id: string
@@ -26,11 +26,14 @@ function AuditBody() {
   useEffect(() => {
     void send<AuditEntry[]>('GET', '/api/admin/audit').then((r) => r.ok && setRows(r.data))
   }, [])
-  if (!rows) return <p className="pt-13 text-[14px] text-dim">审计加载中…</p>
+  if (!rows) return <p className="pt-13 text-[14px] text-dim">加载中…</p>
+
+  const { page, totalPages, paged, setPage } = usePagination(rows, 50)
+
   return (
-    <MagSec tag="审计" title="操作审计" note={`${rows.length} ENTRIES · 定价/折扣/收款/角色/设置`}>
+    <MagSec tag="01" title="操作审计" note={`${rows.length} ENTRIES · 定价/折扣/收款/角色/设置`}>
       {rows.length === 0 && <p className="text-[13px] text-dim">暂无审计记录。</p>}
-      {rows.map((r) => (
+      {paged.map((r) => (
         <div key={r.id} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[7px]">
           <span className="min-w-10 font-mono text-[10px] tracking-[.1em] text-wine-ink">
             {ACTION_LABEL[r.action] ?? r.action}
@@ -45,6 +48,10 @@ function AuditBody() {
           <span className="font-mono text-[10.5px] text-dim">{r.created_at.slice(0, 16).replace('T', ' ')}</span>
         </div>
       ))}
+      <Paginator page={page} totalPages={totalPages} onPage={setPage} />
+      <div className="mt-3 text-right">
+        <a href="/api/admin/audit/export" className="font-mono text-[10.5px] tracking-[.12em] text-dim underline hover:text-wine-ink">导出 XLSX ↧</a>
+      </div>
     </MagSec>
   )
 }

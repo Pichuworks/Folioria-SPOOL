@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import {
   completeJob,
+  consumeHighlightJobId,
   createJob,
   fetchJobPreview,
   fetchJobRecommend,
@@ -16,7 +17,7 @@ import {
   type MachineRecDto,
   type OptionsDto,
 } from './api'
-import { Field, Leader, MagSec, PillBtn, SpecRow, specInput } from './spec'
+import { Field, Leader, MagSec, Paginator, PillBtn, SpecRow, specInput, usePagination } from './spec'
 
 const STATUS_ORDER = ['draft', 'queued', 'printing', 'done', 'cancelled'] as const
 const STATUS_LABEL: Record<JobDto['status'], string> = {
@@ -115,10 +116,15 @@ function ReassignPanel({ job, onChanged }: { job: JobDto; onChanged: () => void 
   )
 }
 
-function JobRow({ job, onChanged }: { job: JobDto; onChanged: () => void }) {
+function JobRow({ job, onChanged, highlight }: { job: JobDto; onChanged: () => void; highlight?: boolean }) {
+  const rowRef = useRef<HTMLDivElement>(null)
   const [doneOpen, setDoneOpen] = useState(false)
   const [reassignOpen, setReassignOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (highlight && rowRef.current) rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [highlight])
 
   const transition = async (status: 'queued' | 'printing' | 'cancelled') => {
     if (status === 'cancelled' && !window.confirm(`确认取消「${job.title}」？`)) return
@@ -133,7 +139,7 @@ function JobRow({ job, onChanged }: { job: JobDto; onChanged: () => void }) {
   )
 
   return (
-    <div className="border-b border-line py-[9px]">
+    <div ref={rowRef} className={`border-b border-line py-[9px] ${highlight ? 'bg-wine-dim/20' : ''}`}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-[14px] font-medium text-ink">{job.title}</span>
         <span className="text-[12px] text-dim">
@@ -224,7 +230,7 @@ function groupByBook(list: JobDto[]): RenderUnit[] {
   return units
 }
 
-function BookJobGroup({ unit, onChanged }: { unit: Extract<RenderUnit, { kind: 'book' }>; onChanged: () => void }) {
+function BookJobGroup({ unit, onChanged, highlightId }: { unit: Extract<RenderUnit, { kind: 'book' }>; onChanged: () => void; highlightId?: string | null }) {
   return (
     <div className="my-1.5 border-l-2 border-wine/40 pl-3">
       <div className="flex items-baseline gap-2 pt-1.5 text-[12.5px]">
@@ -235,8 +241,39 @@ function BookJobGroup({ unit, onChanged }: { unit: Extract<RenderUnit, { kind: '
         </span>
       </div>
       {unit.jobs.map((j) => (
-        <JobRow key={j.id} job={j} onChanged={onChanged} />
+        <JobRow key={j.id} job={j} onChanged={onChanged} highlight={j.id === highlightId} />
       ))}
+    </div>
+  )
+}
+
+const JOBS_PAGE_SIZE = 20
+
+function StatusGroup({ status, jobs, onChanged, highlightId }: { status: string; jobs: JobDto[]; onChanged: () => void; highlightId: string | null }) {
+  const units = useMemo(() => groupByBook(jobs), [jobs])
+  const { page, totalPages, paged, setPage } = usePagination(units, JOBS_PAGE_SIZE)
+
+  return (
+    <div className="mb-7">
+      <div className="flex items-baseline gap-3 border-b border-ink pb-1.5">
+        <span className="font-mono text-[10px] tracking-[.22em] text-dim">{status.toUpperCase()}</span>
+        <span className="text-[14px] font-medium text-ink">{STATUS_LABEL[status as JobDto['status']]}</span>
+        <span className="ml-auto font-mono text-[11px] text-dim">{jobs.length}</span>
+      </div>
+      {jobs.length === 0 ? (
+        <p className="py-2 text-[12px] text-dim">—</p>
+      ) : (
+        <>
+          {paged.map((u) =>
+            u.kind === 'book' ? (
+              <BookJobGroup key={u.bookId} unit={u} onChanged={onChanged} highlightId={highlightId} />
+            ) : (
+              <JobRow key={u.job.id} job={u.job} onChanged={onChanged} highlight={u.job.id === highlightId} />
+            ),
+          )}
+          <Paginator page={page} totalPages={totalPages} onPage={setPage} />
+        </>
+      )}
     </div>
   )
 }
@@ -248,6 +285,7 @@ function JobsBody() {
   const [optionsError, setOptionsError] = useState<string | null>(null)
   const [jobs, setJobs] = useState<JobDto[] | null>(getJobsCache)
   const [tick, setTick] = useState(0)
+  const [highlightId] = useState<string | null>(() => consumeHighlightJobId())
 
   const [title, setTitle] = useState('')
   const [modeId, setModeId] = useState<number | null>(null)
@@ -500,24 +538,7 @@ function JobsBody() {
           <p className="py-2 text-[13px] text-dim">台账加载中…</p>
         ) : (
           STATUS_ORDER.map((s) => (
-            <div key={s} className="mb-7">
-              <div className="flex items-baseline gap-3 border-b border-ink pb-1.5">
-                <span className="font-mono text-[10px] tracking-[.22em] text-dim">{s.toUpperCase()}</span>
-                <span className="text-[14px] font-medium text-ink">{STATUS_LABEL[s]}</span>
-                <span className="ml-auto font-mono text-[11px] text-dim">{groups[s].length}</span>
-              </div>
-              {groups[s].length === 0 ? (
-                <p className="py-2 text-[12px] text-dim">—</p>
-              ) : (
-                groupByBook(groups[s]).map((u) =>
-                  u.kind === 'book' ? (
-                    <BookJobGroup key={u.bookId} unit={u} onChanged={onMutated} />
-                  ) : (
-                    <JobRow key={u.job.id} job={u.job} onChanged={onMutated} />
-                  ),
-                )
-              )}
-            </div>
+            <StatusGroup key={s} status={s} jobs={groups[s]} onChanged={onMutated} highlightId={highlightId} />
           ))
         )}
       </MagSec>

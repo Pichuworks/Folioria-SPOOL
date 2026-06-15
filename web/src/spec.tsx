@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 /* Asagaya modern·杂志语域 × eri 配色，全站统一壳：刊头 / 墨标签节头 / 点线行 / 直角控件 / 对折页码 */
 
@@ -28,7 +28,7 @@ export const Folio = ({ center, right }: { center: string; right?: ReactNode }) 
   <footer className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-ink pb-7 pt-3 font-mono text-[10.5px] tracking-[.14em] text-dim">
     <span>FOLIORIA · S.P.O.O.L.</span>
     <span>{center}</span>
-    <span>{right ?? '© 2026 FOLIORIA'}</span>
+    <span>{right ?? `v${__APP_VERSION__} · b${__BUILD_NUMBER__} · © 2026 FOLIORIA`}</span>
   </footer>
 )
 
@@ -87,8 +87,62 @@ export const PillLink = ({ href, kind, children }: { href: string; kind: 'primar
   </a>
 )
 
-export const PillBtn = ({ children, full }: { children: ReactNode; full?: boolean }) => (
-  <button type="submit" className={`${pillClass('primary')} ${full ? 'w-full' : ''}`}>
+export const PillBtn = ({ children, full, type, onClick }: { children: ReactNode; full?: boolean; type?: 'submit' | 'button'; onClick?: () => void }) => (
+  <button type={type ?? 'submit'} onClick={onClick} className={`${pillClass('primary')} ${full ? 'w-full' : ''}`}>
     {children}
   </button>
 )
+
+/* ── Modal ── */
+
+export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" onClick={onClose}>
+      <div className="mx-4 w-full max-w-lg border border-ink bg-paper p-6 shadow-e1" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-baseline justify-between border-b border-ink pb-3">
+          <h3 className="text-[20px] font-semibold text-ink">{title}</h3>
+          <button type="button" onClick={onClose} className="text-[18px] text-dim hover:text-ink">×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/* ── Paginator ── */
+
+export function usePagination<T>(items: T[], pageSize: number) {
+  const [page, setPage] = useState(0)
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
+  const safeP = Math.min(page, totalPages - 1)
+  if (safeP !== page) setPage(safeP)
+  const paged = useMemo(() => items.slice(safeP * pageSize, (safeP + 1) * pageSize), [items, safeP, pageSize])
+  return { page: safeP, totalPages, paged, setPage, total: items.length } as const
+}
+
+export function Paginator({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
+  if (totalPages <= 1) return null
+  return (
+    <div className="flex items-center justify-center gap-3 pt-5 pb-2">
+      <button type="button" disabled={page === 0} onClick={() => onPage(page - 1)}
+        className="font-mono text-[11px] tracking-[.12em] text-dim enabled:hover:text-ink disabled:opacity-30">
+        ‹ 上页
+      </button>
+      <span className="font-mono text-[10.5px] tracking-[.1em] text-dim">
+        {page + 1} / {totalPages}
+      </span>
+      <button type="button" disabled={page >= totalPages - 1} onClick={() => onPage(page + 1)}
+        className="font-mono text-[11px] tracking-[.12em] text-dim enabled:hover:text-ink disabled:opacity-30">
+        下页 ›
+      </button>
+    </div>
+  )
+}

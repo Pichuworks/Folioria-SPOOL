@@ -257,6 +257,9 @@ function QuotesSection({
           </div>
         )
       })}
+      <div className="mt-3 text-right">
+        <a href="/api/admin/pricing/export" className="font-mono text-[10.5px] tracking-[.12em] text-dim underline hover:text-wine-ink">导出 XLSX ↧</a>
+      </div>
     </MagSec>
   )
 }
