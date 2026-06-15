@@ -17,11 +17,8 @@ export const Shell = ({ nav, center, right, children }: { nav: ReactNode; center
 export const Masthead = ({ nav }: { nav: ReactNode }) => (
   <header className="flex flex-wrap items-end justify-between gap-x-[18px] gap-y-3 border-b border-ink pb-4 pt-[30px]">
     <a href="#/" className="flex items-end gap-5 text-ink">
-      <span className="text-[44px] font-bold leading-none tracking-[.04em]">枫光映刻</span>
-      <span className="pb-1">
-        <span className="block text-[15px] font-medium tracking-[.08em]">Maplescape</span>
-        <span className="block font-garamond text-[13px] italic text-dim">Folioria</span>
-      </span>
+      <span className="text-[44px] font-bold leading-none tracking-[.14em]">枫光映刻</span>
+      <span className="pb-1 font-script text-[19px] text-dim">Maplescape Folioria</span>
     </a>
     <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-1 text-[13px]">{nav}</nav>
   </header>
