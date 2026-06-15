@@ -148,6 +148,40 @@ export function Paginator({ page, totalPages, onPage }: { page: number; totalPag
   )
 }
 
+/* ── TabBar ── */
+
+export function TabBar({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: { key: string; label: string; count?: number }[]
+  active: string
+  onChange: (key: string) => void
+}) {
+  return (
+    <div className="flex gap-0 border-b border-line">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={
+            active === t.key
+              ? 'border-b-2 border-wine px-4 py-2.5 text-[13px] font-medium text-wine-ink'
+              : 'border-b-2 border-transparent px-4 py-2.5 text-[13px] text-dim hover:text-ink'
+          }
+        >
+          {t.label}
+          {t.count != null && (
+            <span className="ml-1.5 font-mono text-[10px] tracking-[.08em] text-dim">{t.count}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /* ── Global loading bar ── */
 
 let _loadingCount = 0

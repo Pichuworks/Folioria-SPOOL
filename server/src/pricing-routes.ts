@@ -887,6 +887,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
           { header: '总成本', key: 'total_display', width: 12 },
           { header: '自动地板价', key: 'auto_display', width: 14 },
           { header: '售价', key: 'sell_display', width: 12 },
+          { header: '手动价_c', key: 'sell_c', width: 12 },
           { header: '来源', key: 'source', width: 8 },
           { header: '标记', key: 'flag', width: 14 },
         ],
@@ -899,11 +900,127 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
           total_display: formatMoneyC(q.total_c, currency),
           auto_display: formatMoneyC(q.auto_sell_c, currency),
           sell_display: formatMoneyC(q.sell_c, currency),
+          sell_c: q.source === 'manual' ? q.sell_c : null,
           source: q.source,
           flag: q.flag,
         })),
       },
     ])
+  })
+
+  app.post('/api/admin/pricing/import', { preHandler: requireAdmin }, async (req, reply) => {
+    const file = await req.file()
+    if (!file) return reply.status(400).send({ error: 'no_file' })
+    const ext = file.filename.split('.').pop()?.toLowerCase()
+    if (ext !== 'xlsx') return reply.status(400).send({ error: 'xlsx_only' })
+
+    const ExcelJS = (await import('exceljs')).default
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.read(file.file)
+    const ws = wb.worksheets[0]
+    if (!ws) return reply.status(400).send({ error: 'empty_workbook' })
+
+    const headers: string[] = []
+    ws.getRow(1).eachCell((cell, col) => {
+      headers[col] = String(cell.value ?? '').trim()
+    })
+    const colMode = headers.indexOf('打印模式')
+    const colPaper = headers.indexOf('纸张')
+    const colSize = headers.indexOf('尺寸')
+    const colSellC = headers.indexOf('手动价_c')
+    if (colMode < 0 || colPaper < 0 || colSize < 0 || colSellC < 0) {
+      return reply.status(422).send({
+        error: 'missing_columns',
+        message: '需要列：打印模式, 纸张, 尺寸, 手动价_c',
+      })
+    }
+
+    const modes = new Map(
+      (db.prepare('SELECT id, name FROM print_modes WHERE archived = 0').all() as Array<{ id: number; name: string }>).map(
+        (m) => [m.name, m.id],
+      ),
+    )
+    const papers = new Map(
+      (db.prepare('SELECT id, name FROM papers WHERE archived = 0').all() as Array<{ id: number; name: string }>).map(
+        (p) => [p.name, p.id],
+      ),
+    )
+    const sizes = new Map(
+      (db.prepare('SELECT key, label FROM sizes').all() as Array<{ key: string; label: string }>).map(
+        (s) => [s.label, s.key],
+      ),
+    )
+    const combos = new Map(
+      (
+        db.prepare('SELECT id, mode_id, paper_id FROM combos WHERE archived = 0').all() as Array<{
+          id: number
+          mode_id: number
+          paper_id: number
+        }>
+      ).map((c) => [`${c.mode_id}:${c.paper_id}`, c.id]),
+    )
+
+    const upsert = db.prepare(
+      `INSERT INTO combo_prices (combo_id, size_key, sell_c, internal_sell_c)
+       VALUES (?, ?, ?, NULL)
+       ON CONFLICT(combo_id, size_key) DO UPDATE SET sell_c = excluded.sell_c`,
+    )
+    const delPrice = db.prepare(
+      `DELETE FROM combo_prices WHERE combo_id = ? AND size_key = ?`,
+    )
+
+    let updated = 0
+    const skipped: Array<{ row: number; reason: string }> = []
+
+    const txn = db.transaction(() => {
+      ws.eachRow((row, rowNum) => {
+        if (rowNum <= 1) return
+        const modeName = String(row.getCell(colMode).value ?? '').trim()
+        const paperName = String(row.getCell(colPaper).value ?? '').trim()
+        const sizeLabel = String(row.getCell(colSize).value ?? '').trim()
+        const rawSellC = row.getCell(colSellC).value
+
+        if (!modeName || !paperName || !sizeLabel) {
+          skipped.push({ row: rowNum, reason: '名称列为空' })
+          return
+        }
+
+        const modeId = modes.get(modeName)
+        if (modeId == null) {
+          skipped.push({ row: rowNum, reason: `未知打印模式: ${modeName}` })
+          return
+        }
+        const paperId = papers.get(paperName)
+        if (paperId == null) {
+          skipped.push({ row: rowNum, reason: `未知纸张: ${paperName}` })
+          return
+        }
+        const sizeKey = sizes.get(sizeLabel) ?? sizeLabel
+        const comboId = combos.get(`${modeId}:${paperId}`)
+        if (comboId == null) {
+          skipped.push({ row: rowNum, reason: `组合不存在: ${modeName} × ${paperName}` })
+          return
+        }
+
+        if (rawSellC == null || rawSellC === '' || rawSellC === null) {
+          delPrice.run(comboId, sizeKey)
+          updated++
+          return
+        }
+
+        const sellC = Math.trunc(Number(rawSellC))
+        if (!Number.isSafeInteger(sellC) || sellC < 0) {
+          skipped.push({ row: rowNum, reason: `手动价_c 不是非负整数: ${String(rawSellC)}` })
+          return
+        }
+
+        upsert.run(comboId, sizeKey, sellC)
+        updated++
+      })
+    })
+    txn()
+
+    return { updated, skipped }
   })
 
   // ---------- 下单域: 计算器 ----------

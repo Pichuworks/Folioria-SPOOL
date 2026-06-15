@@ -55,7 +55,26 @@ export default function PriceList() {
 
   return (
     <MagSec tag="价目" title="公开价目表" note={`${rows.length} 种 · 单张价 · 实时推导`}>
-      <div className="overflow-x-auto border border-ink">
+      {/* Mobile: compact card list */}
+      <div className="border border-ink md:hidden">
+        {rows.map((r) => (
+          <div key={r.key} className="border-b border-line px-4 py-3 last:border-b-0">
+            <div className="text-[13px] font-medium leading-snug text-ink">{r.label}</div>
+            <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5">
+              {sizes.map((s) =>
+                r.prices[s.key] ? (
+                  <span key={s.key} className="inline-flex items-baseline gap-1 font-mono text-[12.5px]">
+                    <span className="text-[10px] tracking-[.1em] text-dim">{s.label}</span>
+                    <span className="text-wine-ink">{r.prices[s.key]}</span>
+                  </span>
+                ) : null,
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Desktop: table */}
+      <div className="hidden overflow-x-auto border border-ink md:block">
         <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr className="border-b border-ink bg-card">
