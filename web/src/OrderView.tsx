@@ -464,6 +464,11 @@ export default function OrderView({ token }: { token: string }) {
                   : '未付款'
             }
           />
+          {order.status === 'cancelled' && order.paid_amount > 0 && (
+            <p className="mt-2 border border-warn bg-warn/10 px-3 py-2 text-[12.5px] leading-[1.7] text-warn">
+              订单已取消，已付 {order.paid_amount_display} 待退款——工坊将另行办理退款，如有疑问请联系工坊。
+            </p>
+          )}
           {order.delivery_method && (
             <SpecRow
               label="配送"

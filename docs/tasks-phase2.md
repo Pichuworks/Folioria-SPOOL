@@ -175,6 +175,14 @@
       提示「须退 ¥X(=paid_amount)」+ 取消确认弹窗警示，引导走退款流水。
       —— Track C（PC1–PC2）全部完成。P8 三块（登录统一 / 书收尾 / 审计运营）闭合。
 
+## P9 质量补全 · 报表/退款/文件预检（D34+）
+> 接 P8 收尾。系统功能已闭合，本组提升「好用度」。测试先行；combos/§2.5 基线（187/43）不回归。
+
+- [x] Q1 客户侧退款可见性：OrderView 对已取消且 paid_amount>0 的单显示「待退款 ¥X」（下单域投影派生，不暴露 admin refund_due）。
+- [ ] Q2 报表 CSV 导出：`/api/reports/{monthly,equipment-usage,paper-consumption}` 加 CSV 导出端点（admin，text/csv attachment，整数金额）；AdminReports 加导出按钮。
+- [ ] Q3 月度报表自动快照（附录A D__）：migration report_snapshots；CLI `spool snapshot-month`；`GET /api/reports/snapshots`；systemd 月度 timer（deploy）。
+- [ ] Q4 文件自动预检（Phase 3 提前，附录A D__）：sharp（图片 DPI/色彩空间）+ pdf-lib（PDF 页数/加密/页尺寸）接 storeUpload choke-point；advisory 落 file_precheck 不阻断人工审稿；书组件与单页 item 同口径。
+
 ## P4 Phase 3 远期（PRD 立项，不急）
 
 - 环境传感器 MQTT → location 湿度自动预警 · 打印机 SNMP → 出纸计数/碳粉余量自动校正
