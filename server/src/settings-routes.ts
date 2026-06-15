@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs'
 import { type FastifyInstance } from 'fastify'
 import { audit } from './audit.js'
 import { type DB } from './db.js'
@@ -158,4 +159,24 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
       return toDto(db.prepare(SELECT_CONFIG).get() as ConfigRow)
     },
   )
+
+  app.get('/api/settings/system-info', { preHandler: requireAdmin }, async () => {
+    const userCount = (db.prepare("SELECT COUNT(*) n FROM users WHERE id != 'guest'").get() as { n: number }).n
+    const orderCount = (db.prepare('SELECT COUNT(*) n FROM orders').get() as { n: number }).n
+    const jobCount = (db.prepare('SELECT COUNT(*) n FROM jobs').get() as { n: number }).n
+    let dbSizeMb = '—'
+    try {
+      const dbPath = (db as unknown as { name: string }).name
+      if (dbPath) dbSizeMb = (statSync(dbPath).size / 1024 / 1024).toFixed(2) + ' MB'
+    } catch { /* non-file db (e.g. :memory:) */ }
+    const hasResendKey = !!process.env['SPOOL_RESEND_API_KEY']
+    return {
+      node_version: process.version,
+      db_size: dbSizeMb,
+      user_count: userCount,
+      order_count: orderCount,
+      job_count: jobCount,
+      email_configured: hasResendKey,
+    }
+  })
 }

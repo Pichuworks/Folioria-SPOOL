@@ -16,9 +16,28 @@ interface SettingsDto {
   initialized_at: string | null
 }
 
+interface SystemInfoDto {
+  node_version: string
+  db_size: string
+  user_count: number
+  order_count: number
+  job_count: number
+  email_configured: boolean
+}
+
+const PERM_MATRIX: Array<{ label: string; customer: string; member: string; admin: string }> = [
+  { label: '下单域访问', customer: '是', member: '是', admin: '是' },
+  { label: '管理域访问', customer: '否', member: '否', admin: '是' },
+  { label: '适用价格', customer: '对外价', member: '内部价', admin: '全部' },
+  { label: '下单标记', customer: '—', member: 'is_internal', admin: '—' },
+  { label: '订单可见', customer: '仅自己', member: '仅自己', admin: '全部' },
+  { label: '成本/毛利可见', customer: '否', member: '否', admin: '是' },
+]
+
 function SettingsBody() {
   const [settings, setSettings] = useState<SettingsDto | null>(null)
   const [form, setForm] = useState<SettingsDto | null>(null)
+  const [sysInfo, setSysInfo] = useState<SystemInfoDto | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,6 +47,7 @@ function SettingsBody() {
         setForm(r.data)
       }
     })
+    void send<SystemInfoDto>('GET', '/api/settings/system-info').then((r) => r.ok && setSysInfo(r.data))
   }, [])
 
   if (!settings || !form) return <Skeleton />
@@ -123,6 +143,45 @@ function SettingsBody() {
           {notice && <p className="text-[12.5px] text-wine-ink">{notice}</p>}
         </form>
       </MagSec>
+
+      <MagSec tag="03" title="角色权限" note="ROLE MATRIX">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-ink">
+                <th className="py-2 pr-4 font-mono text-[10px] tracking-[.12em] text-dim">权限项</th>
+                <th className="py-2 px-3 font-mono text-[10px] tracking-[.12em] text-dim">顾客</th>
+                <th className="py-2 px-3 font-mono text-[10px] tracking-[.12em] text-dim">内部成员</th>
+                <th className="py-2 px-3 font-mono text-[10px] tracking-[.12em] text-dim">管理员</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PERM_MATRIX.map((row) => (
+                <tr key={row.label} className="border-b border-line">
+                  <td className="py-2 pr-4 text-ink">{row.label}</td>
+                  <td className="py-2 px-3 text-dim">{row.customer}</td>
+                  <td className="py-2 px-3 text-dim">{row.member}</td>
+                  <td className="py-2 px-3 text-wine-ink">{row.admin}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[11.5px] leading-[1.7] text-dim">
+          member 与 customer 的唯一区别：下单时适用内部价（internal_sell_c），订单标记 is_internal，月报单独归类。管理域全部功能仅限 admin。
+        </p>
+      </MagSec>
+
+      {sysInfo && (
+        <MagSec tag="04" title="系统信息" note="READ-ONLY">
+          <SpecRow label="Node.js" value={sysInfo.node_version} />
+          <SpecRow label="数据库大小" value={sysInfo.db_size} />
+          <SpecRow label="用户数" value={sysInfo.user_count} />
+          <SpecRow label="订单数" value={sysInfo.order_count} />
+          <SpecRow label="作业数" value={sysInfo.job_count} />
+          <SpecRow label="邮件服务" value={sysInfo.email_configured ? '已配置' : '未配置'} />
+        </MagSec>
+      )}
     </div>
   )
 }
