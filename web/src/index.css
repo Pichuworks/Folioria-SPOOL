@@ -6,8 +6,8 @@
   --color-card: #fefcf8; /* bgCard · 暖白 */
   --color-deep: #ebe3d5; /* bgDeep · 暖砂 */
   --color-line: #d0c2a7; /* border · 永远一像素 */
-  --color-ink: #302418; /* text · 胡桃 */
-  --color-dim: #6f5e48; /* textDim · 暖褐 */
+  --color-ink: #3d1e10; /* text · 铁胆墨 */
+  --color-dim: #6a4e30; /* textDim · 暖褐 */
   --color-wine: #b84520; /* accent · 秋枫 */
   --color-wine-ink: #873212; /* accentInk · 深锈 */
   --color-wine-dim: #f2ddc8; /* accentDim · 蜜桃 */
@@ -17,7 +17,7 @@
 
   --font-serif: "Noto Serif SC", "Noto Serif JP", Georgia, serif;
   --font-garamond: "EB Garamond", Georgia, serif;
-  --font-script: "Great Vibes", cursive;
+  --font-script: "IM Fell English", Georgia, serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
   --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.06);
@@ -45,4 +45,12 @@ h4 {
 
 p {
   text-wrap: pretty;
+}
+
+.ink-press {
+  text-shadow:
+    0 0 0.5px currentColor,
+    0 0 1px rgb(61 30 16 / 0.25),
+    0 0.5px 1px rgb(61 30 16 / 0.12);
+  filter: url(#ink-turb);
 }

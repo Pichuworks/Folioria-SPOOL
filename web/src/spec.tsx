@@ -15,10 +15,10 @@ export const Shell = ({ nav, center, right, children }: { nav: ReactNode; center
 )
 
 export const Masthead = ({ nav }: { nav: ReactNode }) => (
-  <header className="flex flex-wrap items-end justify-between gap-x-[18px] gap-y-3 border-b border-ink pb-4 pt-[30px]">
+  <header className="flex flex-wrap items-end justify-between gap-x-[18px] gap-y-5 border-b border-ink pb-4 pt-[30px]">
     <a href="#/" className="flex items-end gap-5 text-ink">
-      <span className="text-[44px] font-bold leading-none tracking-[.14em]">枫光映刻</span>
-      <span className="pb-1 font-script text-[19px] text-dim">Maplescape Folioria</span>
+      <span className="ink-press text-[44px] font-bold leading-none tracking-[.14em]">枫光映刻</span>
+      <span className="ink-press pb-1 font-script text-[19px] text-dim">Maplescape Folioria</span>
     </a>
     <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-1 text-[13px]">{nav}</nav>
   </header>
@@ -39,7 +39,7 @@ export const MagSec = ({
   id,
   children,
 }: {
-  tag: string
+  tag?: string
   title: string
   note?: string
   id?: string
@@ -47,7 +47,7 @@ export const MagSec = ({
 }) => (
   <section id={id} className="pt-13">
     <div className="mb-[22px] flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-ink pb-3">
-      <span className="bg-ink px-2.5 py-1 font-mono text-[11px] tracking-[.22em] text-paper">{tag}</span>
+      {tag && <span className="bg-ink px-2.5 py-1 font-mono text-[11px] tracking-[.22em] text-paper">{tag}</span>}
       <h2 className="text-[26px] font-semibold text-ink">{title}</h2>
       {note && <span className="ml-auto font-mono text-[10px] tracking-[.12em] text-dim">{note}</span>}
     </div>

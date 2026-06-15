@@ -64,7 +64,7 @@ function ReviewRow({
     <div className="border-b border-line py-3 last:border-b-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-[13.5px] font-medium text-ink">
-          {item.mode_name} × {item.paper_name} · {item.size_label}
+          {item.mode_name ?? item.category} × {item.paper_name} · {item.size_label}
         </span>
         <span className="text-[12px] text-dim">
           {item.unit_display}/张 × {item.quantity}

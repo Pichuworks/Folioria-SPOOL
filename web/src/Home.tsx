@@ -111,7 +111,7 @@ export default function Home({ me }: { me: MeDto | null }) {
             <h1 className="text-[56px] font-medium leading-[1.15] tracking-[.02em]">
               这里是
               <br />
-              <span className="tracking-[.14em]">枫光映刻</span>。
+              <span className="ink-press tracking-[.14em]">枫光映刻</span>。
             </h1>
             <p className="mt-4 text-[16px] leading-[1.85] tracking-[.02em] text-dim">
               我们负责把创作纸质化。从一本同人志、一张无料、一套周边，到展会现场的每一份物料，枫光映刻会参与它们从屏幕到纸面的全过程。

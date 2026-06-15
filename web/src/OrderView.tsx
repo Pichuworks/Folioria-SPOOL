@@ -18,6 +18,22 @@ import {
 } from './api'
 import { Leader, MagSec, SpecRow } from './spec'
 
+const CAT_LABEL: Record<string, string> = {
+  bw: '黑白',
+  color: '彩色',
+  'photo-value': '照片·性价比',
+  'photo-premium': '照片·高质量',
+  'photo-art': '照片·艺术微喷',
+}
+const TECH_LABEL: Record<string, string> = { laser: '激光', inkjet: '喷墨' }
+
+function itemLabel(i: OrderItemDto) {
+  const cat = CAT_LABEL[i.category] ?? i.category
+  const tech = TECH_LABEL[i.tech] ?? i.tech
+  const duplex = i.duplex ? '·双面' : ''
+  return `${cat}${tech}${duplex} · ${i.paper_name} · ${i.size_label}`
+}
+
 export const FILE_STATUS_LABEL: Record<OrderItemDto['file_status'], string> = {
   pending: '待审稿',
   approved: '审稿通过',
@@ -261,7 +277,7 @@ function ItemRow({
     <div className="border-b border-line py-3 last:border-b-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-[14px] font-medium text-ink">
-          {item.mode_name} × {item.paper_name} · {item.size_label}
+          {itemLabel(item)}
         </span>
         <span className="text-[12.5px] text-dim">
           {item.unit_display}/张 × {item.quantity}
@@ -382,7 +398,7 @@ export default function OrderView({ token }: { token: string }) {
         paper_id: i.paper_id,
         size_key: i.size_key,
         quantity: i.quantity,
-        label: `${i.mode_name} × ${i.paper_name} · ${i.size_label}`,
+        label: itemLabel(i),
       })),
       books: (order.books ?? []).map((b) => ({
         book_id: b.book_id,

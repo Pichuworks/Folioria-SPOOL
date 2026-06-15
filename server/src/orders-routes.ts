@@ -54,6 +54,9 @@ export const ORDER_ITEM_SCHEMA = {
     id: { type: 'string' },
     mode_id: { type: 'integer' },
     mode_name: { type: 'string' },
+    category: { type: 'string' },
+    tech: { type: 'string' },
+    duplex: { type: 'boolean' },
     paper_id: { type: 'integer' },
     paper_name: { type: 'string' },
     size_key: { type: 'string' },
@@ -274,7 +277,9 @@ function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
   return {
     id: item.id,
     mode_id: item.mode_id,
-    mode_name: item.mode_name,
+    category: item.color_class.split(',')[0],
+    tech: item.tech,
+    duplex: item.duplex !== 0,
     paper_id: item.paper_id,
     paper_name: item.paper_name,
     size_key: item.size_key,
@@ -288,7 +293,7 @@ function itemDto(item: OrderItemRow, currency: Currency, opts: DtoOptions) {
     file_status: item.file_status,
     file_note: item.file_note,
     file_precheck: parsePrecheck(item.file_precheck),
-    ...(opts.admin ? { job_id: item.job_id } : {}),
+    ...(opts.admin ? { mode_name: item.mode_name, job_id: item.job_id } : {}),
   }
 }
 

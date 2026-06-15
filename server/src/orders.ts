@@ -94,6 +94,9 @@ export interface OrderItemRow {
   mode_name: string
   paper_name: string
   size_label: string
+  color_class: string
+  tech: string
+  duplex: number
 }
 
 export function getOrder(db: DB, id: string): OrderRow | undefined {
@@ -103,9 +106,11 @@ export function getOrder(db: DB, id: string): OrderRow | undefined {
 export function getOrderItems(db: DB, orderId: string): OrderItemRow[] {
   return db
     .prepare(
-      `SELECT oi.*, m.name AS mode_name, p.name AS paper_name, s.label AS size_label
+      `SELECT oi.*, m.name AS mode_name, p.name AS paper_name, s.label AS size_label,
+              COALESCE(m.color_class, 'color') AS color_class, pr.type AS tech, m.duplex
        FROM order_items oi
        JOIN print_modes m ON m.id = oi.mode_id
+       JOIN printers pr ON pr.id = m.printer_id
        JOIN papers p ON p.id = oi.paper_id
        JOIN sizes s ON s.key = oi.size_key
        WHERE oi.order_id = ?

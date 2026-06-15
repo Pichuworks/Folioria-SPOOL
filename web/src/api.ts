@@ -529,7 +529,10 @@ export interface FilePrecheckDto {
 export interface OrderItemDto {
   id: string
   mode_id: number
-  mode_name: string
+  mode_name?: string
+  category: string
+  tech: string
+  duplex: boolean
   paper_id: number
   paper_name: string
   size_key: string

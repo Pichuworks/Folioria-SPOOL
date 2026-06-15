@@ -338,7 +338,7 @@ export default function Quote() {
     }`
 
   return (
-    <MagSec tag="下单" title="自助报价 · 在线下单">
+    <MagSec title="自助报价 · 在线下单">
       {me && <VerifyBanner me={me} />}
       <div className="mt-2 grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
         {/* 左栏：单页属性配置器 / 册子配置器 */}
