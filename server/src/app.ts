@@ -138,7 +138,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       return (Array.isArray(cf) ? cf[0] : cf) ?? req.ip
     },
     onExceeded: (req) => {
-      req.log.warn('rate limit exceeded')
+      req.log.warn({ ip: req.ip }, 'rate limit exceeded')
     },
   })
   app.decorateRequest('user', null)

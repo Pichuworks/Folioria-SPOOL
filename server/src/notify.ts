@@ -40,8 +40,8 @@ export function emailChannel(): NotificationChannel {
       const key = process.env['SPOOL_RESEND_API_KEY']
       const from = process.env['SPOOL_MAIL_FROM'] ?? 'Folioria S.P.O.O.L. <spool@folioria.com>'
       if (!key) {
-        // dev 链路：无 key 时正文进控制台（本地验证从这里取链接），落痕 skipped
-        console.log(`[notify skipped] ${msg.subject} → ${to}\n${msg.text}`)
+        getLog().info({ to, subject: msg.subject }, 'notify skipped (no RESEND_API_KEY)')
+        getLog().debug({ to, text: msg.text }, 'notify skipped body')
         return { ok: false, skipped: true }
       }
       try {

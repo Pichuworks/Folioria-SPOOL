@@ -90,17 +90,11 @@ interface PrinterCalibrationRow {
 /** C6 双触发：页数或天数任一超限即 due；对应维度为 NULL 则不触发 */
 export function calibrationDue(p: PrinterCalibrationRow, now: Date): boolean {
   if (p.calibration_interval_pages != null) {
-    if (p.total_pages - p.last_calibration_pages >= p.calibration_interval_pages) {
-      getLog().debug({ printer: p.code, trigger: 'pages', elapsed: p.total_pages - p.last_calibration_pages, threshold: p.calibration_interval_pages }, 'calibration due')
-      return true
-    }
+    if (p.total_pages - p.last_calibration_pages >= p.calibration_interval_pages) return true
   }
   if (p.calibration_interval_days != null && p.last_calibration_at != null) {
     const elapsedDays = (now.getTime() - Date.parse(p.last_calibration_at)) / 86_400_000
-    if (elapsedDays >= p.calibration_interval_days) {
-      getLog().debug({ printer: p.code, trigger: 'days', elapsed: Math.floor(elapsedDays), threshold: p.calibration_interval_days }, 'calibration due')
-      return true
-    }
+    if (elapsedDays >= p.calibration_interval_days) return true
   }
   return false
 }
@@ -115,6 +109,9 @@ export function checkCalibration(db: DB, printerId: number, now = new Date()): b
     )
     .get(printerId) as PrinterCalibrationRow | undefined
   if (!p || !calibrationDue(p, now)) return false
+  const pageElapsed = p.total_pages - p.last_calibration_pages
+  const trigger = p.calibration_interval_pages != null && pageElapsed >= p.calibration_interval_pages ? 'pages' : 'days'
+  getLog().debug({ printer: p.code, trigger, pageElapsed }, 'calibration due — raising alert')
   raiseAlert(db, {
     type: 'calibration_due',
     severity: 'warning',
