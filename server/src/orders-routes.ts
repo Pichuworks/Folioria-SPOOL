@@ -1,6 +1,6 @@
 import { type FastifyInstance } from 'fastify'
 import { audit } from './audit.js'
-import { type BookLineInput } from './books.js'
+import { type BookLineInput, type BookSpecInput } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin, requireUser } from './guards.js'
@@ -139,7 +139,7 @@ export const ORDER_BOOK_SCHEMA = {
   additionalProperties: false,
   properties: {
     id: { type: 'string' },
-    book_id: { type: 'integer' },
+    book_id: { type: ['integer', 'null'] },
     name: { type: 'string' },
     count: { type: 'integer' },
     unit_price_c: { type: 'integer' },
@@ -263,9 +263,42 @@ const BOOK_LINE_SCHEMA = {
   },
 }
 
+const CUSTOM_BOOK_LINE_SCHEMA = {
+  type: 'object',
+  required: ['count', 'size_key', 'components'],
+  additionalProperties: false,
+  properties: {
+    count: { type: 'integer', minimum: 1, maximum: 1000000 },
+    size_key: { type: 'string', minLength: 1 },
+    components: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 20,
+      items: {
+        type: 'object',
+        required: ['role', 'paper_id', 'color_class', 'duplex'],
+        additionalProperties: false,
+        properties: {
+          role: { type: 'string', enum: ['cover', 'inner', 'insert'] },
+          paper_id: { type: 'integer', minimum: 1 },
+          color_class: { type: 'string', minLength: 1 },
+          duplex: { type: 'integer', enum: [0, 1] },
+          sheets_per_book: { type: 'integer', minimum: 1, maximum: 1000000 },
+        },
+      },
+    },
+    finishing_ids: { type: 'array', maxItems: 20, items: { type: 'integer', minimum: 1 } },
+  },
+}
+
 interface OrderLineBody {
   items?: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number }>
   books?: Array<{ book_id: number; count: number; components?: Array<{ component_id: number; sheets_per_book: number }> }>
+  custom_books?: Array<{
+    count: number; size_key: string
+    components: Array<{ role: 'cover' | 'inner' | 'insert'; paper_id: number; color_class: string; duplex: number; sheets_per_book?: number }>
+    finishing_ids?: number[]
+  }>
 }
 
 /** 请求体书行 → createOrder 的 BookLineInput（components 数组转 sheets record） */
@@ -274,6 +307,15 @@ function toBookLines(books: OrderLineBody['books']): BookLineInput[] {
     book_id: bk.book_id,
     count: bk.count,
     sheets: Object.fromEntries((bk.components ?? []).map((c) => [c.component_id, c.sheets_per_book])),
+  }))
+}
+
+function toCustomBookSpecs(cbs: OrderLineBody['custom_books']): BookSpecInput[] {
+  return (cbs ?? []).map((cb) => ({
+    count: cb.count,
+    size_key: cb.size_key,
+    components: cb.components,
+    finishing_ids: cb.finishing_ids ?? [],
   }))
 }
 
@@ -628,6 +670,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
           properties: {
             items: { type: 'array', maxItems: 50, items: ITEM_LINE_SCHEMA },
             books: { type: 'array', maxItems: 50, items: BOOK_LINE_SCHEMA },
+            custom_books: { type: 'array', maxItems: 50, items: CUSTOM_BOOK_LINE_SCHEMA },
             contact_info: { type: ['string', 'null'], maxLength: 200 },
             notes: { type: ['string', 'null'], maxLength: 2000 },
             delivery_method: { type: 'string', enum: ['pickup', 'shipping'] },
@@ -659,6 +702,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         internal: user.role !== 'customer',
         items: b.items ?? [],
         books: toBookLines(b.books),
+        customBooks: toCustomBookSpecs(b.custom_books),
         contactInfo: b.contact_info ?? null,
         notes: b.notes ?? null,
         deliveryMethod: b.delivery_method ?? 'pickup',
@@ -685,6 +729,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
           properties: {
             items: { type: 'array', maxItems: 50, items: ITEM_LINE_SCHEMA },
             books: { type: 'array', maxItems: 50, items: BOOK_LINE_SCHEMA },
+            custom_books: { type: 'array', maxItems: 50, items: CUSTOM_BOOK_LINE_SCHEMA },
             email: { type: 'string', minLength: 3, maxLength: 254, pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' },
             name: { type: 'string', minLength: 1, maxLength: 80 },
             contact_info: { type: ['string', 'null'], maxLength: 200 },
@@ -716,6 +761,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         internal: false,
         items: b.items ?? [],
         books: toBookLines(b.books),
+        customBooks: toCustomBookSpecs(b.custom_books),
         contactInfo: b.contact_info ?? null,
         notes: b.notes ?? null,
         deliveryMethod: b.delivery_method ?? 'pickup',

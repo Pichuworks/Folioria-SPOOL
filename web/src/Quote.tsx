@@ -2,8 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import {
   createGuestOrder,
   createOrder,
-  fetchBookQuote,
-  fetchBooks,
+  fetchBookSpecQuote,
   fetchFinishingCatalog,
   fetchMe,
   fetchProducts,
@@ -100,8 +99,6 @@ export default function Quote() {
     fetchFinishingCatalog().then((c) => c && setFinishingCatalog(c.finishings)).catch(() => {})
   }, [])
 
-  // C1/D32 一键再下单：消费缓冲的单页行 + 书册行，按现价重报后填入购物车；
-  // 书册行对照实时目录——成品或任一组件已归档则跳过并提示
   useEffect(() => {
     const buf = takeReorder()
     if (!buf || (buf.items.length === 0 && buf.books.length === 0)) return
@@ -125,32 +122,28 @@ export default function Quote() {
           })
         } else skipped += 1
       }
-      if (buf.books.length > 0) {
-        const catalog = await fetchBooks().catch(() => null)
-        for (const rb of buf.books) {
-          // 成品下架 → 目录无此 book；组件下架 → 目录组件集合缺 source_component_id
-          const cat = catalog?.books.find((b) => b.id === rb.book_id)
-          const catIds = new Set(cat?.components.map((c) => c.id))
-          if (!cat || rb.components.some((c) => !catIds.has(c.component_id))) {
-            skipped += 1
-            continue
-          }
-          const res = await fetchBookQuote({ book_id: rb.book_id, count: rb.count, components: rb.components }).catch(() => null)
-          if (res && res.ok) {
-            lines.push({
-              kind: 'book',
-              book_id: rb.book_id,
-              count: rb.count,
-              components: rb.components,
-              label: `${cat.name} · ${rb.count}本`,
-              line_total_display: res.data.line_total_display,
-            })
-          } else skipped += 1
-        }
+      for (const rb of buf.books) {
+        const res = await fetchBookSpecQuote({
+          count: rb.count,
+          size_key: rb.size_key,
+          components: rb.components,
+          finishing_ids: rb.finishing_ids,
+        }).catch(() => null)
+        if (res && res.ok) {
+          lines.push({
+            kind: 'book',
+            count: rb.count,
+            size_key: rb.size_key,
+            components: rb.components,
+            finishing_ids: rb.finishing_ids,
+            label: rb.label,
+            line_total_display: res.data.line_total_display,
+          })
+        } else skipped += 1
       }
       if (cancelled) return
       if (lines.length > 0) setCart((prev) => [...prev, ...lines])
-      if (skipped > 0) setReorderNotice(`${skipped} 项因成品/组件已下架或暂不可报价，已跳过——请确认清单。`)
+      if (skipped > 0) setReorderNotice(`${skipped} 项因组件已下架或暂不可报价，已跳过——请确认清单。`)
     })()
     return () => {
       cancelled = true
@@ -257,10 +250,13 @@ export default function Quote() {
         mode_id, paper_id, size_key, quantity: qty,
         ...(fids.length > 0 ? { finishing_ids: fids } : {}),
       }))
-  const books = () =>
+  const customBooks = () =>
     cart
       .filter((l): l is BookCartLine => l.kind === 'book')
-      .map(({ book_id, count, components }) => ({ book_id, count, components }))
+      .map(({ count, size_key, components, finishing_ids }) => ({
+        count, size_key, components,
+        ...(finishing_ids.length > 0 ? { finishing_ids } : {}),
+      }))
 
   const showError = (err: string | undefined, status: number) =>
     setSubmitError(
@@ -297,7 +293,7 @@ export default function Quote() {
       setSubmitError(null)
       const gres = await createGuestOrder({
         items: items(),
-        books: books(),
+        custom_books: customBooks(),
         ...delivery(),
         email: guestEmail.trim(),
         name: guestName.trim(),
@@ -316,7 +312,7 @@ export default function Quote() {
     setSubmitError(null)
     const res = await createOrder({
       items: items(),
-      books: books(),
+      custom_books: customBooks(),
       ...delivery(),
       contact_info: contact.trim() === '' ? null : contact.trim(),
       notes: notes.trim() === '' ? null : notes.trim(),

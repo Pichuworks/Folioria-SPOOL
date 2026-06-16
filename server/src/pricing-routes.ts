@@ -1,6 +1,6 @@
 import { type FastifyInstance } from 'fastify'
 import { audit } from './audit.js'
-import { BookError, priceBook } from './books.js'
+import { BookError, priceBook, priceBookSpec } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { finishingContribution, type FinishingPricing } from './finishing.js'
@@ -616,6 +616,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     name: { type: 'string', minLength: 1 },
     pricing: { type: 'string', enum: ['per_book', 'per_page', 'per_area'] },
     price_c: MONEY_C,
+    category: { type: ['string', 'null'] },
   }
 
   app.post(
@@ -632,10 +633,10 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       },
     },
     async (req, reply) => {
-      const b = req.body as { name: string; pricing: string; price_c: number }
+      const b = req.body as { name: string; pricing: string; price_c: number; category?: string | null }
       const { lastInsertRowid } = db
-        .prepare('INSERT INTO finishing_ops (name, pricing, price_c) VALUES (?, ?, ?)')
-        .run(b.name, b.pricing, b.price_c)
+        .prepare('INSERT INTO finishing_ops (name, pricing, price_c, category) VALUES (?, ?, ?, ?)')
+        .run(b.name, b.pricing, b.price_c, b.category ?? null)
       logEdit(req.user?.id ?? null, 'pricing.finishing', String(lastInsertRowid), `新建工艺 ${b.name} ${b.pricing} ${b.price_c}`)
       return reply.status(201).send(db.prepare('SELECT * FROM finishing_ops WHERE id = ?').get(lastInsertRowid))
     },
@@ -658,15 +659,16 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     async (req, reply) => {
       const id = Number((req.params as { id: string }).id)
       const existing = db.prepare('SELECT * FROM finishing_ops WHERE id = ?').get(id) as
-        | { name: string; pricing: string; price_c: number; archived: number }
+        | { name: string; pricing: string; price_c: number; archived: number; category: string | null }
         | undefined
       if (!existing) return reply.status(404).send({ error: 'not_found' })
-      const b = req.body as { name?: string; pricing?: string; price_c?: number; archived?: boolean }
-      db.prepare('UPDATE finishing_ops SET name = ?, pricing = ?, price_c = ?, archived = ? WHERE id = ?').run(
+      const b = req.body as { name?: string; pricing?: string; price_c?: number; archived?: boolean; category?: string | null }
+      db.prepare('UPDATE finishing_ops SET name = ?, pricing = ?, price_c = ?, archived = ?, category = ? WHERE id = ?').run(
         b.name ?? existing.name,
         b.pricing ?? existing.pricing,
         b.price_c ?? existing.price_c,
         b.archived === undefined ? existing.archived : b.archived ? 1 : 0,
+        b.category === undefined ? existing.category : b.category,
         id,
       )
       logEdit(req.user?.id ?? null, 'pricing.finishing', id, `改工艺 ${id}`)
@@ -1227,15 +1229,15 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
-  // 下单域: 工艺目录（客户自选单张工艺）
+  // 下单域: 工艺目录（客户自选单张工艺——排除 binding 类，装订仅书册用）
   app.get(
     '/api/calculator/finishings',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     async () => {
       const currency = baseCurrency(db)
       const fins = db
-        .prepare('SELECT id, name, pricing, price_c FROM finishing_ops WHERE archived = 0 ORDER BY id')
-        .all() as Array<{ id: number; name: string; pricing: string; price_c: number }>
+        .prepare("SELECT id, name, pricing, price_c, category FROM finishing_ops WHERE archived = 0 AND (category IS NULL OR category != 'binding') ORDER BY id")
+        .all() as Array<{ id: number; name: string; pricing: string; price_c: number; category: string | null }>
       return {
         currency,
         finishings: fins.map((f) => ({
@@ -1243,7 +1245,150 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
           name: f.name,
           pricing: f.pricing,
           price_c: f.price_c,
+          category: f.category,
           price_display: formatMoneyC(moneyC(f.price_c), currency),
+        })),
+      }
+    },
+  )
+
+  // D36 下单域: 书册配置菜单（纸张×尺寸可用性 + 分组工艺目录）
+  app.get(
+    '/api/calculator/book-config',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (req) => {
+      const internal = req.user?.role === 'member'
+      const currency = baseCurrency(db)
+      const sizes = db.prepare('SELECT key, label, area, sort FROM sizes ORDER BY sort').all() as Array<{
+        key: string; label: string; area: number; sort: number
+      }>
+      const papers = db.prepare('SELECT id, name, category, gsm FROM papers WHERE archived = 0 ORDER BY id').all() as Array<{
+        id: number; name: string; category: string | null; gsm: number | null
+      }>
+      const psc = db.prepare('SELECT paper_id, size_key FROM paper_size_costs').all() as Array<{
+        paper_id: number; size_key: string
+      }>
+      const paperSizes = new Map<number, string[]>()
+      for (const row of psc) {
+        const arr = paperSizes.get(row.paper_id)
+        if (arr) arr.push(row.size_key)
+        else paperSizes.set(row.paper_id, [row.size_key])
+      }
+      const products = listProducts(db, { internal })
+      const paperColors = new Map<string, Set<string>>()
+      for (const p of products) {
+        const key = `${p.paper_id}:${p.size_key}`
+        const set = paperColors.get(key)
+        if (set) set.add(p.category)
+        else paperColors.set(key, new Set([p.category]))
+      }
+
+      const fins = db
+        .prepare('SELECT id, name, pricing, price_c, category FROM finishing_ops WHERE archived = 0 ORDER BY id')
+        .all() as Array<{ id: number; name: string; pricing: string; price_c: number; category: string | null }>
+      const binding = fins.filter((f) => f.category === 'binding')
+      const addons = fins.filter((f) => f.category !== 'binding')
+
+      return {
+        currency,
+        sizes,
+        papers: papers.map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          gsm: p.gsm,
+          available_sizes: paperSizes.get(p.id) ?? [],
+          color_classes: [...new Set(
+            (paperSizes.get(p.id) ?? []).flatMap((sk) => [...(paperColors.get(`${p.id}:${sk}`) ?? [])]),
+          )],
+        })),
+        finishings: {
+          binding: binding.map((f) => ({
+            id: f.id, name: f.name, pricing: f.pricing, price_c: f.price_c,
+            price_display: formatMoneyC(moneyC(f.price_c), currency),
+          })),
+          addons: addons.map((f) => ({
+            id: f.id, name: f.name, pricing: f.pricing, price_c: f.price_c, category: f.category,
+            price_display: formatMoneyC(moneyC(f.price_c), currency),
+          })),
+        },
+      }
+    },
+  )
+
+  // D36 下单域: 自定义书册实时报价
+  app.post(
+    '/api/calculator/book-spec-quote',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['count', 'size_key', 'components'],
+          additionalProperties: false,
+          properties: {
+            count: { type: 'integer', minimum: 1, maximum: 1000000 },
+            size_key: { type: 'string', minLength: 1 },
+            components: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 20,
+              items: {
+                type: 'object',
+                required: ['role', 'paper_id', 'color_class', 'duplex'],
+                additionalProperties: false,
+                properties: {
+                  role: { type: 'string', enum: ['cover', 'inner', 'insert'] },
+                  paper_id: { type: 'integer', minimum: 1 },
+                  color_class: { type: 'string', minLength: 1 },
+                  duplex: { type: 'integer', enum: [0, 1] },
+                  sheets_per_book: { type: 'integer', minimum: 1, maximum: 1000000 },
+                },
+              },
+            },
+            finishing_ids: { type: 'array', maxItems: 20, items: { type: 'integer', minimum: 1 } },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body as {
+        count: number
+        size_key: string
+        components: Array<{ role: 'cover' | 'inner' | 'insert'; paper_id: number; color_class: string; duplex: number; sheets_per_book?: number }>
+        finishing_ids?: number[]
+      }
+      const internal = req.user?.role === 'member'
+      let bq
+      try {
+        bq = priceBookSpec(db, { ...b, finishing_ids: b.finishing_ids ?? [] }, { internal })
+      } catch (err) {
+        if (err instanceof BookError) return reply.status(422).send({ error: err.message })
+        throw err
+      }
+      const currency = baseCurrency(db)
+      const total = lineTotal(bq.unit_price_c, b.count)
+      return {
+        book_id: bq.book_id,
+        name: bq.name,
+        count: b.count,
+        unit_price_c: bq.unit_price_c as number,
+        unit_display: formatMoneyC(bq.unit_price_c, currency),
+        line_total: total as number,
+        line_total_display: formatMoney(total, currency),
+        components: bq.components.map((c) => ({
+          component_id: c.component_id,
+          role: c.role,
+          sheets_per_book: c.sheets_per_book,
+          unit_sell_c: c.unit_sell_c as number,
+          unit_display: formatMoneyC(c.unit_sell_c, currency),
+        })),
+        finishings: bq.finishings.map((f) => ({
+          finishing_id: f.finishing_id,
+          name: f.name,
+          pricing: f.pricing,
+          contribution_c: f.contribution_c as number,
+          contribution_display: formatMoneyC(f.contribution_c, currency),
         })),
       }
     },

@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto'
-import { priceBook, type BookLineInput } from './books.js'
+import { priceBook, priceBookSpec, type BookLineInput, type BookSpecInput } from './books.js'
 import { type DB } from './db.js'
 import { finishingContribution, type FinishingPricing } from './finishing.js'
 import { lineTotal, moneyC, sumMoney } from './money.js'
@@ -260,6 +260,8 @@ export interface CreateOrderInput {
   items: NewOrderItem[]
   /** D27 书行：一本书 = 购物车一行（成品 + 每组件每本张数 + 本数） */
   books?: BookLineInput[]
+  /** D36 自定义书册行：客户直接指定组件规格（不引用成品） */
+  customBooks?: BookSpecInput[]
   contactInfo?: string | null
   notes?: string | null
   /** D30 配送：'pickup'（默认）| 'shipping'（须 deliveryAddress 非空） */
@@ -315,7 +317,13 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
     return { input: bl, quote: bq, line_total: lineTotal(bq.unit_price_c, bl.count) }
   })
 
-  if (priced.length === 0 && books.length === 0) throw new OrderError(422, 'empty_order')
+  // D36 自定义书册：客户直接指定组件规格
+  const customBooks = (input.customBooks ?? []).map((spec) => {
+    const bq = priceBookSpec(db, spec, { internal: input.internal })
+    return { input: spec, quote: bq, line_total: lineTotal(bq.unit_price_c, spec.count) }
+  })
+
+  if (priced.length === 0 && books.length === 0 && customBooks.length === 0) throw new OrderError(422, 'empty_order')
 
   // D30 配送：邮寄须有非空地址
   const deliveryMethod = input.deliveryMethod ?? 'pickup'
@@ -324,7 +332,7 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
     throw new OrderError(422, 'delivery_address_required')
   }
 
-  const subtotal = sumMoney([...priced.map((p) => p.line_total), ...books.map((b) => b.line_total)])
+  const subtotal = sumMoney([...priced.map((p) => p.line_total), ...books.map((b) => b.line_total), ...customBooks.map((b) => b.line_total)])
 
   const now = new Date()
   const nowIso = now.toISOString()
@@ -404,6 +412,21 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
         )
       }
       for (const f of b.quote.finishings) {
+        insertBookFin.run(randomUUID(), obId, f.finishing_id, f.name, f.pricing, f.price_c, f.contribution_c)
+      }
+    }
+
+    // D36 自定义书册：book_id = NULL
+    for (const cb of customBooks) {
+      const obId = randomUUID()
+      insertBook.run(obId, orderId, null, cb.quote.name, cb.input.count, cb.quote.unit_price_c, cb.line_total)
+      for (const c of cb.quote.components) {
+        insertBookComp.run(
+          randomUUID(), obId, c.role, c.paper_id, c.size_key, c.color_class,
+          c.duplex, c.mode_id, c.sheets_per_book, c.unit_sell_c, null,
+        )
+      }
+      for (const f of cb.quote.finishings) {
         insertBookFin.run(randomUUID(), obId, f.finishing_id, f.name, f.pricing, f.price_c, f.contribution_c)
       }
     }

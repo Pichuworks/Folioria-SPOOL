@@ -120,6 +120,7 @@ export interface FinishingCatalogItem {
   name: string
   pricing: string
   price_c: number
+  category: string | null
   price_display: string
 }
 
@@ -234,6 +235,58 @@ export const fetchBookQuote = (body: {
   count: number
   components?: Array<{ component_id: number; sheets_per_book: number }>
 }) => send<BookQuoteDto & { error?: string }>('POST', '/api/calculator/book-quote', body)
+
+// D36 自定义书册
+export interface BookConfigPaper {
+  id: number
+  name: string
+  category: string | null
+  gsm: number | null
+  available_sizes: string[]
+  color_classes: string[]
+}
+export interface BookConfigFinishing {
+  id: number
+  name: string
+  pricing: string
+  price_c: number
+  price_display: string
+  category?: string | null
+}
+export interface BookConfigDto {
+  currency: CurrencyDto
+  sizes: Array<{ key: string; label: string; area: number; sort: number }>
+  papers: BookConfigPaper[]
+  finishings: {
+    binding: BookConfigFinishing[]
+    addons: BookConfigFinishing[]
+  }
+}
+let bookConfigEntry: CacheEntry<BookConfigDto> | null = null
+export const getBookConfigCache = (): BookConfigDto | null => bookConfigEntry?.data ?? null
+export function fetchBookConfig(): Promise<BookConfigDto> {
+  return swr(bookConfigEntry, async () => {
+    const res = await fetch('/api/calculator/book-config')
+    if (!res.ok) throw new Error(`book-config failed: ${res.status}`)
+    return (await res.json()) as BookConfigDto
+  }, (e) => { bookConfigEntry = e })
+}
+
+export interface BookSpecQuoteInput {
+  count: number
+  size_key: string
+  components: Array<{
+    role: 'cover' | 'inner' | 'insert'
+    paper_id: number
+    color_class: string
+    duplex: number
+    sheets_per_book?: number
+  }>
+  finishing_ids?: number[]
+}
+export type BookSpecQuoteDto = BookQuoteDto & { error?: string }
+export const fetchBookSpecQuote = (body: BookSpecQuoteInput) =>
+  send<BookSpecQuoteDto>('POST', '/api/calculator/book-spec-quote', body)
 
 export interface MeDto {
   id: string
@@ -643,7 +696,7 @@ export interface OrderBookFinishingDto {
 }
 export interface OrderBookDto {
   id: string
-  book_id: number
+  book_id: number | null
   name: string
   count: number
   unit_price_c: number
@@ -709,10 +762,20 @@ export const ORDER_STATUS_LABEL: Record<OrderDto['status'], string> = {
   cancelled: '已取消',
 }
 
-/** D27: items 与 books 均可选，至少一行 */
 export interface OrderLineBody {
   items?: Array<{ mode_id: number; paper_id: number; size_key: string; quantity: number; finishing_ids?: number[] }>
-  books?: Array<{ book_id: number; count: number; components?: Array<{ component_id: number; sheets_per_book: number }> }>
+  custom_books?: Array<{
+    count: number
+    size_key: string
+    components: Array<{
+      role: 'cover' | 'inner' | 'insert'
+      paper_id: number
+      color_class: string
+      duplex: number
+      sheets_per_book: number
+    }>
+    finishing_ids?: number[]
+  }>
 }
 
 /** D30 配送 */
@@ -832,11 +895,17 @@ export interface ReorderItem {
   quantity: number
   label: string
 }
-/** D32 书册行预填：book_id + 本数 + 各非封面组件（source_component_id → 每本张数） */
 export interface ReorderBook {
-  book_id: number
   count: number
-  components: Array<{ component_id: number; sheets_per_book: number }>
+  size_key: string
+  components: Array<{
+    role: 'cover' | 'inner' | 'insert'
+    paper_id: number
+    color_class: string
+    duplex: number
+    sheets_per_book: number
+  }>
+  finishing_ids: number[]
   label: string
 }
 export interface ReorderBuffer {

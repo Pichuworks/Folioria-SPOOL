@@ -395,8 +395,6 @@ export default function OrderView({ token }: { token: string }) {
   }
 
   const reorder = () => {
-    // C1/D32: 单页行（机器沿用原 mode_id）+ 书册行（按目录组件来源还原每本张数）预填购物车；
-    // 封面固定 1 张由 priceBook 定，不入缓冲；无 source_component_id（迁移前老单）的书行交由 Quote 跳过提示
     setReorder({
       items: order.items.map((i) => ({
         mode_id: i.mode_id,
@@ -406,11 +404,16 @@ export default function OrderView({ token }: { token: string }) {
         label: itemLabel(i),
       })),
       books: (order.books ?? []).map((b) => ({
-        book_id: b.book_id,
         count: b.count,
-        components: b.components
-          .filter((c) => c.role !== 'cover' && c.source_component_id != null)
-          .map((c) => ({ component_id: c.source_component_id as number, sheets_per_book: c.sheets_per_book })),
+        size_key: b.components[0]?.size_key ?? 'A4',
+        components: b.components.map((c) => ({
+          role: c.role as 'cover' | 'inner' | 'insert',
+          paper_id: c.paper_id,
+          color_class: c.color_class,
+          duplex: c.duplex ? 1 : 0,
+          sheets_per_book: c.sheets_per_book,
+        })),
+        finishing_ids: b.finishings.map((f) => f.finishing_id),
         label: b.name,
       })),
     })
