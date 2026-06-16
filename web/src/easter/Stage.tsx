@@ -18,6 +18,8 @@ function init(cfg: SpriteConfig, w: number): SpriteInstance {
     soloYOffset: 0,
     soloType: null,
     soloDuration: 0,
+    soloBubbles: [],
+    soloBubbleIdx: 0,
   }
 }
 
@@ -57,16 +59,9 @@ export default function Stage({ sprites: cfgs, decryptionKey }: Props) {
         s.stateTimer += dt
 
         if (s.state === 'walk') {
-          const speed = s.soloType === 'sprint' ? s.cfg.speed * 3 : s.cfg.speed
           const dir = s.facingRight ? 1 : -1
-          s.x += speed * dir * 60 * dt
-          if (!reduced) {
-            const bh = s.soloType === 'big_bounce' ? s.cfg.bounceHeight * 2.5 : s.cfg.bounceHeight
-            s.bouncePhase += dt * 8
-            s.soloYOffset = s.soloType === 'big_bounce'
-              ? Math.sin(s.bouncePhase) * bh - Math.sin(s.bouncePhase) * s.cfg.bounceHeight
-              : 0
-          }
+          s.x += s.cfg.speed * dir * 30 * dt
+          if (!reduced) s.bouncePhase += dt * 4
           if (s.x < 0) { s.x = 0; s.facingRight = true }
           if (s.x > w - 16) { s.x = w - 16; s.facingRight = false }
           if (s.stateTimer > s.walkDuration) {
@@ -74,7 +69,6 @@ export default function Stage({ sprites: cfgs, decryptionKey }: Props) {
             s.stateTimer = 0
             s.pauseDuration = s.cfg.pauseDuration[0] + Math.random() * (s.cfg.pauseDuration[1] - s.cfg.pauseDuration[0])
             s.bouncePhase = 0
-            s.soloYOffset = 0
           }
         } else if (s.state === 'idle') {
           if (s.stateTimer > s.pauseDuration) {
@@ -88,32 +82,49 @@ export default function Stage({ sprites: cfgs, decryptionKey }: Props) {
             s.state = 'idle'
             s.stateTimer = 0
             s.pauseDuration = 0.5 + Math.random()
-            s.soloType = null
           }
         } else if (s.state === 'solo') {
-          if (s.soloType === 'long_pause') {
-            // just stand still
-          } else if (s.soloType === 'sprint') {
+          const ty = s.soloType
+          if (ty === 'sprint') {
             const dir = s.facingRight ? 1 : -1
-            s.x += s.cfg.speed * 3 * dir * 60 * dt
-            if (!reduced) s.bouncePhase += dt * 16
+            s.x += s.cfg.speed * 3 * dir * 30 * dt
+            if (!reduced) s.bouncePhase += dt * 8
             if (s.x < 0) { s.x = 0; s.facingRight = true }
             if (s.x > w - 16) { s.x = w - 16; s.facingRight = false }
-          } else if (s.soloType === 'big_bounce') {
+          } else if (ty === 'big_bounce') {
             const dir = s.facingRight ? 1 : -1
-            s.x += s.cfg.speed * dir * 60 * dt
+            s.x += s.cfg.speed * dir * 30 * dt
             if (!reduced) {
-              s.bouncePhase += dt * 8
+              s.bouncePhase += dt * 4
               s.soloYOffset = Math.sin(s.bouncePhase) * s.cfg.bounceHeight * 1.5
             }
             if (s.x < 0) { s.x = 0; s.facingRight = true }
             if (s.x > w - 16) { s.x = w - 16; s.facingRight = false }
+          } else if (ty === 'sequence' && s.soloBubbles.length > 0) {
+            const idx = Math.min(Math.floor(s.stateTimer / 1.2), s.soloBubbles.length - 1)
+            if (idx !== s.soloBubbleIdx && idx < s.soloBubbles.length) {
+              s.soloBubbleIdx = idx
+              s.bubble = s.soloBubbles[idx]!
+              s.bubbleTimer = 1.0
+            }
+          } else if (ty === 'spin') {
+            s.facingRight = Math.floor(s.stateTimer / 0.25) % 2 === 0
+          } else if (ty === 'cat_antics') {
+            if (s.stateTimer < 0.05) s.facingRight = !s.facingRight
+            const dir = s.facingRight ? 1 : -1
+            s.x += s.cfg.speed * 2 * dir * 30 * dt
+            if (!reduced) s.bouncePhase += dt * 8
+            if (s.x < 0) { s.x = 0; s.facingRight = true }
+            if (s.x > w - 16) { s.x = w - 16; s.facingRight = false }
           }
           if (s.stateTimer > s.soloDuration) {
+            if (s.soloType === 'turn') s.facingRight = !s.facingRight
             s.state = 'idle'
             s.stateTimer = 0
             s.soloType = null
             s.soloYOffset = 0
+            s.soloBubbles = []
+            s.soloBubbleIdx = 0
             s.pauseDuration = 0.5 + Math.random()
           }
         }

@@ -61,7 +61,7 @@ const CHARS = [
     dl:['喵梦亲！！'],
   },
   {
-    id:'soyo', n:'长崎爽世', f:'长崎', g:'爽世', d:'素世', x:1,
+    id:'soyo', n:'长崎素世', f:'长崎', g:'素世', d:'素世', x:1,
     q:'Fmaj7 → Em7 → Dm7 → Cmaj7',
     m:'……你来了。没关系。慢慢看就好。这里的故事，每个人走进来的速度都不一样。',
     c:'#FFDD88', sp:0.5, pc:0.5, pd:[4,8], bh:2,
@@ -258,6 +258,16 @@ const PAIR_IX = [
   { a:'eri',     b:'master',  ad:'Master，还有热水吗',     bd:'壶里有。',           ch:0.1,  cd:20 },
   { a:'koharu',  b:'master',  ad:'Master，加一杯。',       bd:'好。',              ch:0.1,  cd:20 },
   { a:'shion',   b:'master',  ad:'——',                   bd:'老样子？',           ch:0.1,  cd:20 },
+  // Cross-group (continued)
+  { a:'raincandy', b:'nyamu',   ad:'喵梦别闹了！',          bd:'阿雨脸红了！！',     ch:0.15, cd:15 },
+  { a:'nyamu',     b:'mutsumi', ad:'小睦！！♡',             bd:'……若麦。',          ch:0.15, cd:15 },
+  { a:'sakiko',    b:'uika',    ad:'初华……♡',              bd:'小祥！看看那颗星！', ch:0.15, cd:15 },
+  { a:'sakiko',    b:'soyo',    ad:'素世……喝茶吗？',        bd:'……好。谢谢小祥。', ch:0.15, cd:15 },
+  { a:'mortis',    b:'raana',   ad:'.',                     bd:'……。',             ch:0.1,  cd:20 },
+  { a:'keke',      b:'soyo',    ad:'素世！！一起唱！',       bd:'……可可真有精神。',  ch:0.15, cd:15 },
+  { a:'ren',       b:'eri',     ad:'……绘理。茶？',          bd:'嗯。坐吧。',        ch:0.1,  cd:20 },
+  { a:'rina',      b:'mutsumi', ad:'[>v<]',                 bd:'……璃奈的板子。',    ch:0.15, cd:15 },
+  { a:'eri',       b:'sakiko',  ad:'祥子，辛苦了。',         bd:'……绘理也是。',      ch:0.15, cd:15 },
 ]
 
 // ── Cat interactions ──
@@ -270,21 +280,49 @@ const CAT_IX = [
   { cat:'*',     tgt:'eri',     td:'小心别踩到猫。',    ch:0.15, cd:15 },
   { cat:'*',     tgt:'tomori',  td:'……毛茸茸的。',     ch:0.2,  cd:12 },
   { cat:'*',     tgt:'raana',   td:'……猫。有趣。',     ch:0.15, cd:15 },
+  { cat:'*',     tgt:'sakiko',  td:'……猫。……♡',      ch:0.2,  cd:12 },
+  { cat:'*',     tgt:'soyo',    td:'……♡',            ch:0.15, cd:15 },
+  { cat:'*',     tgt:'anon',    td:'猫！！不要动！',   ch:0.2,  cd:12 },
+  { cat:'*',     tgt:'keke',    td:'猫！！！',         ch:0.2,  cd:12 },
+  { cat:'*',     tgt:'rina',    td:'[^.^]',           ch:0.15, cd:15 },
+  { cat:'*',     tgt:'taki',    td:'……♡',            ch:0.1,  cd:20 },
+  { cat:'*',     tgt:'uika',    td:'小猫~♡',          ch:0.2,  cd:12 },
+  { cat:'*',     tgt:'kkun',    td:'猫！？',           ch:0.2,  cd:12 },
+  { cat:'*',     tgt:'mana',    td:'……猫……',         ch:0.15, cd:15 },
 ]
 
-// ── Solo actions (no encoded text) ──
+// ── Solo actions ──
 
 const SOLO = [
-  { id:'raana',  ty:'long_pause' },
-  { id:'nyamu',  ty:'sprint' },
-  { id:'tomori', ty:'big_bounce' },
+  { id:'raana',     ty:'long_pause',  dl:[] },
+  { id:'nyamu',     ty:'sprint',      dl:['！！'] },
+  { id:'tomori',    ty:'big_bounce',  dl:[] },
+  { id:'raincandy', ty:'sequence',    dl:['……','！','……'] },
+  { id:'eri',       ty:'pause',       dl:['♡'] },
+  { id:'mortis',    ty:'turn',        dl:['♪'] },
+  { id:'sakiko',    ty:'pause',       dl:['♪'] },
+  { id:'soyo',      ty:'pause',       dl:['…'] },
+  { id:'anon',      ty:'pause',       dl:['📷'] },
+  { id:'taki',      ty:'pause',       dl:[] },
+  { id:'uika',      ty:'pause',       dl:['✦'] },
+  { id:'umiri',     ty:'pause',       dl:[] },
+  { id:'keke',      ty:'spin',        dl:['！！！'] },
+  { id:'shiki',     ty:'sequence',    dl:['？','！'] },
+  { id:'rina',      ty:'pause',       dl:['[>v<]'] },
+  { id:'mana',      ty:'pause',       dl:[] },
+  { id:'kkun',      ty:'sequence',    dl:['？','！'] },
+  { id:'koharu',    ty:'pause',       dl:['♡'] },
+  { id:'melon',     ty:'cat_antics',  dl:[] },
 ]
 
-// ── Group events (no encoded text) ──
+// ── Group events ──
 
 const GROUP = [
-  { ty:'cats_stop',  ch:0.0002, cd:30 },
-  { ty:'nyamu_dash', ch:0.0001, cd:45 },
+  { ty:'cats_stop',       ch:0.0002, cd:30 },
+  { ty:'volume_warning',  ch:0.0003, cd:30 },
+  { ty:'crychic',         ch:0.0005, cd:45 },
+  { ty:'mygo',            ch:0.0005, cd:45 },
+  { ty:'meeting',         ch:0.0003, cd:40 },
 ]
 
 // ── Tagline + hint ──
@@ -343,7 +381,13 @@ const cx = CAT_IX.map(r => ({
   ch: r.ch, cd: r.cd,
 }))
 
-const payload = { s, z, t, h, b, k, ix, cx, so: SOLO, ge: GROUP }
+const so = SOLO.map(r => ({
+  id: r.id,
+  ty: r.ty,
+  dl: (r.dl || []).map(l => e(l)),
+}))
+
+const payload = { s, z, t, h, b, k, ix, cx, so, ge: GROUP }
 
 // ── Output ──
 

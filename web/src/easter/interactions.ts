@@ -1,7 +1,7 @@
 import { decode } from './codec'
 import { _d } from './payload'
 import { findNearPairs } from './proximity'
-import type { SpriteInstance } from './types'
+import type { SoloType, SpriteInstance } from './types'
 
 export interface PairRule {
   a: string
@@ -22,11 +22,12 @@ export interface CatRule {
 
 export interface SoloRule {
   id: string
-  type: 'long_pause' | 'sprint' | 'big_bounce'
+  type: string
+  dialogues: string[]
 }
 
 export interface GroupEvent {
-  type: 'cats_stop' | 'nyamu_dash'
+  type: string
   chance: number
   cooldown: number
 }
@@ -55,6 +56,7 @@ export function loadRules(key: string): DecodedRules {
 
   const solos: SoloRule[] = ((_d as any).so ?? []).map((r: any) => ({
     id: r.id, type: r.ty,
+    dialogues: (r.dl ?? []).map((l: string) => d(l)),
   }))
 
   const groups: GroupEvent[] = ((_d as any).ge ?? []).map((r: any) => ({
@@ -159,7 +161,7 @@ export class InteractionEngine {
     }
   }
 
-  private tickSolos(sprites: SpriteInstance[], _dt: number) {
+  private tickSolos(sprites: SpriteInstance[], dt: number) {
     for (const rule of this.rules.solos) {
       const idx = this.idIndex.get(rule.id)
       if (idx == null) continue
@@ -168,7 +170,7 @@ export class InteractionEngine {
 
       const cd = this.soloCooldowns.get(rule.id) ?? 0
       if (cd > 0) {
-        this.soloCooldowns.set(rule.id, cd - _dt)
+        this.soloCooldowns.set(rule.id, cd - dt)
         continue
       }
 
@@ -177,16 +179,33 @@ export class InteractionEngine {
       this.soloCooldowns.set(rule.id, 20)
       s.state = 'solo'
       s.stateTimer = 0
+      s.soloBubbles = rule.dialogues
+      s.soloBubbleIdx = 0
 
-      if (rule.type === 'long_pause') {
-        s.soloType = 'long_pause'
+      const ty = rule.type as SoloType
+      s.soloType = ty
+
+      if (ty === 'long_pause') {
         s.soloDuration = 8 + Math.random() * 7
-      } else if (rule.type === 'sprint') {
-        s.soloType = 'sprint'
+      } else if (ty === 'sprint') {
         s.soloDuration = 2 + Math.random()
-      } else if (rule.type === 'big_bounce') {
-        s.soloType = 'big_bounce'
+      } else if (ty === 'big_bounce') {
         s.soloDuration = 3 + Math.random() * 2
+      } else if (ty === 'pause') {
+        s.soloDuration = 3 + Math.random() * 2
+      } else if (ty === 'sequence') {
+        s.soloDuration = rule.dialogues.length * 1.2 + 1
+      } else if (ty === 'turn') {
+        s.soloDuration = 3 + Math.random()
+      } else if (ty === 'spin') {
+        s.soloDuration = 1.5 + Math.random()
+      } else if (ty === 'cat_antics') {
+        s.soloDuration = 1.5 + Math.random()
+      }
+
+      if (rule.dialogues.length > 0) {
+        s.bubble = rule.dialogues[0]!
+        s.bubbleTimer = ty === 'sequence' ? 1.0 : s.soloDuration
       }
     }
   }
@@ -200,28 +219,83 @@ export class InteractionEngine {
         continue
       }
 
-      if (Math.random() > ge.chance) continue
-
-      this.groupCooldowns.set(gi, ge.cooldown)
-
       if (ge.type === 'cats_stop') {
+        if (Math.random() > ge.chance) continue
+        this.groupCooldowns.set(gi, ge.cooldown)
         for (const s of sprites) {
           if (!s.cfg.isCat) continue
           s.state = 'idle'
           s.stateTimer = 0
           s.pauseDuration = 3
         }
-      } else if (ge.type === 'nyamu_dash') {
-        const idx = this.idIndex.get('nyamu')
-        if (idx != null) {
-          const s = sprites[idx]!
-          s.state = 'solo'
-          s.stateTimer = 0
-          s.soloType = 'sprint'
-          s.soloDuration = 4
+      } else if (ge.type === 'volume_warning') {
+        if (!this.checkCluster(sprites, ['keke', 'nyamu'], 50)) continue
+        if (Math.random() > ge.chance) continue
+        const third = this.findNearbyBystander(sprites, ['keke', 'nyamu'], 60)
+        if (!third) continue
+        this.groupCooldowns.set(gi, ge.cooldown)
+        this.triggerInteractById(sprites, 'keke', '！！！')
+        this.triggerInteractById(sprites, 'nyamu', '！！！')
+        this.triggerInteract(third, '……')
+      } else if (ge.type === 'crychic') {
+        const members = ['tomori', 'soyo', 'mutsumi', 'taki', 'sakiko']
+        if (!this.checkCluster(sprites, members, 80)) continue
+        if (Math.random() > ge.chance) continue
+        this.groupCooldowns.set(gi, ge.cooldown)
+        for (const id of members) this.triggerInteractById(sprites, id, '♪')
+      } else if (ge.type === 'mygo') {
+        const members = ['tomori', 'anon', 'taki', 'soyo', 'raana']
+        if (!this.checkCluster(sprites, members, 80)) continue
+        if (Math.random() > ge.chance) continue
+        this.groupCooldowns.set(gi, ge.cooldown)
+        for (const id of members) {
+          const b = id === 'anon' ? '！' : id === 'taki' ? '…' : '♪'
+          this.triggerInteractById(sprites, id, b)
+        }
+      } else if (ge.type === 'meeting') {
+        const members = ['mana', 'uika', 'sakiko']
+        if (!this.checkCluster(sprites, members, 60)) continue
+        if (Math.random() > ge.chance) continue
+        this.groupCooldowns.set(gi, ge.cooldown)
+        for (const id of members) {
+          this.triggerInteractById(sprites, id, id === 'uika' ? '！' : '…')
         }
       }
     }
+  }
+
+  private checkCluster(sprites: SpriteInstance[], ids: string[], threshold: number): boolean {
+    let minX = Infinity, maxX = -Infinity
+    for (const id of ids) {
+      const idx = this.idIndex.get(id)
+      if (idx == null) return false
+      const s = sprites[idx]!
+      if (s.state === 'interact' || s.state === 'solo') return false
+      if (s.x < minX) minX = s.x
+      if (s.x > maxX) maxX = s.x
+    }
+    return (maxX - minX) < threshold
+  }
+
+  private findNearbyBystander(sprites: SpriteInstance[], exclude: string[], range: number): SpriteInstance | null {
+    let cx = 0, n = 0
+    for (const id of exclude) {
+      const idx = this.idIndex.get(id)
+      if (idx != null) { cx += sprites[idx]!.x; n++ }
+    }
+    if (n === 0) return null
+    cx /= n
+    for (const s of sprites) {
+      if (exclude.includes(s.cfg.id) || s.cfg.isCat) continue
+      if (s.state === 'interact' || s.state === 'solo') continue
+      if (Math.abs(s.x - cx) < range) return s
+    }
+    return null
+  }
+
+  private triggerInteractById(sprites: SpriteInstance[], id: string, dialogue: string) {
+    const idx = this.idIndex.get(id)
+    if (idx != null) this.triggerInteract(sprites[idx]!, dialogue)
   }
 
   private triggerInteract(s: SpriteInstance, dialogue: string) {

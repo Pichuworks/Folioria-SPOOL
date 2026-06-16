@@ -27,6 +27,11 @@ export type Phase = 'entering' | 'playing' | 'finale' | 'idle'
 
 export type SpriteMotion = 'walk' | 'idle' | 'solo' | 'interact'
 
+export type SoloType =
+  | 'long_pause' | 'sprint' | 'big_bounce'
+  | 'pause' | 'sequence' | 'turn' | 'spin' | 'cat_antics'
+  | null
+
 export interface SpriteInstance {
   cfg: SpriteConfig
   x: number
@@ -39,6 +44,8 @@ export interface SpriteInstance {
   bubble: string | null
   bubbleTimer: number
   soloYOffset: number
-  soloType: 'long_pause' | 'sprint' | 'big_bounce' | null
+  soloType: SoloType
   soloDuration: number
+  soloBubbles: string[]
+  soloBubbleIdx: number
 }
