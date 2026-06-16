@@ -97,8 +97,9 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
           >
             映
           </span>
-          <span className="absolute bottom-9 right-7 top-9 hidden border-l border-line pl-4 text-[15px] tracking-[.42em] text-ink [writing-mode:vertical-rl] lg:block">
-            枫林叶下，光影映成。文作入纸，时光刻上。
+          <span className="absolute bottom-9 right-7 top-9 hidden gap-3 text-[15px] tracking-[.42em] text-ink [writing-mode:vertical-rl] lg:flex">
+            <span>枫林叶下，光影映成。</span>
+            <span>文作入纸，时光刻上。</span>
           </span>
           <div className="max-w-[560px] py-10 md:absolute md:bottom-11 md:left-0 md:py-0">
             <h1 className="text-[38px] font-medium leading-[1.15] tracking-[.18em] md:text-[56px]">
