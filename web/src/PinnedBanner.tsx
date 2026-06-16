@@ -47,10 +47,11 @@ export default function PinnedBanner() {
   if (!items.length) return null
 
   const text = bannerText(items)
-  const span = 'inline-block min-w-full whitespace-nowrap px-8 py-[5px] font-mono text-[11px] tracking-[.06em] text-dim'
+  const h = 'h-[22px]'
+  const span = `inline-flex ${h} min-w-full items-center whitespace-nowrap px-8 font-mono text-[11px] tracking-[.06em] text-dim`
 
   return (
-    <a href="#/announcements" className="group/banner block overflow-hidden">
+    <a href="#/announcements" className={`group/banner block ${h} -mb-[22px] overflow-hidden`}>
       <div
         ref={trackRef}
         className="flex animate-marquee whitespace-nowrap group-hover/banner:[animation-play-state:paused]"

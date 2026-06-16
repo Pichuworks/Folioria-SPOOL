@@ -20,7 +20,7 @@ export const Shell = ({ nav, center, children }: { nav: ReactNode; center: strin
 export const Masthead = ({ nav }: { nav: ReactNode }) => (
   <header className="flex flex-wrap items-end justify-between gap-x-[18px] gap-y-5 border-b border-ink pb-4 pt-[30px]">
     <a href="#/" className="flex items-end gap-5 text-ink">
-      <span className="ink-press text-[44px] font-bold leading-none tracking-[.14em]">枫光映刻</span>
+      <span className="ink-press text-[44px] font-bold leading-none tracking-[.28em]">枫光映刻</span>
       <span className="ink-press pb-1 font-script text-[19px] text-dim">Maplescape Folioria</span>
     </a>
     <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-1 text-[13px]">{nav}</nav>

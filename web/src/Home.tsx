@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { renderMarkdown } from './markdown'
 import { AccountMenu } from './Account'
 import { fetchOptions, fetchPublicAnnouncements, getOptionsCache, type MeDto, type OptionsDto, type PublicAnnouncementDto } from './api'
-import { Leader, MagSec, PillLink, Shell } from './spec'
+import { Leader, MagSec, Modal, PillLink, Shell } from './spec'
 
 /* Asagaya modern·杂志版式 × eri 配色。家具：墨标签节头 / 撕样条 / 点线引导行 / 竖排引文 / 对折页码 */
 
@@ -64,6 +64,7 @@ const minRows = (o: OptionsDto | null): PriceRow[] | null => {
 export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode }) {
   const [rows, setRows] = useState<PriceRow[] | null>(() => minRows(getOptionsCache()))
   const [announcements, setAnnouncements] = useState<PublicAnnouncementDto[]>([])
+  const [detail, setDetail] = useState<PublicAnnouncementDto | null>(null)
 
   useEffect(() => {
     fetchOptions()
@@ -116,20 +117,35 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
         </div>
 
         {nonPinned.length > 0 && (
-          <div className="mt-6 flex flex-col gap-3">
+          <div className="mt-6 border-t border-line">
             {nonPinned.map((a) => (
-              <div key={a.id} className="border border-line px-6 py-4">
-                <h3 className="text-[15px] font-medium">{a.title}</h3>
-                {a.body && (
-                  <div
-                    className="prose-ann mt-1.5 text-[13px] leading-[1.85] text-dim"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(a.body) }}
-                  />
-                )}
-                <span className="mt-1 block font-mono text-[10px] tracking-[.08em] text-dim">{a.published_at.slice(0, 10)}</span>
-              </div>
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => setDetail(a)}
+                className="flex w-full items-baseline gap-3 border-b border-line py-3 text-left hover:bg-deep/40"
+              >
+                <span className="font-mono text-[10px] tracking-[.08em] text-dim">{a.published_at.slice(0, 10)}</span>
+                <span className="flex-1 truncate text-[14px] font-medium text-ink">{a.title}</span>
+              </button>
             ))}
           </div>
+        )}
+
+        {detail && (
+          <Modal open onClose={() => setDetail(null)} title={detail.title} wide>
+            <div className="mb-3 font-mono text-[10px] tracking-[.08em] text-dim">
+              {detail.published_at.slice(0, 10)}
+            </div>
+            {detail.body ? (
+              <div
+                className="prose-ann text-[14px] leading-[1.85] text-dim"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(detail.body) }}
+              />
+            ) : (
+              <p className="text-[13px] text-dim">无正文内容</p>
+            )}
+          </Modal>
         )}
 
         <MagSec title="工艺" id="craft">
