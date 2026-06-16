@@ -93,13 +93,14 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
         <div className="relative overflow-hidden border-b border-ink md:min-h-[430px]">
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute -top-[72px] right-20 hidden select-none text-[400px] font-medium leading-none text-transparent opacity-45 [-webkit-text-stroke:1.5px_var(--color-wine)] md:block"
+            className="pointer-events-none absolute -top-[72px] right-28 hidden select-none text-[400px] font-medium leading-none text-transparent opacity-45 [-webkit-text-stroke:1.5px_var(--color-wine)] md:block"
           >
             映
           </span>
-          <span className="absolute bottom-9 right-7 top-9 hidden gap-3 border-l border-line pl-5 text-[15px] tracking-[.42em] text-ink [writing-mode:vertical-rl] lg:flex">
-            <span>枫林叶下，光影映成。</span>
-            <span>文作入纸，时光刻上。</span>
+          <span className="absolute bottom-9 right-7 top-9 hidden items-stretch gap-3 text-[15px] tracking-[.42em] text-ink lg:flex">
+            <span className="w-px shrink-0 bg-line" />
+            <span className="shrink-0 [writing-mode:vertical-rl]">文作入纸，时光刻上。</span>
+            <span className="shrink-0 [writing-mode:vertical-rl]">枫林叶下，光影映成。</span>
           </span>
           <div className="max-w-[560px] py-10 md:absolute md:bottom-11 md:left-0 md:py-0">
             <h1 className="text-[38px] font-medium leading-[1.15] tracking-[.18em] md:text-[56px]">
