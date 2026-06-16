@@ -74,14 +74,6 @@ export default function Home({ me }: { me: MeDto | null }) {
   return (
     <Shell
       center="WWW.FOLIORIA.COM"
-      right={
-        <>
-          © 2026 FOLIORIA ·{' '}
-          <a href="#/dashboard" className="hover:text-ink">
-            STAFF →
-          </a>
-        </>
-      }
       nav={
         <>
           <a href="#craft" className={anchor}>工艺</a>

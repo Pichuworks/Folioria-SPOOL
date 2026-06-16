@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore, useState, type R
 
 export const Leader = () => <span className="mx-2.5 flex-1 -translate-y-1 border-b border-dotted border-line" />
 
-export const Shell = ({ nav, center, right, children }: { nav: ReactNode; center: string; right?: ReactNode; children: ReactNode }) => (
+export const Shell = ({ nav, center, children }: { nav: ReactNode; center: string; children: ReactNode }) => (
   <div className="min-h-screen bg-paper text-ink">
     <LoadingBar />
     <div className="mx-auto max-w-[1200px] px-5 md:px-10">
       <Masthead nav={nav} />
       <main className="min-h-[60vh] pb-16">{children}</main>
-      <Folio center={center} right={right} />
+      <Folio center={center} />
     </div>
   </div>
 )
@@ -25,20 +25,16 @@ export const Masthead = ({ nav }: { nav: ReactNode }) => (
   </header>
 )
 
-export function Folio({ center, right }: { center: string; right?: ReactNode }) {
+export function Folio({ center }: { center: string }) {
   const [aboutOpen, setAboutOpen] = useState(false)
   return (
     <>
       <footer className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-ink pb-7 pt-3 font-mono text-[10.5px] tracking-[.14em] text-dim">
         <span>FOLIORIA · S.P.O.O.L.</span>
         <span>{center}</span>
-        <span>
-          {right ?? (
-            <button type="button" onClick={() => setAboutOpen(true)} className="cursor-pointer text-dim hover:text-ink">
-              v{__APP_VERSION__} · b{__BUILD_NUMBER__} · © 2026 FOLIORIA
-            </button>
-          )}
-        </span>
+        <button type="button" onClick={() => setAboutOpen(true)} className="cursor-pointer text-dim hover:text-ink">
+          v{__APP_VERSION__} · b{__BUILD_NUMBER__} · © 2026 FOLIORIA
+        </button>
       </footer>
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </>
