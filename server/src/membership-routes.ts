@@ -541,7 +541,7 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
       const userId = req.user!.id
       return {
         effective: getEffectiveTier(db, userId),
-        memberships: getUserMemberships(db, userId),
+        memberships: getUserMemberships(db, userId).map((m) => ({ ...m, manual: m.manual !== 0 })),
       }
     },
   )

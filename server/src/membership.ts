@@ -80,11 +80,6 @@ export function getUserMemberships(
   >
 }
 
-export function getUserDiscountBp(db: DB, userId: string): number {
-  const tier = getEffectiveTier(db, userId)
-  return tier?.discount_bp ?? 0
-}
-
 /** 会员折扣绝对金额：integer divmod half-up(subtotal * bp / 10000) */
 export function membershipDiscountAmount(subtotal: Money, discountBp: number): Money {
   if (discountBp <= 0) return 0 as Money
