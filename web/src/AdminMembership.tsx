@@ -269,9 +269,10 @@ function MembersTab() {
   const [tiers, setTiers] = useState<Tier[] | null>(null)
   const [users, setUsers] = useState<UserOption[] | null>(null)
   const [assignForm, setAssignForm] = useState(false)
-  const [selUser, setSelUser] = useState('')
+  const [selUsers, setSelUsers] = useState<Set<string>>(new Set())
   const [selTier, setSelTier] = useState<number | ''>('')
   const [assignErr, setAssignErr] = useState<string | null>(null)
+  const [userFilter, setUserFilter] = useState('')
 
   const load = () => {
     void send<MemberUser[]>('GET', '/api/admin/membership/users').then((r) => r.ok && setMembers(r.data))
@@ -282,18 +283,31 @@ function MembersTab() {
     void send<UserOption[]>('GET', '/api/admin/users').then((r) => r.ok && setUsers(r.data))
   }, [])
 
+  const toggleUser = (id: string) => {
+    setSelUsers((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   const assign = async (e: FormEvent) => {
     e.preventDefault()
     setAssignErr(null)
-    if (!selUser || selTier === '') return
-    const res = await send('POST', '/api/admin/membership/assign', { user_id: selUser, tier_id: selTier })
+    if (selUsers.size === 0 || selTier === '') return
+    const ids = [...selUsers]
+    const res = ids.length === 1
+      ? await send('POST', '/api/admin/membership/assign', { user_id: ids[0], tier_id: selTier })
+      : await send('POST', '/api/admin/membership/batch-assign', { user_ids: ids, tier_id: selTier })
     if (!res.ok) {
       setAssignErr((res.data as { error?: string }).error ?? '指派失败')
       return
     }
     setAssignForm(false)
-    setSelUser('')
+    setSelUsers(new Set())
     setSelTier('')
+    setUserFilter('')
     load()
   }
 
@@ -305,6 +319,10 @@ function MembersTab() {
   if (!members || !tiers) return <Skeleton />
 
   const activeTiers = tiers.filter((t) => !t.archived)
+  const filterLc = userFilter.toLowerCase()
+  const filteredUsers = users?.filter(
+    (u) => !filterLc || u.name.toLowerCase().includes(filterLc) || u.email.toLowerCase().includes(filterLc),
+  )
 
   return (
     <div className="space-y-4 pt-4">
@@ -314,25 +332,48 @@ function MembersTab() {
       </div>
 
       {assignForm && (
-        <form onSubmit={assign} className="flex flex-wrap items-end gap-3 border border-ink p-4">
-          <Field label="用户">
-            <select className={specInput} value={selUser} onChange={(e) => setSelUser(e.target.value)} required>
-              <option value="">选择用户…</option>
-              {users?.map((u) => (
-                <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
-              ))}
-            </select>
+        <form onSubmit={assign} className="space-y-3 border border-ink p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="等级">
+              <select className={specInput} value={selTier} onChange={(e) => setSelTier(Number(e.target.value))} required>
+                <option value="">选择等级…</option>
+                {activeTiers.map((t) => (
+                  <option key={t.id} value={t.id}>[{t.track}] {t.code} · {t.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Btn type="submit" disabled={selUsers.size === 0}>
+              确认{selUsers.size > 0 ? ` (${selUsers.size})` : ''}
+            </Btn>
+            {assignErr && <span className="text-xs text-red-600">{assignErr}</span>}
+          </div>
+          <Field label={`用户 (已选 ${selUsers.size})`}>
+            <input
+              className={specInput}
+              placeholder="搜索用户…"
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+            />
           </Field>
-          <Field label="等级">
-            <select className={specInput} value={selTier} onChange={(e) => setSelTier(Number(e.target.value))} required>
-              <option value="">选择等级…</option>
-              {activeTiers.map((t) => (
-                <option key={t.id} value={t.id}>[{t.track}] {t.code} · {t.name}</option>
-              ))}
-            </select>
-          </Field>
-          <PillBtn type="submit">确认</PillBtn>
-          {assignErr && <span className="text-xs text-red-600">{assignErr}</span>}
+          <div className="max-h-48 overflow-y-auto border border-line">
+            {filteredUsers?.map((u) => (
+              <label
+                key={u.id}
+                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-line/30"
+              >
+                <input
+                  type="checkbox"
+                  checked={selUsers.has(u.id)}
+                  onChange={() => toggleUser(u.id)}
+                />
+                <span>{u.name}</span>
+                <span className="text-dim">{u.email}</span>
+              </label>
+            ))}
+            {filteredUsers?.length === 0 && (
+              <p className="py-2 text-center text-xs text-dim">无匹配用户</p>
+            )}
+          </div>
         </form>
       )}
 

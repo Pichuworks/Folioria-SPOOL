@@ -381,6 +381,72 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
   )
 
   app.post(
+    '/api/admin/membership/batch-assign',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['user_ids', 'tier_id'],
+          additionalProperties: false,
+          properties: {
+            user_ids: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 200 },
+            tier_id: { type: 'integer', minimum: 1 },
+            notes: { type: ['string', 'null'], maxLength: 500 },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              assigned: { type: 'integer' },
+              skipped: { type: 'array', items: { type: 'string' } },
+            },
+          },
+          404: ERROR_SCHEMA,
+        },
+      },
+    },
+    async (req, reply) => {
+      const { user_ids, tier_id, notes } = req.body as { user_ids: string[]; tier_id: number; notes?: string | null }
+
+      const tier = db.prepare('SELECT * FROM membership_tiers WHERE id = ? AND archived = 0').get(tier_id) as TierRow | undefined
+      if (!tier) return reply.status(404).send({ error: 'tier_not_found' })
+
+      const skipped: string[] = []
+      const now = new Date().toISOString()
+      const operatorId = req.user?.id ?? null
+
+      const insertStmt = db.prepare(
+        `INSERT INTO user_memberships (user_id, track, tier_id, assigned_at, assigned_by, manual, notes)
+         VALUES (?, ?, ?, ?, ?, 1, ?)
+         ON CONFLICT(user_id, track) DO UPDATE SET
+           tier_id = excluded.tier_id, assigned_at = excluded.assigned_at,
+           assigned_by = excluded.assigned_by, manual = 1, notes = excluded.notes`,
+      )
+      const userStmt = db.prepare('SELECT id, name FROM users WHERE id = ?')
+
+      const run = db.transaction(() => {
+        for (const uid of user_ids) {
+          const user = userStmt.get(uid) as { id: string; name: string } | undefined
+          if (!user) { skipped.push(uid); continue }
+          insertStmt.run(uid, tier.track, tier_id, now, operatorId, notes ?? null)
+          audit(db, {
+            actorId: operatorId,
+            action: 'membership.assign',
+            targetType: 'user',
+            targetId: uid,
+            summary: `批量指派 ${user.name} → ${tier.code}`,
+          })
+        }
+      })
+      run()
+
+      return { assigned: user_ids.length - skipped.length, skipped }
+    },
+  )
+
+  app.post(
     '/api/admin/membership/remove',
     {
       preHandler: requireAdmin,
