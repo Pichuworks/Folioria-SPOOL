@@ -224,7 +224,7 @@ const CATS = [
 const PAIR_IX = [
   // Core pairs (high chance, short cooldown)
   { a:'mortis',  b:'mutsumi', ad:'小睦，走慢一点',         bd:'……Mortis。',        ch:0.3,  cd:8  },
-  { a:'sakiko',  b:'mutsumi', ad:'睦……今天也很好看。',     bd:'……祥子。',          ch:0.3,  cd:8  },
+  { a:'sakiko',  b:'mutsumi', ad:'睦……今天也很好看。',     bd:'……祥。',          ch:0.3,  cd:8  },
   { a:'keke',    b:'kanon',   ad:'香音！！一起散步！！',     bd:'好好好，别拉了可可',  ch:0.3,  cd:8  },
   { a:'sumire',  b:'chisato', ad:'……千砂都别跟这么近',     bd:'堇~一起走嘛',        ch:0.3,  cd:8  },
   { a:'kkun',    b:'koharu',  ad:'小春！那边有星星！',      bd:'K，小声点……',       ch:0.3,  cd:8  },
@@ -236,10 +236,10 @@ const PAIR_IX = [
   { a:'anon',    b:'soyo',    ad:'素世！笑一个！',         bd:'……好。',            ch:0.2,  cd:12 },
   { a:'anon',    b:'taki',    ad:'立希，看镜头！',         bd:'……不要。',          ch:0.2,  cd:12 },
   { a:'taki',    b:'raana',   ad:'……',                   bd:'……有趣。',          ch:0.2,  cd:12 },
-  { a:'soyo',    b:'raana',   ad:'乐奈……要芭菲吗？',     bd:'……抹茶。',          ch:0.2,  cd:12 },
+  { a:'soyo',    b:'raana',   ad:'乐奈……要芭菲吗？',     bd:'……抹茶芭菲。',          ch:0.2,  cd:12 },
   // Ave Mujica related
   { a:'mutsumi', b:'uika',    ad:'……初华。',             bd:'睦！一起看星星！',    ch:0.2,  cd:12 },
-  { a:'sakiko',  b:'mortis',  ad:'Mortis……泡茶吗？',     bd:'小祥，少爷在前面。',  ch:0.2,  cd:12 },
+  { a:'sakiko',  b:'mortis',  ad:'Mortis……泡茶吗？',     bd:'祥子，看前面。',  ch:0.2,  cd:12 },
   { a:'mutsumi', b:'umiri',   ad:'……海铃。',             bd:'嗯。',              ch:0.2,  cd:12 },
   // Liella related
   { a:'keke',    b:'ren',     ad:'恋！！跳舞！！',         bd:'……这里？',          ch:0.2,  cd:12 },
@@ -260,14 +260,14 @@ const PAIR_IX = [
   { a:'shion',   b:'master',  ad:'——',                   bd:'老样子？',           ch:0.1,  cd:20 },
   // Cross-group (continued)
   { a:'raincandy', b:'nyamu',   ad:'喵梦别闹了！',          bd:'阿雨脸红了！！',     ch:0.15, cd:15 },
-  { a:'nyamu',     b:'mutsumi', ad:'小睦！！♡',             bd:'……若麦。',          ch:0.15, cd:15 },
+  { a:'nyamu',     b:'mutsumi', ad:'小睦！！♡',             bd:'……喵梦。',          ch:0.15, cd:15 },
   { a:'sakiko',    b:'uika',    ad:'初华……♡',              bd:'小祥！看看那颗星！', ch:0.15, cd:15 },
   { a:'sakiko',    b:'soyo',    ad:'素世……喝茶吗？',        bd:'……好。谢谢小祥。', ch:0.15, cd:15 },
   { a:'mortis',    b:'raana',   ad:'.',                     bd:'……。',             ch:0.1,  cd:20 },
   { a:'keke',      b:'soyo',    ad:'素世！！一起唱！',       bd:'……可可真有精神。',  ch:0.15, cd:15 },
-  { a:'ren',       b:'eri',     ad:'……绘理。茶？',          bd:'嗯。坐吧。',        ch:0.1,  cd:20 },
+  { a:'ren',       b:'eri',     ad:'……绘理。茶？',          bd:'好呢。坐吧。',        ch:0.1,  cd:20 },
   { a:'rina',      b:'mutsumi', ad:'[>v<]',                 bd:'……璃奈的板子。',    ch:0.15, cd:15 },
-  { a:'eri',       b:'sakiko',  ad:'祥子，辛苦了。',         bd:'……绘理也是。',      ch:0.15, cd:15 },
+  { a:'eri',       b:'sakiko',  ad:'祥子，辛苦了。',         bd:'……绘理姐姐也是。',      ch:0.15, cd:15 },
 ]
 
 // ── Cat interactions ──
