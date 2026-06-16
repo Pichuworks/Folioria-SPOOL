@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import StarMessage from './StarMessage'
 import type { StarEntry } from './types'
 
+interface CatCredit { name: string; color: string }
+
 interface Props {
   stars: StarEntry[]
+  cats: CatCredit[]
   finalMsg: StarEntry | null
   tagline: string[]
   ending: string[]
@@ -13,7 +16,7 @@ interface Props {
 
 type FinalePhase = 'nozomu' | 'ending' | null
 
-export default function Credits({ stars, finalMsg, tagline, ending, glitchEnabled, onFinale }: Props) {
+export default function Credits({ stars, cats, finalMsg, tagline, ending, glitchEnabled, onFinale }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const msgRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -54,7 +57,7 @@ export default function Credits({ stars, finalMsg, tagline, ending, glitchEnable
           }
         }
 
-        if (!finaleRef.current && offsetRef.current < -(track.scrollHeight - boxH * 0.5)) {
+        if (!finaleRef.current && offsetRef.current < -track.scrollHeight) {
           finaleRef.current = true
           setFinalePhase('nozomu')
           onFinale()
@@ -119,7 +122,22 @@ export default function Credits({ stars, finalMsg, tagline, ending, glitchEnable
             glitchEnabled={glitchEnabled}
           />
         ))}
-        <div style={{ height: '30vh' }} />
+        {cats.map((cat, ci) => (
+          <div
+            key={`cat-${ci}-${cycle}`}
+            ref={(el) => { msgRefs.current[stars.length + ci] = el }}
+            className="egg-msg py-10 text-center"
+            style={{ opacity: 0 }}
+          >
+            <div className="text-[16px] tracking-[.08em]" style={{ color: cat.color, fontFamily: 'var(--font-serif)' }}>
+              {cat.name}
+            </div>
+            <div className="mt-2 text-[13px]" style={{ color: '#c8bfb0' }}>
+              {'「喵」'}
+            </div>
+          </div>
+        ))}
+        <div style={{ height: '10vh' }} />
       </div>
 
       {finalePhase === 'nozomu' && finalMsg && (

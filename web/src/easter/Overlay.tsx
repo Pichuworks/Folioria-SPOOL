@@ -39,6 +39,7 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
   const [finalMsg, setFinalMsg] = useState<StarEntry | null>(null)
   const [tagline, setTagline] = useState<string[]>([])
   const [ending, setEnding] = useState<string[]>([])
+  const [catCredits, setCatCredits] = useState<{ name: string; color: string }[]>([])
   const [glitch, setGlitch] = useState(false)
   const [vis, setVis] = useState(false)
   const keyRef = useRef(decryptionKey)
@@ -111,6 +112,13 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
 
     setTagline(_d.t.map(l => d(l)))
     setEnding(((_d as any).ed ?? []).map((l: string) => d(l)))
+
+    const catLookup = new Map(_d.k.map(cat => [cat.i, { name: d(cat.d), color: cat.c }] as const))
+    setCatCredits(
+      ['watermelon', 'flatwhite', 'kamaboko', 'watermelon_ice', 'kamaboko']
+        .map(id => catLookup.get(id))
+        .filter((c): c is { name: string; color: string } => !!c)
+    )
   }, [])
 
   useEffect(() => {
@@ -154,6 +162,7 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
           <Sky />
           <Credits
             stars={stars}
+            cats={catCredits}
             finalMsg={finalMsg}
             tagline={tagline}
             ending={ending}
