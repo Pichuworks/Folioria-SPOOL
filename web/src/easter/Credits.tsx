@@ -122,10 +122,20 @@ export default function Credits({ stars, cats, finalMsg, tagline, ending, glitch
             glitchEnabled={glitchEnabled}
           />
         ))}
+        {cats.length > 0 && (
+          <div
+            key={`cat-sep-${cycle}`}
+            ref={(el) => { msgRefs.current[stars.length] = el }}
+            className="egg-msg py-10 text-center text-[20px]"
+            style={{ opacity: 0 }}
+          >
+            🐱
+          </div>
+        )}
         {cats.map((cat, ci) => (
           <div
             key={`cat-${ci}-${cycle}`}
-            ref={(el) => { msgRefs.current[stars.length + ci] = el }}
+            ref={(el) => { msgRefs.current[stars.length + 1 + ci] = el }}
             className="egg-msg py-10 text-center"
             style={{ opacity: 0 }}
           >

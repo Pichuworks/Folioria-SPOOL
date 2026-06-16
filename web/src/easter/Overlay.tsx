@@ -113,9 +113,11 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
     setTagline(_d.t.map(l => d(l)))
     setEnding(((_d as any).ed ?? []).map((l: string) => d(l)))
 
-    const catLookup = new Map(_d.k.map(cat => [cat.i, { name: d(cat.d), color: cat.c }] as const))
+    const catLookup = new Map<string, { name: string; color: string }>()
+    for (const cat of _d.k) catLookup.set(cat.i, { name: d(cat.d), color: cat.c })
+    for (const ch of _d.s) if ((ch as any).cat) catLookup.set(ch.i, { name: d(ch.d), color: ch.c })
     setCatCredits(
-      ['watermelon', 'flatwhite', 'kamaboko', 'watermelon_ice', 'kamaboko']
+      ['watermelon', 'flatwhite', 'kamaboko', 'watermelon_ice', 'melon']
         .map(id => catLookup.get(id))
         .filter((c): c is { name: string; color: string } => !!c)
     )
