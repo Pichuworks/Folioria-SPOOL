@@ -1259,8 +1259,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     async (req) => {
       const internal = req.user?.role === 'member'
       const currency = baseCurrency(db)
-      const sizes = db.prepare('SELECT key, label, area, sort FROM sizes ORDER BY sort').all() as Array<{
-        key: string; label: string; area: number; sort: number
+      const sizes = db.prepare('SELECT key, label, area, sort, width_mm, height_mm FROM sizes ORDER BY sort').all() as Array<{
+        key: string; label: string; area: number; sort: number; width_mm: number | null; height_mm: number | null
       }>
       const papers = db.prepare('SELECT id, name, category, gsm FROM papers WHERE archived = 0 ORDER BY id').all() as Array<{
         id: number; name: string; category: string | null; gsm: number | null

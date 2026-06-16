@@ -14,6 +14,7 @@ import Login from './Login'
 import MyOrders from './MyOrders'
 import OrderView from './OrderView'
 import PriceList from './PriceList'
+import CoverSize from './CoverSize'
 import Quote from './Quote'
 import ResetPassword from './ResetPassword'
 import Setup from './Setup'
@@ -36,6 +37,7 @@ const AdminUsers = lazy(() => import('./AdminUsers'))
 /** 下单域路由：公开导航三态（guest / 下单用户 / admin）都可见 */
 const STOREFRONT_ROUTES: Record<string, { nav: string; title: string; folio: string; view: ComponentType; auth?: boolean }> = {
   '#/quote': { nav: '自助报价', title: '自助报价 · 在线下单', folio: 'QUOTE & ORDER', view: Quote },
+  '#/cover-size': { nav: '封面尺寸', title: '封面尺寸计算', folio: 'COVER SIZE', view: CoverSize },
   '#/price-list': { nav: '价目表', title: '价目表', folio: 'PRICE LIST', view: PriceList },
   '#/my/orders': { nav: '我的订单', title: '我的订单', folio: 'MY ORDERS', view: MyOrders, auth: true },
 }

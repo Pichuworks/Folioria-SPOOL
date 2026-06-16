@@ -255,7 +255,7 @@ export interface BookConfigFinishing {
 }
 export interface BookConfigDto {
   currency: CurrencyDto
-  sizes: Array<{ key: string; label: string; area: number; sort: number }>
+  sizes: Array<{ key: string; label: string; area: number; sort: number; width_mm: number | null; height_mm: number | null }>
   papers: BookConfigPaper[]
   finishings: {
     binding: BookConfigFinishing[]
