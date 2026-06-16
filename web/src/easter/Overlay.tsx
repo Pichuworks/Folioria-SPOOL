@@ -49,7 +49,7 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
   useEffect(() => {
     const d = (s: string) => decode(s, keyRef.current)
 
-    setStars(_d.s.map(ch => ({
+    setStars(_d.s.filter(ch => !(ch as any).cat).map(ch => ({
       id: ch.i,
       fullName: d(ch.n),
       familyName: d(ch.f),
