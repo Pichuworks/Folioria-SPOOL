@@ -3,6 +3,7 @@ import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
+import { getLog } from './logger.js'
 import { formatMoneyC, moneyC } from './money.js'
 import { sendXlsx } from './xlsx.js'
 
@@ -355,6 +356,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
                                     convert_group, reason, operator_id, created_at)
          VALUES (?, 'paper_stock', ?, 'convert', ?, ?, ?, ?, ?)`,
       )
+      getLog().info({ group, from: b.from.stock_id, fromDelta: b.from.quantity_delta, to: b.to.stock_id, toDelta: b.to.quantity_delta }, 'stock convert')
       db.transaction(() => {
         db.prepare('UPDATE paper_stocks SET quantity = quantity + ? WHERE id = ?').run(
           b.from.quantity_delta,

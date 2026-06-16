@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type DB } from './db.js'
+import { getLog } from './logger.js'
 import { getOrder } from './orders.js'
 
 /** 带 statusCode 抛出，由 app 全局 errorHandler 映射 */
@@ -90,6 +91,8 @@ export function recordPayment(db: DB, orderId: string, input: RecordPaymentInput
 
   const id = randomUUID()
   const now = new Date().toISOString()
+  const oldStatus = order.payment_status as string
+  const oldPaid = order.paid_amount as number
   db.transaction(() => {
     db.prepare(
       `INSERT INTO payments (id, order_id, kind, amount, method, operator_id, note, created_at)
@@ -97,5 +100,10 @@ export function recordPayment(db: DB, orderId: string, input: RecordPaymentInput
     ).run(id, orderId, input.kind, input.amount, input.method ?? null, input.operatorId ?? null, input.note ?? null, now)
     reproject(db, orderId, order.total)
   })()
+  const updated = getOrder(db, orderId)!
+  getLog().info(
+    { orderId, kind: input.kind, amount: input.amount, paid: `${oldPaid}→${updated.paid_amount}`, status: `${oldStatus}→${updated.payment_status}` },
+    'payment recorded',
+  )
   return db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as PaymentRow
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type DB } from './db.js'
+import { getLog } from './logger.js'
 
 export type AlertSeverity = 'info' | 'warning' | 'critical'
 const SEVERITY_RANK: Record<AlertSeverity, number> = { info: 0, warning: 1, critical: 2 }
@@ -31,6 +32,7 @@ export function raiseAlert(db: DB, input: RaiseAlertInput): 'created' | 'upgrade
     .get(input.target_type, input.target_id, input.type) as
     | { id: string; severity: AlertSeverity }
     | undefined
+  const log = getLog()
   if (open) {
     if (SEVERITY_RANK[input.severity] > SEVERITY_RANK[open.severity]) {
       db.prepare('UPDATE alerts SET severity = ?, message = ? WHERE id = ?').run(
@@ -38,8 +40,10 @@ export function raiseAlert(db: DB, input: RaiseAlertInput): 'created' | 'upgrade
         input.message,
         open.id,
       )
+      log.info({ alertId: open.id, from: open.severity, to: input.severity, type: input.type, target: input.target_id }, 'alert upgraded')
       return 'upgraded'
     }
+    log.debug({ type: input.type, target: input.target_id }, 'alert noop (open exists)')
     return 'noop'
   }
   try {
@@ -56,10 +60,13 @@ export function raiseAlert(db: DB, input: RaiseAlertInput): 'created' | 'upgrade
       new Date().toISOString(),
     )
   } catch (err) {
-    // 并发兜底：数据库层 uniq_alert_open 拒绝 → no-op
-    if (err instanceof Error && err.message.includes('UNIQUE')) return 'noop'
+    if (err instanceof Error && err.message.includes('UNIQUE')) {
+      log.debug({ type: input.type, target: input.target_id }, 'alert noop (UNIQUE constraint)')
+      return 'noop'
+    }
     throw err
   }
+  log.info({ type: input.type, severity: input.severity, target: `${input.target_type}/${input.target_id}` }, 'alert created')
   return 'created'
 }
 
@@ -83,11 +90,17 @@ interface PrinterCalibrationRow {
 /** C6 双触发：页数或天数任一超限即 due；对应维度为 NULL 则不触发 */
 export function calibrationDue(p: PrinterCalibrationRow, now: Date): boolean {
   if (p.calibration_interval_pages != null) {
-    if (p.total_pages - p.last_calibration_pages >= p.calibration_interval_pages) return true
+    if (p.total_pages - p.last_calibration_pages >= p.calibration_interval_pages) {
+      getLog().debug({ printer: p.code, trigger: 'pages', elapsed: p.total_pages - p.last_calibration_pages, threshold: p.calibration_interval_pages }, 'calibration due')
+      return true
+    }
   }
   if (p.calibration_interval_days != null && p.last_calibration_at != null) {
     const elapsedDays = (now.getTime() - Date.parse(p.last_calibration_at)) / 86_400_000
-    if (elapsedDays >= p.calibration_interval_days) return true
+    if (elapsedDays >= p.calibration_interval_days) {
+      getLog().debug({ printer: p.code, trigger: 'days', elapsed: Math.floor(elapsedDays), threshold: p.calibration_interval_days }, 'calibration due')
+      return true
+    }
   }
   return false
 }

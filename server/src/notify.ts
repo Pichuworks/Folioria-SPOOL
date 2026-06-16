@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type DB } from './db.js'
+import { getLog } from './logger.js'
 
 /**
  * R7/D6 通知抽象层：事件 → 渲染模板 → 逐渠道分发 → notification_log 留痕。
@@ -49,9 +50,13 @@ export function emailChannel(): NotificationChannel {
           headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
           body: JSON.stringify({ from, to: [to], subject: msg.subject, text: msg.text }),
         })
-        if (!res.ok) return { ok: false, error: `resend_http_${res.status}` }
+        if (!res.ok) {
+          getLog().warn({ status: res.status, to }, 'resend API non-ok')
+          return { ok: false, error: `resend_http_${res.status}` }
+        }
         return { ok: true }
       } catch (err) {
+        getLog().error({ err, to }, 'resend API fetch failed')
         return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }
     },
@@ -86,8 +91,8 @@ export async function notifyAddress(db: DB, event: NotifyEvent, to: string, msg:
     }
     try {
       logResult(db, event, ch.id, to, result)
-    } catch {
-      // 留痕失败不反噬业务
+    } catch (err) {
+      getLog().error({ err, event, channel: ch.id, to }, 'notification_log INSERT failed')
     }
   }
 }
@@ -97,13 +102,17 @@ export async function notifyUser(db: DB, event: NotifyEvent, userId: string, msg
   const user = db
     .prepare('SELECT email, notify_channels, notify_addresses FROM users WHERE id = ? AND archived = 0')
     .get(userId) as { email: string; notify_channels: string; notify_addresses: string } | undefined
-  if (!user) return
+  if (!user) {
+    getLog().debug({ userId, event }, 'notifyUser: user not found or archived')
+    return
+  }
   let subscribed: string[]
   let addresses: Record<string, string>
   try {
     subscribed = JSON.parse(user.notify_channels) as string[]
     addresses = JSON.parse(user.notify_addresses) as Record<string, string>
-  } catch {
+  } catch (err) {
+    getLog().warn({ userId, err }, 'notify_channels/addresses JSON parse failed, falling back to email')
     subscribed = ['email']
     addresses = {}
   }
@@ -118,8 +127,8 @@ export async function notifyUser(db: DB, event: NotifyEvent, userId: string, msg
     }
     try {
       logResult(db, event, ch.id, to, result)
-    } catch {
-      // 留痕失败不反噬业务
+    } catch (err) {
+      getLog().error({ err, event, channel: ch.id, to }, 'notification_log INSERT failed')
     }
   }
 }

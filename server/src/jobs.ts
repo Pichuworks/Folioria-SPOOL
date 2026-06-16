@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { checkCalibration, checkConsumableThreshold, raiseAlert } from './alerts.js'
 import { type DB } from './db.js'
+import { getLog } from './logger.js'
 import { lineTotal, moneyC } from './money.js'
 import { deriveUnitCost, divRoundHalfUp, overheadC } from './pricing.js'
 
@@ -299,58 +300,66 @@ export function completeJob(db: DB, jobId: string, input: CompleteJobInput): voi
      VALUES (?, 'paper_stock', ?, ?, ?, ?, ?, ?, ?)`,
   )
 
-  db.transaction(() => {
-    for (const d of draws) {
-      const drawn = d.consume + d.scrap
-      db.prepare('UPDATE paper_stocks SET quantity = quantity - ? WHERE id = ?').run(drawn, d.id)
-      if (d.consume > 0) {
-        insertLog.run(randomUUID(), d.id, 'consume', -d.consume, null, input.operatorId ?? null, jobId, now)
+  const log = getLog()
+  log.info({ jobId, quantity: job.quantity, waste, pages, consumed, totalCost, profit }, 'job.complete begin')
+  try {
+    db.transaction(() => {
+      for (const d of draws) {
+        const drawn = d.consume + d.scrap
+        db.prepare('UPDATE paper_stocks SET quantity = quantity - ? WHERE id = ?').run(drawn, d.id)
+        if (d.consume > 0) {
+          insertLog.run(randomUUID(), d.id, 'consume', -d.consume, null, input.operatorId ?? null, jobId, now)
+        }
+        if (d.scrap > 0) {
+          insertLog.run(randomUUID(), d.id, 'scrap', -d.scrap, '废品', input.operatorId ?? null, jobId, now)
+        }
+        if (d.before - drawn < 0) {
+          log.warn({ jobId, stockId: d.id, after: d.before - drawn }, 'stock negative after draw')
+          raiseAlert(db, {
+            type: 'low_stock',
+            severity: 'critical',
+            target_type: 'paper_stock',
+            target_id: d.id,
+            message: `作业 ${jobId} 落账后库位 ${d.id} 账面为负（${d.before - drawn}），需盘点调整`,
+          })
+        }
       }
-      if (d.scrap > 0) {
-        insertLog.run(randomUUID(), d.id, 'scrap', -d.scrap, '废品', input.operatorId ?? null, jobId, now)
-      }
-      // 实物打穿账面：不阻断（已发生的消耗必须入账），但该库位立即拉响警报
-      if (d.before - drawn < 0) {
-        raiseAlert(db, {
-          type: 'low_stock',
-          severity: 'critical',
-          target_type: 'paper_stock',
-          target_id: d.id,
-          message: `作业 ${jobId} 落账后库位 ${d.id} 账面为负（${d.before - drawn}），需盘点调整`,
-        })
-      }
-    }
 
-    const consumables = db
-      .prepare(
-        `SELECT id FROM consumables
-         WHERE printer_id = ? AND cost_model = 'per_page' AND archived = 0`,
+      const consumables = db
+        .prepare(
+          `SELECT id FROM consumables
+           WHERE printer_id = ? AND cost_model = 'per_page' AND archived = 0`,
+        )
+        .all(job.printer_id) as Array<{ id: string }>
+      for (const c of consumables) {
+        db.prepare('UPDATE consumables SET current_usage_pages = current_usage_pages + ? WHERE id = ?').run(pages, c.id)
+        checkConsumableThreshold(db, c.id)
+      }
+
+      db.prepare('UPDATE printers SET total_pages = total_pages + ? WHERE id = ?').run(pages, job.printer_id)
+      checkCalibration(db, job.printer_id)
+
+      db.prepare(
+        `UPDATE jobs SET status = 'done', waste_quantity = ?, pages_consumed = ?,
+           paper_cost_c = ?, consumable_cost_c = ?, overhead_cost_c = ?,
+           total_cost = ?, profit = ?, completed_at = ?, operator_id = ?
+         WHERE id = ?`,
+      ).run(
+        waste,
+        pages,
+        cost.paper_c,
+        cost.ink_c,
+        overhead,
+        totalCost,
+        profit,
+        now,
+        input.operatorId ?? null,
+        jobId,
       )
-      .all(job.printer_id) as Array<{ id: string }>
-    for (const c of consumables) {
-      db.prepare('UPDATE consumables SET current_usage_pages = current_usage_pages + ? WHERE id = ?').run(pages, c.id)
-      checkConsumableThreshold(db, c.id)
-    }
-
-    db.prepare('UPDATE printers SET total_pages = total_pages + ? WHERE id = ?').run(pages, job.printer_id)
-    checkCalibration(db, job.printer_id)
-
-    db.prepare(
-      `UPDATE jobs SET status = 'done', waste_quantity = ?, pages_consumed = ?,
-         paper_cost_c = ?, consumable_cost_c = ?, overhead_cost_c = ?,
-         total_cost = ?, profit = ?, completed_at = ?, operator_id = ?
-       WHERE id = ?`,
-    ).run(
-      waste,
-      pages,
-      cost.paper_c,
-      cost.ink_c,
-      overhead,
-      totalCost,
-      profit,
-      now,
-      input.operatorId ?? null,
-      jobId,
-    )
-  })()
+    })()
+    log.info({ jobId }, 'job.complete committed')
+  } catch (err) {
+    log.error({ jobId, err }, 'job.complete rolled back')
+    throw err
+  }
 }

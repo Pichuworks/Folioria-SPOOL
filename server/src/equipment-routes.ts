@@ -3,6 +3,7 @@ import { type FastifyInstance } from 'fastify'
 import { calibrationDue } from './alerts.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { getLog } from './logger.js'
 import { requireAdmin } from './guards.js'
 import { formatMoney, formatMoneyC, money, moneyC, type Currency } from './money.js'
 import { sendXlsx } from './xlsx.js'
@@ -167,8 +168,10 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
           return reply.status(422).send({ error: 'consumable_printer_mismatch' })
         }
         if (consumable.quantity < 1) {
+          getLog().warn({ printerId, consumableId: b.consumable_id }, 'toner_change rejected: no spare')
           return reply.status(409).send({ error: 'no_spare_in_stock' })
         }
+        getLog().info({ printerId, consumableId: b.consumable_id, finalUsage: b.final_usage, spares: consumable.quantity }, 'toner_change begin')
         db.transaction(() => {
           insertEvent.run(
             eventId,

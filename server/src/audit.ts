@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type DB } from './db.js'
+import { getLog } from './logger.js'
 
 export interface AuditInput {
   actorId?: string | null
@@ -29,8 +30,8 @@ export function audit(db: DB, input: AuditInput): void {
       input.detail === undefined ? null : JSON.stringify(input.detail),
       new Date().toISOString(),
     )
-  } catch {
-    // 旁路留痕失败不阻断主流程
+  } catch (err) {
+    getLog().error({ err, action: input.action, target: `${input.targetType}/${input.targetId}` }, 'audit INSERT failed')
   }
 }
 

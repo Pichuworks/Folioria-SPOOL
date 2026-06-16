@@ -9,6 +9,7 @@ import { type FastifyInstance, type FastifyReply } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireUser } from './guards.js'
+import { getLog } from './logger.js'
 import { notifyAdmins, templates } from './notify.js'
 import { getOrder, OrderError, syncFileState, type OrderRow } from './orders.js'
 import { ERROR_SCHEMA, ORDER_SCHEMA, orderDto } from './orders-routes.js'
@@ -52,12 +53,14 @@ async function storeUpload(
   uploadDir: string,
   target?: PrecheckTarget,
 ): Promise<{ storedName: string; precheck: PrecheckResult }> {
+  const log = getLog()
   if (!data) throw new OrderError(422, 'file_required')
-  const ext = path.extname(data.filename ?? '').slice(1).toLowerCase()
+  const filename = data.filename ?? ''
+  const ext = path.extname(filename).slice(1).toLowerCase()
   const kind = EXT_TO_KIND[ext]
   if (!kind) {
-    // 排空流，否则连接挂起
     data.file.resume()
+    log.info({ ext, filename }, 'upload rejected: unsupported type')
     throw new OrderError(415, 'unsupported_file_type')
   }
 
@@ -67,16 +70,17 @@ async function storeUpload(
   try {
     await pipeline(data.file, createWriteStream(partPath, { flags: 'wx' }))
   } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    log.error({ code, storedName }, 'upload pipeline failed')
     await rm(partPath, { force: true })
     throw err
   }
-  // 超过 limits.fileSize 时流被截断（不抛错）——半截文件清掉，413
   if (data.file.truncated) {
+    log.warn({ storedName }, 'upload truncated: file too large')
     await rm(partPath, { force: true })
     throw new OrderError(413, 'file_too_large')
   }
 
-  // magic bytes 复查：以落盘内容为准（拒收改名伪装）
   const fh = await open(partPath, 'r')
   const head = Buffer.alloc(8)
   try {
@@ -84,12 +88,15 @@ async function storeUpload(
   } finally {
     await fh.close()
   }
-  if (sniffMagic(head) !== kind) {
+  const detected = sniffMagic(head)
+  if (detected !== kind) {
+    log.info({ ext, expected: kind, detected }, 'upload rejected: magic mismatch')
     await rm(partPath, { force: true })
     throw new OrderError(415, 'file_content_mismatch')
   }
   const finalPath = path.join(uploadDir, storedName)
   await rename(partPath, finalPath)
+  log.info({ storedName, kind }, 'file stored')
   const precheck = await precheckFile(finalPath, kind, target)
   return { storedName, precheck }
 }
@@ -107,7 +114,13 @@ async function sendStored(reply: FastifyReply, uploadDir: string, fileUrl: strin
   let fh
   try {
     fh = await open(path.join(uploadDir, safeName), 'r')
-  } catch {
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code !== 'ENOENT') {
+      getLog().error({ file: safeName, code }, 'file download failed: unexpected error')
+    } else {
+      getLog().warn({ file: safeName }, 'file download: DB record exists but file missing from disk')
+    }
     throw new OrderError(404, 'not_found')
   }
   void reply.header('x-content-type-options', 'nosniff')
@@ -190,7 +203,9 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
 
       // 重传：旧文件清理 + file_status 重置 pending、驳回意见清空、预检刷新（R5/D35 定点）
       if (item.file_url != null) {
-        await rm(path.join(uploadDir, item.file_url), { force: true })
+        try { await rm(path.join(uploadDir, item.file_url)) } catch {
+          getLog().warn({ file: item.file_url, orderId: id }, 'old file cleanup failed (orphan)')
+        }
       }
       db.prepare(
         "UPDATE order_items SET file_url = ?, file_status = 'pending', file_note = NULL, file_precheck = ? WHERE id = ?",
@@ -248,7 +263,9 @@ export function registerFilesRoutes(app: FastifyInstance, db: DB, uploadDir: str
       const { storedName, precheck } = await storeUpload(await req.file(), uploadDir, target)
 
       if (comp.file_url != null) {
-        await rm(path.join(uploadDir, comp.file_url), { force: true })
+        try { await rm(path.join(uploadDir, comp.file_url)) } catch {
+          getLog().warn({ file: comp.file_url, orderId: id }, 'old comp file cleanup failed (orphan)')
+        }
       }
       db.prepare(
         "UPDATE order_book_components SET file_url = ?, file_status = 'pending', file_note = NULL, file_precheck = ? WHERE id = ?",

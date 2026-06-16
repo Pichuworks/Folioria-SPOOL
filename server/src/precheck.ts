@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { PDFDocument } from 'pdf-lib'
 import sharp from 'sharp'
+import { getLog } from './logger.js'
 
 /**
  * D35 文件自动预检（advisory，best-effort，永不阻断）：上传落盘后跑，结果存 file_precheck JSON。
@@ -122,7 +123,8 @@ export async function precheckFile(
 ): Promise<PrecheckResult> {
   try {
     return kind === 'pdf' ? await precheckPdf(filePath, target) : await precheckImage(filePath, target)
-  } catch {
+  } catch (err) {
+    getLog().warn({ err, filePath, kind }, 'precheck parse failed')
     return {
       level: 'warn',
       items: [{ key: 'parse', level: 'warn', message: '文件无法完整解析（可能损坏或格式异常），请确认导出正常' }],

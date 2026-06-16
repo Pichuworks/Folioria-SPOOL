@@ -20,6 +20,7 @@ import {
 import { audit, listAudit } from './audit.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { initLogger } from './logger.js'
 import { spoolInit } from './init.js'
 import { formatMoney, money } from './money.js'
 import { importSeed } from './seed.js'
@@ -107,17 +108,22 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   const cookieSecure = opts.cookieSecure ?? true
   const uploadDir = opts.uploadDir ?? defaultUploadDir()
   const uploadMaxBytes = opts.uploadMaxBytes ?? UPLOAD_MAX_BYTES
+  const logLevel = (process.env['SPOOL_LOG_LEVEL'] ?? (process.env['VITEST'] ? 'silent' : 'info')) as 'silent' | 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace'
   // coerceTypes 必须关死：金额字段传 "100"/1.5 须 422，不允许静默转换（acceptance §7）
-  const app = Fastify({ logger: false, ajv: { customOptions: { coerceTypes: false } } })
+  const app = Fastify({ logger: { level: logLevel }, ajv: { customOptions: { coerceTypes: false } } })
+  initLogger(app.log)
 
   // acceptance §7: schema 校验失败一律 422
   app.setErrorHandler((rawErr, req, reply) => {
     const err = rawErr as FastifyError
     if (err.validation) {
+      req.log.info({ validationError: err.message }, 'schema validation 422')
       return reply.status(422).send({ error: 'validation_failed', message: err.message })
     }
     const status = err.statusCode ?? 500
     if (status >= 500) req.log.error(err)
+    else if (status === 401 || status === 403) req.log.warn({ status, error: err.message }, 'auth rejection')
+    else if (status >= 400) req.log.info({ status, error: err.message }, 'client error')
     return reply.status(status).send({ error: status >= 500 ? 'internal_error' : err.message })
   })
 
@@ -131,11 +137,19 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       const cf = req.headers['cf-connecting-ip']
       return (Array.isArray(cf) ? cf[0] : cf) ?? req.ip
     },
+    onExceeded: (req) => {
+      req.log.warn('rate limit exceeded')
+    },
   })
   app.decorateRequest('user', null)
   app.addHook('preHandler', (req, _reply, done) => {
     const token = req.cookies[SESSION_COOKIE]
-    req.user = token ? userByToken(db, token) : null
+    if (token) {
+      req.user = userByToken(db, token)
+      if (!req.user) req.log.debug('session cookie present but invalid/expired/revoked')
+    } else {
+      req.user = null
+    }
     done()
   })
 
@@ -246,7 +260,10 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       const who = identifier ?? email
       if (!who) return reply.status(422).send({ error: 'identifier_required' })
       const user = await verifyLogin(db, who, password)
-      if (!user) return reply.status(401).send({ error: 'invalid_credentials' })
+      if (!user) {
+        req.log.info({ identifier: who.slice(0, 3) + '***' }, 'login failed')
+        return reply.status(401).send({ error: 'invalid_credentials' })
+      }
       const token = createSession(db, user.id)
       void reply.setCookie(SESSION_COOKIE, token, {
         httpOnly: true,

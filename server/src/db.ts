@@ -25,10 +25,15 @@ export function migrate(db: DB, dir: string = MIGRATIONS_DIR): number {
     const version = Number(file.slice(0, 4))
     if (version <= current) continue
     const sql = readFileSync(path.join(dir, file), 'utf8')
-    db.transaction(() => {
-      db.exec(sql)
-      db.pragma(`user_version = ${version}`)
-    })()
+    try {
+      db.transaction(() => {
+        db.exec(sql)
+        db.pragma(`user_version = ${version}`)
+      })()
+    } catch (err) {
+      console.error(`migration ${file} failed:`, err)
+      throw err
+    }
     applied += 1
   }
   return applied

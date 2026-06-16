@@ -8,14 +8,33 @@ const port = Number(process.env['PORT'] ?? 3000)
 const cookieSecure = process.env['SPOOL_COOKIE_SECURE'] !== '0'
 
 const db = openDb(dbPath)
-migrate(db)
+const applied = migrate(db)
+
 // R5: 上传目录取 SPOOL_UPLOAD_DIR（默认 ~/.local/share/spool/uploads，files-routes 内解析）
 const app = buildApp(db, { cookieSecure })
 
+if (applied > 0) app.log.info({ applied }, 'migrations applied')
+
 app
   .listen({ port, host: '127.0.0.1' })
-  .then(() => console.log(`spool server listening on http://127.0.0.1:${port} (db: ${dbPath})`))
+  .then(() => app.log.info({ port, db: dbPath }, 'spool server listening'))
   .catch((err: unknown) => {
-    console.error(err)
+    app.log.fatal(err as Error, 'server startup failed')
     process.exit(1)
   })
+
+function shutdown(signal: string) {
+  app.log.info({ signal }, 'shutting down')
+  void app.close().then(() => {
+    db.close()
+    app.log.info('shutdown complete')
+    process.exit(0)
+  })
+  setTimeout(() => {
+    app.log.error('shutdown timeout, forcing exit')
+    process.exit(1)
+  }, 5000)
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))

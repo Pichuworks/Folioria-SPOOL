@@ -1,4 +1,5 @@
 import { type DB } from './db.js'
+import { getLog } from './logger.js'
 import { moneyC, roundHalfUp, type MoneyC } from './money.js'
 
 export interface QuoteOptions {
@@ -102,9 +103,18 @@ export function deriveUnitCost(
     )
     .get({ mode: modeId, paper: paperId, size: sizeKey }) as CostRow | undefined
 
-  if (!row) return null
-  if (row.size_area > row.max_area) return null
-  if (row.pack_price_c == null || row.pack_count == null) return null
+  if (!row) {
+    getLog().debug({ modeId, paperId, sizeKey }, 'deriveUnitCost: mode/size join empty')
+    return null
+  }
+  if (row.size_area > row.max_area) {
+    getLog().debug({ modeId, sizeKey, sizeArea: row.size_area, maxArea: row.max_area }, 'deriveUnitCost: size exceeds max')
+    return null
+  }
+  if (row.pack_price_c == null || row.pack_count == null) {
+    getLog().debug({ paperId, sizeKey }, 'deriveUnitCost: no paper_size_costs')
+    return null
+  }
   if (row.pricing_mode === 'ml' && row.ml_per_batch == null) {
     throw new Error(`pricing: mode ${modeId} pricing_mode=ml requires ml_per_batch`)
   }

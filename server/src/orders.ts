@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { priceBook, priceBookSpec, type BookLineInput, type BookSpecInput } from './books.js'
 import { type DB } from './db.js'
 import { finishingContribution, type FinishingPricing } from './finishing.js'
+import { getLog } from './logger.js'
 import { lineTotal, moneyC, sumMoney } from './money.js'
 import { quote } from './pricing.js'
 
@@ -472,10 +473,10 @@ export function syncFileState(db: DB, orderId: string): { status: OrderStatus; c
   if (n > 0 && filed === n) {
     next = approved === n ? 'file_approved' : 'file_pending'
   } else if (order.status !== 'quoted') {
-    // 不应发生（上传后文件不删除），防御性维持现状
     next = order.status
   }
   if (next === order.status) return { status: next, changed: false }
+  getLog().info({ orderId, from: order.status, to: next, items: n, filed, approved }, 'syncFileState transition')
   db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(next, orderId)
   return { status: next, changed: true }
 }
@@ -560,6 +561,9 @@ export function confirmOrder(db: DB, orderId: string): void {
   const shares = distributeDiscount(order.discount, order.subtotal, lineTotals)
   const itemShares = shares.slice(0, items.length)
   const bookShares = shares.slice(items.length)
+  if (order.discount > 0) {
+    getLog().info({ orderId, discount: order.discount, subtotal: order.subtotal, lines: lineTotals.length }, 'confirm: discount distributed')
+  }
 
   db.transaction(() => {
     const insertJob = db.prepare(
