@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchBookConfig, getBookConfigCache, type BookConfigDto, type BookConfigPaper } from './api'
-import { Field, Leader, MagSec, SpecRow, specInput } from './spec'
+import { Field, MagSec, SpecRow, specInput } from './spec'
 
 const BLEED = 3
 
@@ -12,7 +12,7 @@ function parseGsm(paper: BookConfigPaper): number | null {
 
 function thicknessPerSheet(gsm: number, name: string): number {
   if (/铜版|coated/i.test(name)) return gsm * 0.001
-  if (/相纸|RC|baryta|艺术/i.test(name)) return gsm * 0.001
+  if (/相纸|RC|baryta|艺术|微喷/i.test(name)) return gsm * 0.001
   return gsm * 0.00125
 }
 
