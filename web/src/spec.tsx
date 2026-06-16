@@ -55,7 +55,7 @@ function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
       <div className="mx-4 w-full max-w-md border border-ink bg-paper p-8 shadow-e1" onClick={(e) => e.stopPropagation()}>
         {/* 刊头 */}
         <div className="mb-6 border-b border-ink pb-5 text-center">
-          <div className="ink-press text-[36px] font-bold leading-none tracking-[.14em]">枫光映刻</div>
+          <div className="ink-press text-[36px] font-bold leading-none tracking-[.22em]">枫光映刻</div>
           <div className="mt-2 font-script text-[16px] text-dim">Maplescape Folioria</div>
           <div className="mt-3 font-mono text-[10px] tracking-[.3em] text-wine-ink">
             Powered by CRISIRIS S.P.O.O.L.
@@ -65,19 +65,20 @@ function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
           </div>
         </div>
         {/* 规格行 */}
-        <div className="space-y-0">
+        <div className="[&>*:last-child]:border-b-0">
           <AboutRow label="版本" value={`v${__APP_VERSION__}`} />
           <AboutRow label="构建" value={`build ${__BUILD_NUMBER__}`} />
         </div>
         {/* 开发者 */}
-        <div className="mt-6 border-t border-line pt-4 text-center">
-          <div className="text-[12px] tracking-[.06em] text-dim">开发</div>
-          <div className="mt-1 text-[15px] font-medium">Pichuworks</div>
-          <div className="mt-0.5 font-mono text-[11px] tracking-[.05em] text-dim">pichuworks@gmail.com</div>
+        <div className="mt-6 pt-5 text-center">
+          <div className="text-[13px] tracking-[.04em] text-ink">Developed by <a href="https://github.com/Pichuworks/" target="_blank" rel="noopener noreferrer" className="font-medium text-ink hover:text-wine-ink">Pichuworks</a></div>
+          <div className="mt-3 text-[11px] leading-relaxed tracking-[.02em] text-dim">
+            由<br />Crisamielle Aveniris · 诸泪折虹制作委员会<br />提供设计与技术支持
+          </div>
         </div>
         {/* 版权 */}
         <div className="mt-5 border-t border-ink pt-4 text-center font-mono text-[10px] tracking-[.14em] text-dim">
-          © 2026 FOLIORIA. ALL RIGHTS RESERVED.
+          © 2026 Maplescape Folioria. ALL RIGHTS RESERVED.
         </div>
         <div className="mt-5 flex justify-center">
           <button

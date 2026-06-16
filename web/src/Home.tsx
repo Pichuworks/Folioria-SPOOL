@@ -96,10 +96,10 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
             枫林叶下，光影映成。文作入纸，时光刻上。
           </span>
           <div className="max-w-[560px] py-10 md:absolute md:bottom-11 md:left-0 md:py-0">
-            <h1 className="text-[38px] font-medium leading-[1.15] tracking-[.02em] md:text-[56px]">
+            <h1 className="text-[38px] font-medium leading-[1.15] tracking-[.18em] md:text-[56px]">
               这里是
               <br />
-              <span className="ink-press whitespace-nowrap tracking-[.14em]">枫光映刻</span>
+              <span className="ink-press whitespace-nowrap">枫光映刻</span>
             </h1>
             <p className="mt-4 text-[16px] leading-[1.85] tracking-[.02em] text-dim">
               我们负责把创作纸质化。从一本同人志、一张无料、一套周边，到展会现场的每一份物料，枫光映刻会参与它们从屏幕到纸面的全过程。
@@ -168,7 +168,7 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
           </MagSec>
 
         <MagSec title="流程" id="flow">
-          <div className="grid grid-cols-1 gap-x-8 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-8 [&>:first-child]:border-t-0 md:grid-cols-4 md:gap-y-0 md:[&>:first-child]:border-t-2">
             {STEPS.map((s) => (
               <div key={s.n} className="border-t-2 border-ink pt-3">
                 <span className="font-mono text-[12px] text-wine-ink">{s.n}</span>
