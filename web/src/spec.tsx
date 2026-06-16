@@ -180,7 +180,7 @@ const btnVariants: Record<BtnVariant, string> = {
   ghost: 'border-wine text-wine-ink hover:opacity-80',
   outline: 'border-ink text-ink hover:bg-card',
   subtle: 'border-line text-dim hover:border-wine hover:text-wine-ink',
-  danger: 'border-wine text-wine-ink hover:opacity-80',
+  danger: 'border-wine bg-wine/8 text-wine-ink font-medium hover:bg-wine/15',
 }
 
 const btnSizes: Record<BtnSize, string> = {

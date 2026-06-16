@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import AdminGate from './AdminGate'
 import {
   fetchOrders,
@@ -440,6 +440,7 @@ function KanbanBody() {
   const [orders, setOrders] = useState<OrderDto[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showCancelled, setShowCancelled] = useState(false)
+  const lastSelectedRef = useRef<OrderDto | null>(null)
 
   const refresh = useCallback(() => {
     void fetchOrders().then((res) => {
@@ -454,6 +455,8 @@ function KanbanBody() {
   if (!orders) return <Skeleton />
 
   const selected = orders.find((o) => o.id === selectedId) ?? null
+  if (selected) lastSelectedRef.current = selected
+  const displayed = selected ?? lastSelectedRef.current
   const cancelled = orders.filter((o) => o.status === 'cancelled')
 
   const updateOne = (o: OrderDto) =>
@@ -502,8 +505,8 @@ function KanbanBody() {
         })}
       </div>
 
-      <Drawer open={!!selected} onClose={() => setSelectedId(null)} title={selected?.order_number ?? ''}>
-        {selected && <OrderDetail order={selected} onUpdated={updateOne} onRefresh={refresh} />}
+      <Drawer open={!!selected} onClose={() => setSelectedId(null)} title={displayed?.order_number ?? ''}>
+        {displayed && <OrderDetail order={displayed} onUpdated={updateOne} onRefresh={refresh} />}
       </Drawer>
 
       {cancelled.length > 0 && (
