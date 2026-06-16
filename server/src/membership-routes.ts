@@ -398,6 +398,8 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
         response: {
           200: {
             type: 'object',
+            required: ['assigned', 'skipped'],
+            additionalProperties: false,
             properties: {
               assigned: { type: 'integer' },
               skipped: { type: 'array', items: { type: 'string' } },
@@ -413,6 +415,7 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
       const tier = db.prepare('SELECT * FROM membership_tiers WHERE id = ? AND archived = 0').get(tier_id) as TierRow | undefined
       if (!tier) return reply.status(404).send({ error: 'tier_not_found' })
 
+      const unique = [...new Set(user_ids)]
       const skipped: string[] = []
       const now = new Date().toISOString()
       const operatorId = req.user?.id ?? null
@@ -427,7 +430,7 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
       const userStmt = db.prepare('SELECT id, name FROM users WHERE id = ?')
 
       const run = db.transaction(() => {
-        for (const uid of user_ids) {
+        for (const uid of unique) {
           const user = userStmt.get(uid) as { id: string; name: string } | undefined
           if (!user) { skipped.push(uid); continue }
           insertStmt.run(uid, tier.track, tier_id, now, operatorId, notes ?? null)
@@ -436,13 +439,13 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
             action: 'membership.assign',
             targetType: 'user',
             targetId: uid,
-            summary: `批量指派 ${user.name} → ${tier.code}`,
+            summary: `指派 ${user.name} → ${tier.code}`,
           })
         }
       })
       run()
 
-      return { assigned: user_ids.length - skipped.length, skipped }
+      return { assigned: unique.length - skipped.length, skipped }
     },
   )
 

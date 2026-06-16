@@ -296,10 +296,7 @@ function MembersTab() {
     e.preventDefault()
     setAssignErr(null)
     if (selUsers.size === 0 || selTier === '') return
-    const ids = [...selUsers]
-    const res = ids.length === 1
-      ? await send('POST', '/api/admin/membership/assign', { user_id: ids[0], tier_id: selTier })
-      : await send('POST', '/api/admin/membership/batch-assign', { user_ids: ids, tier_id: selTier })
+    const res = await send('POST', '/api/admin/membership/batch-assign', { user_ids: [...selUsers], tier_id: selTier })
     if (!res.ok) {
       setAssignErr((res.data as { error?: string }).error ?? '指派失败')
       return
