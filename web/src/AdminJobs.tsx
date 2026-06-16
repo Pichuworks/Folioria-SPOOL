@@ -17,7 +17,7 @@ import {
   type MachineRecDto,
   type OptionsDto,
 } from './api'
-import { Field, Leader, MagSec, Paginator, PillBtn, Skeleton, SpecRow, specInput, usePagination } from './spec'
+import { Field, Leader, MagSec, Paginator, PillBtn, Skeleton, SpecRow, TabBar, specInput, usePagination } from './spec'
 
 const STATUS_ORDER = ['draft', 'queued', 'printing', 'done', 'cancelled'] as const
 const STATUS_LABEL: Record<JobDto['status'], string> = {
@@ -213,10 +213,8 @@ const JobRow = memo(function JobRow({ job, onChanged, highlight }: { job: JobDto
 
 const BOOK_ROLE_LABEL: Record<string, string> = { cover: '封面', inner: '内页', insert: '插图' }
 
-/** PB3 台账编组单元：独立单页作业 或 一本书的组件作业组（同 order_book_id 折叠） */
 type RenderUnit = { kind: 'job'; job: JobDto } | { kind: 'book'; bookId: string; bookName: string; jobs: JobDto[] }
 
-/** 用 GET /api/jobs 暴露的 order_book_id/book_name 把组件作业按书折叠（保持原顺序） */
 function groupByBook(list: JobDto[]): RenderUnit[] {
   const units: RenderUnit[] = []
   const idx = new Map<string, number>()
@@ -254,44 +252,19 @@ const BookJobGroup = memo(function BookJobGroup({ unit, onChanged, highlightId }
 
 const JOBS_PAGE_SIZE = 20
 
-const StatusGroup = memo(function StatusGroup({ status, jobs, onChanged, highlightId }: { status: string; jobs: JobDto[]; onChanged: () => void; highlightId: string | null }) {
-  const units = useMemo(() => groupByBook(jobs), [jobs])
-  const { page, totalPages, paged, setPage } = usePagination(units, JOBS_PAGE_SIZE)
-
-  return (
-    <div className="mb-7">
-      <div className="flex items-baseline gap-3 border-b border-ink pb-1.5">
-        <span className="font-mono text-[10px] tracking-[.22em] text-dim">{status.toUpperCase()}</span>
-        <span className="text-[14px] font-medium tracking-[.04em] text-ink">{STATUS_LABEL[status as JobDto['status']]}</span>
-        <span className="ml-auto font-mono text-[11px] text-dim">{jobs.length}</span>
-      </div>
-      {jobs.length === 0 ? (
-        <p className="py-2 text-[12px] text-dim">—</p>
-      ) : (
-        <>
-          {paged.map((u) =>
-            u.kind === 'book' ? (
-              <BookJobGroup key={u.bookId} unit={u} onChanged={onChanged} highlightId={highlightId} />
-            ) : (
-              <JobRow key={u.job.id} job={u.job} onChanged={onChanged} highlight={u.job.id === highlightId} />
-            ),
-          )}
-          <Paginator page={page} totalPages={totalPages} onPage={setPage} />
-        </>
-      )}
-    </div>
-  )
-})
-
 type PreviewState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
 
-function JobsBody() {
-  const [options, setOptions] = useState<OptionsDto | null>(getOptionsCache)
-  const [optionsError, setOptionsError] = useState<string | null>(null)
-  const [jobs, setJobs] = useState<JobDto[] | null>(getJobsCache)
-  const [tick, setTick] = useState(0)
-  const [highlightId] = useState<string | null>(() => consumeHighlightJobId())
-
+function CreateJobPanel({
+  options,
+  tick,
+  onCreated,
+  onClose,
+}: {
+  options: OptionsDto
+  tick: number
+  onCreated: () => void
+  onClose: () => void
+}) {
   const [title, setTitle] = useState('')
   const [modeId, setModeId] = useState<number | null>(null)
   const [paperId, setPaperId] = useState<number | null>(null)
@@ -303,34 +276,14 @@ function JobsBody() {
   const [preview, setPreview] = useState<JobPreviewDto | null>(null)
   const [previewState, setPreviewState] = useState<PreviewState>('idle')
 
-  useEffect(() => {
-    fetchOptions()
-      .then(setOptions)
-      .catch(() => {
-        if (!getOptionsCache()) setOptionsError('配置数据加载失败')
-      })
-  }, [])
-
-  const reloadJobs = useCallback(() => {
-    fetchJobs().then(setJobs).catch(() => {
-      if (!getJobsCache()) setJobs(null)
-    })
-  }, [])
-  useEffect(reloadJobs, [reloadJobs])
-
-  const onMutated = useCallback(() => {
-    reloadJobs()
-    setTick((t) => t + 1)
-  }, [reloadJobs])
-
   const papersForMode = useMemo(() => {
-    if (!options || modeId === null) return []
+    if (modeId === null) return []
     const ids = new Set(options.options.filter((o) => o.mode_id === modeId).map((o) => o.paper_id))
     return options.papers.filter((p) => ids.has(p.id))
   }, [options, modeId])
 
   const pricesForPair = useMemo(() => {
-    if (!options || modeId === null || paperId === null) return null
+    if (modeId === null || paperId === null) return null
     return options.options.find((o) => o.mode_id === modeId && o.paper_id === paperId)?.prices ?? null
   }, [options, modeId, paperId])
 
@@ -354,17 +307,7 @@ function JobsBody() {
     return () => ctl.abort()
   }, [modeId, paperId, sizeKey, quantity, tick])
 
-  const groups = useMemo(() => {
-    const g: Record<JobDto['status'], JobDto[]> = {
-      draft: [],
-      queued: [],
-      printing: [],
-      done: [],
-      cancelled: [],
-    }
-    for (const j of jobs ?? []) g[j.status].push(j)
-    return g
-  }, [jobs])
+  const shortage = preview !== null && preview.available < quantity
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -386,165 +329,277 @@ function JobsBody() {
       setNotice('创建失败，请检查配置')
       return
     }
-    setTitle('')
-    setQuotedPrice('')
     setNotice(
       created.availability_warning
-        ? `已创建「${created.title}」（草稿）—— 该纸×尺寸可用量不足，注意补纸`
-        : `已创建「${created.title}」（草稿）`,
+        ? `已创建「${created.title}」—— 该纸×尺寸可用量不足，注意补纸`
+        : `已创建「${created.title}」`,
     )
-    onMutated()
+    setTitle('')
+    setQuotedPrice('')
+    onCreated()
   }
+
+  return (
+    <div className="mb-8 border border-ink">
+      <div className="flex items-center justify-between border-b border-line px-7 py-3">
+        <span className="font-mono text-[10px] tracking-[.14em] text-dim">NEW INTERNAL JOB</span>
+        <button type="button" className="font-mono text-[11px] tracking-[.1em] text-dim hover:text-ink" onClick={onClose}>
+          收起 ✕
+        </button>
+      </div>
+      <form onSubmit={(e) => void submit(e)} className="grid grid-cols-1 md:grid-cols-[5fr_7fr]">
+        <div className="space-y-5 border-b border-line p-7 md:border-b-0 md:border-r">
+          <Field label="标题">
+            <input
+              type="text"
+              required
+              className={specInput}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </Field>
+          <Field label="打印模式">
+            <select
+              className={specInput}
+              value={modeId ?? ''}
+              onChange={(e) => {
+                setModeId(e.target.value === '' ? null : Number(e.target.value))
+                setPaperId(null)
+                setSizeKey(null)
+              }}
+            >
+              <option value="">— 选择 —</option>
+              {options.modes.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="纸张">
+            <select
+              className={specInput}
+              value={paperId ?? ''}
+              disabled={modeId === null}
+              onChange={(e) => {
+                setPaperId(e.target.value === '' ? null : Number(e.target.value))
+                setSizeKey(null)
+              }}
+            >
+              <option value="">— 选择 —</option>
+              {papersForMode.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="尺寸">
+            <select
+              className={specInput}
+              value={sizeKey ?? ''}
+              disabled={pricesForPair === null}
+              onChange={(e) => setSizeKey(e.target.value === '' ? null : e.target.value)}
+            >
+              <option value="">— 选择 —</option>
+              {options.sizes
+                .filter((s) => pricesForPair && s.key in pricesForPair)
+                .map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <Field label="数量（张）">
+            <input
+              type="number"
+              min={1}
+              className={specInput}
+              value={quantity}
+              onChange={(e) => setQuantity(Math.max(1, Math.trunc(Number(e.target.value) || 1)))}
+            />
+          </Field>
+          <Field label="报价金额（整数 · 留空 = 内部作业）">
+            <input
+              type="number"
+              min={0}
+              className={specInput}
+              value={quotedPrice}
+              onChange={(e) => setQuotedPrice(e.target.value)}
+            />
+          </Field>
+          <PillBtn full>创建作业（草稿）</PillBtn>
+          {notice && <p className="text-[12.5px] text-wine-ink">{notice}</p>}
+        </div>
+
+        <div className="flex flex-col p-7">
+          <div className="font-mono text-[10px] tracking-[.14em] text-dim">COST PREVIEW · ADMIN ONLY</div>
+          {previewState === 'ready' && preview ? (
+            <div className="flex flex-1 flex-col">
+              <div className="mt-3">
+                <SpecRow label="墨水" note="每张" value={preview.ink_display} />
+                <SpecRow label="纸张" note="每张" value={preview.paper_display} />
+                <SpecRow label="折旧摊薄" note="每张" value={preview.overhead_display} />
+                <SpecRow label="单张成本" value={preview.unit_total_display} strong />
+                <SpecRow label="预估总成本" note={`× ${quantity} 张`} value={preview.est_total_display ?? '—'} strong />
+              </div>
+              <div className="mt-auto pt-6">
+                <div className="border-t-2 border-ink pt-3">
+                  <SpecRow label="账面" note="该纸×尺寸" value={`${preview.on_hand} 张`} />
+                  <SpecRow label="排队占用" note="queued + printing" value={`${preview.reserved} 张`} />
+                  <div className="flex items-baseline gap-3.5 py-[11px]">
+                    <span className="min-w-24 text-[15px] font-medium text-ink">可用量</span>
+                    <Leader />
+                    <span
+                      className={`font-mono text-[15px] tracking-[.05em] ${shortage ? 'text-warn' : 'text-wine-ink'}`}
+                    >
+                      {preview.available} 张{shortage ? ' · 不足' : ''}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-2 text-right font-mono text-[10px] tracking-[.12em] text-dim">
+                  AVAILABLE = ON HAND − RESERVED · §3.3
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center py-12">
+              <p className="text-[13px] leading-[1.85] text-dim">
+                {previewState === 'loading'
+                  ? '推导中…'
+                  : previewState === 'unavailable'
+                    ? '该组合成本不可推导，请调整配置。'
+                    : previewState === 'error'
+                      ? '预览服务暂时不可用。'
+                      : '选定模式×纸张×尺寸后，成本与可用量即时出现。'}
+              </p>
+            </div>
+          )}
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function JobsBody() {
+  const [options, setOptions] = useState<OptionsDto | null>(getOptionsCache)
+  const [optionsError, setOptionsError] = useState<string | null>(null)
+  const [jobs, setJobs] = useState<JobDto[] | null>(getJobsCache)
+  const [tick, setTick] = useState(0)
+  const [highlightId] = useState<string | null>(() => consumeHighlightJobId())
+
+  const [createOpen, setCreateOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<JobDto['status']>('queued')
+  const highlightApplied = useRef(false)
+
+  useEffect(() => {
+    fetchOptions()
+      .then(setOptions)
+      .catch(() => {
+        if (!getOptionsCache()) setOptionsError('配置数据加载失败')
+      })
+  }, [])
+
+  const reloadJobs = useCallback(() => {
+    fetchJobs().then(setJobs).catch(() => {
+      if (!getJobsCache()) setJobs(null)
+    })
+  }, [])
+  useEffect(reloadJobs, [reloadJobs])
+
+  const onMutated = useCallback(() => {
+    reloadJobs()
+    setTick((t) => t + 1)
+  }, [reloadJobs])
+
+  const groups = useMemo(() => {
+    const g: Record<JobDto['status'], JobDto[]> = {
+      draft: [],
+      queued: [],
+      printing: [],
+      done: [],
+      cancelled: [],
+    }
+    for (const j of jobs ?? []) g[j.status].push(j)
+    return g
+  }, [jobs])
+
+  useEffect(() => {
+    if (highlightApplied.current || !highlightId || !jobs) return
+    const found = jobs.find((j) => j.id === highlightId)
+    if (found) {
+      setActiveTab(found.status)
+      highlightApplied.current = true
+    }
+  }, [highlightId, jobs])
+
+  const tabs = useMemo(
+    () => STATUS_ORDER.map((s) => ({ key: s, label: STATUS_LABEL[s], count: groups[s].length })),
+    [groups],
+  )
+
+  const activeJobs = groups[activeTab]
+  const units = useMemo(() => groupByBook(activeJobs), [activeJobs])
+  const { page, totalPages, paged, setPage } = usePagination(units, JOBS_PAGE_SIZE)
+
+  const switchTab = useCallback((key: string) => {
+    setActiveTab(key as JobDto['status'])
+    setPage(0)
+  }, [setPage])
 
   if (optionsError) return <p className="pt-13 text-[14px] text-wine-ink">{optionsError}</p>
   if (!options) return <Skeleton />
 
-  const shortage = preview !== null && preview.available < quantity
-
   return (
     <div>
-      <MagSec title="新建作业">
-        <form onSubmit={(e) => void submit(e)} className="grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
-          <div className="space-y-5 border-b border-ink p-7 md:border-b-0 md:border-r">
-            <div className="font-mono text-[10px] tracking-[.14em] text-dim">JOB SPEC</div>
-            <Field label="标题">
-              <input
-                type="text"
-                required
-                className={specInput}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </Field>
-            <Field label="打印模式">
-              <select
-                className={specInput}
-                value={modeId ?? ''}
-                onChange={(e) => {
-                  setModeId(e.target.value === '' ? null : Number(e.target.value))
-                  setPaperId(null)
-                  setSizeKey(null)
-                }}
-              >
-                <option value="">— 选择 —</option>
-                {options.modes.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="纸张">
-              <select
-                className={specInput}
-                value={paperId ?? ''}
-                disabled={modeId === null}
-                onChange={(e) => {
-                  setPaperId(e.target.value === '' ? null : Number(e.target.value))
-                  setSizeKey(null)
-                }}
-              >
-                <option value="">— 选择 —</option>
-                {papersForMode.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="尺寸">
-              <select
-                className={specInput}
-                value={sizeKey ?? ''}
-                disabled={pricesForPair === null}
-                onChange={(e) => setSizeKey(e.target.value === '' ? null : e.target.value)}
-              >
-                <option value="">— 选择 —</option>
-                {options.sizes
-                  .filter((s) => pricesForPair && s.key in pricesForPair)
-                  .map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-              </select>
-            </Field>
-            <Field label="数量（张）">
-              <input
-                type="number"
-                min={1}
-                className={specInput}
-                value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Math.trunc(Number(e.target.value) || 1)))}
-              />
-            </Field>
-            <Field label="报价金额（整数 · 留空 = 内部作业）">
-              <input
-                type="number"
-                min={0}
-                className={specInput}
-                value={quotedPrice}
-                onChange={(e) => setQuotedPrice(e.target.value)}
-              />
-            </Field>
-            <PillBtn full>创建作业（草稿）</PillBtn>
-            {notice && <p className="text-[12.5px] text-wine-ink">{notice}</p>}
-          </div>
+      <MagSec
+        title="作业台账"
+        note={jobs ? `${jobs.length} 条` : undefined}
+      >
+        <div className="mb-6 flex items-center gap-4">
+          <button
+            type="button"
+            className={
+              createOpen
+                ? 'rounded-full border border-wine bg-wine-dim/30 px-4 py-2 text-[13px] font-medium text-wine-ink'
+                : 'rounded-full border border-line px-4 py-2 text-[13px] font-medium text-ink hover:border-wine hover:text-wine-ink'
+            }
+            onClick={() => setCreateOpen((v) => !v)}
+          >
+            + 新建内部作业
+          </button>
+        </div>
 
-          <div className="flex flex-col p-7">
-            <div className="font-mono text-[10px] tracking-[.14em] text-dim">COST PREVIEW · ADMIN ONLY</div>
-            {previewState === 'ready' && preview ? (
-              <div className="flex flex-1 flex-col">
-                <div className="mt-3">
-                  <SpecRow label="墨水" note="每张" value={preview.ink_display} />
-                  <SpecRow label="纸张" note="每张" value={preview.paper_display} />
-                  <SpecRow label="折旧摊薄" note="每张" value={preview.overhead_display} />
-                  <SpecRow label="单张成本" value={preview.unit_total_display} strong />
-                  <SpecRow label="预估总成本" note={`× ${quantity} 张`} value={preview.est_total_display ?? '—'} strong />
-                </div>
-                <div className="mt-auto pt-6">
-                  <div className="border-t-2 border-ink pt-3">
-                    <SpecRow label="账面" note="该纸×尺寸" value={`${preview.on_hand} 张`} />
-                    <SpecRow label="排队占用" note="queued + printing" value={`${preview.reserved} 张`} />
-                    <div className="flex items-baseline gap-3.5 py-[11px]">
-                      <span className="min-w-24 text-[15px] font-medium text-ink">可用量</span>
-                      <Leader />
-                      <span
-                        className={`font-mono text-[15px] tracking-[.05em] ${shortage ? 'text-warn' : 'text-wine-ink'}`}
-                      >
-                        {preview.available} 张{shortage ? ' · 不足' : ''}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-right font-mono text-[10px] tracking-[.12em] text-dim">
-                    AVAILABLE = ON HAND − RESERVED · §3.3
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-1 items-center py-12">
-                <p className="text-[13px] leading-[1.85] text-dim">
-                  {previewState === 'loading'
-                    ? '推导中…'
-                    : previewState === 'unavailable'
-                      ? '该组合成本不可推导，请调整配置。'
-                      : previewState === 'error'
-                        ? '预览服务暂时不可用。'
-                        : '选定模式×纸张×尺寸后，成本与可用量即时出现。'}
-                </p>
-              </div>
-            )}
-          </div>
-        </form>
-      </MagSec>
+        {createOpen && (
+          <CreateJobPanel
+            options={options}
+            tick={tick}
+            onCreated={() => {
+              onMutated()
+              switchTab('draft')
+            }}
+            onClose={() => setCreateOpen(false)}
+          />
+        )}
 
-      <MagSec title="作业台账" note={jobs ? `${jobs.length} 条` : undefined}>
+        <TabBar tabs={tabs} active={activeTab} onChange={switchTab} />
+
         {jobs === null ? (
-          <p className="py-2 text-[13px] text-dim">台账加载中…</p>
+          <p className="py-6 text-[13px] text-dim">台账加载中…</p>
+        ) : activeJobs.length === 0 ? (
+          <p className="py-6 text-[12px] text-dim">—</p>
         ) : (
-          STATUS_ORDER.map((s) => (
-            <StatusGroup key={s} status={s} jobs={groups[s]} onChanged={onMutated} highlightId={highlightId} />
-          ))
+          <div className="pt-2">
+            {paged.map((u) =>
+              u.kind === 'book' ? (
+                <BookJobGroup key={u.bookId} unit={u} onChanged={onMutated} highlightId={highlightId} />
+              ) : (
+                <JobRow key={u.job.id} job={u.job} onChanged={onMutated} highlight={u.job.id === highlightId} />
+              ),
+            )}
+            <Paginator page={page} totalPages={totalPages} onPage={setPage} />
+          </div>
         )}
       </MagSec>
     </div>
