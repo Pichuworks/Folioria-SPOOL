@@ -30,10 +30,10 @@ export function Folio({ center }: { center: string }) {
   return (
     <>
       <footer className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-ink pb-7 pt-3 font-mono text-[10.5px] tracking-[.14em] text-dim">
-        <span>FOLIORIA · S.P.O.O.L.</span>
+        <span>Powered by CRISIRIS S.P.O.O.L.</span>
         <span>{center}</span>
         <button type="button" onClick={() => setAboutOpen(true)} className="cursor-pointer text-dim hover:text-ink">
-          v{__APP_VERSION__} · b{__BUILD_NUMBER__} · © 2026 FOLIORIA
+          v{__APP_VERSION__} · build {__BUILD_NUMBER__} · © 2026 FOLIORIA
         </button>
       </footer>
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
@@ -58,16 +58,16 @@ function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="ink-press text-[36px] font-bold leading-none tracking-[.14em]">枫光映刻</div>
           <div className="mt-2 font-script text-[16px] text-dim">Maplescape Folioria</div>
           <div className="mt-3 font-mono text-[10px] tracking-[.3em] text-wine-ink">
-            S.P.O.O.L. — STOCK · PRICING · ORDERS · OPERATIONS · LOGISTICS
+            Powered by CRISIRIS S.P.O.O.L.
+          </div>
+          <div className="mt-1.5 font-mono text-[9px] tracking-[.18em] text-dim">
+            STOCK · PRICING · ORDERS · OPERATIONS · LOGISTICS
           </div>
         </div>
         {/* 规格行 */}
         <div className="space-y-0">
           <AboutRow label="版本" value={`v${__APP_VERSION__}`} />
-          <AboutRow label="构建" value={`b${__BUILD_NUMBER__}`} />
-          <AboutRow label="前端" value="React 18 · Vite · Tailwind v4" />
-          <AboutRow label="后端" value="Fastify v5 · TypeScript" />
-          <AboutRow label="数据库" value="SQLite · WAL · STRICT" />
+          <AboutRow label="构建" value={`build ${__BUILD_NUMBER__}`} />
         </div>
         {/* 开发者 */}
         <div className="mt-6 border-t border-line pt-4 text-center">

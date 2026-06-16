@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
@@ -5,7 +6,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 const pkg = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf-8'))
-const buildNumber = readFileSync(resolve(__dirname, 'build-number.txt'), 'utf-8').trim()
+const buildNumber = execSync('git rev-list --count HEAD', { encoding: 'utf-8' }).trim()
 
 export default defineConfig({
   define: {
