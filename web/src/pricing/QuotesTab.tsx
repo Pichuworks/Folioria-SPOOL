@@ -184,7 +184,7 @@ function PriceEditModal({
   return (
     <Modal open wide title="编辑报价" onClose={onClose}>
       <div className="mb-4">
-        <span className="text-[14px] font-medium text-ink">{modeName}</span>
+        <span className="text-[14px] font-medium tracking-[.04em] text-ink">{modeName}</span>
         <span className="text-dim"> {'×'} </span>
         <span className="text-[14px] text-ink">{paperName}</span>
         <span className="ml-2 font-mono text-[12px] text-dim">@ {quote.size_key}</span>

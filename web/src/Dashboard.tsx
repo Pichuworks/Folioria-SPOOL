@@ -80,7 +80,7 @@ function AdminDashboardBody() {
         <MagSec title="设备">
           {data.equipment.map((p) => (
             <div key={p.code} className="flex items-baseline gap-3 border-b border-line py-[9px]">
-              <span className="min-w-16 text-[14px] font-medium text-ink">{p.code}</span>
+              <span className="min-w-16 text-[14px] font-medium tracking-[.04em] text-ink">{p.code}</span>
               <span className="font-mono text-[10px] tracking-[.1em] text-dim">{p.status.toUpperCase()}</span>
               <span className="mx-2.5 flex-1 -translate-y-1 border-b border-dotted border-line" />
               {p.calibration_due && <span className="font-mono text-[10px] tracking-[.1em] text-warn">校准到期</span>}

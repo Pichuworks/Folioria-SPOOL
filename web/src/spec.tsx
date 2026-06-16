@@ -121,7 +121,7 @@ export const MagSec = ({
   <section id={id} className="pt-13">
     <div className="mb-[22px] flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-ink pb-3">
       {tag && <span className="bg-ink px-2.5 py-1 font-mono text-[11px] tracking-[.22em] text-paper">{tag}</span>}
-      <h2 className="text-[26px] font-semibold text-ink">{title}</h2>
+      <h2 className="text-[26px] font-semibold tracking-[.06em] text-ink">{title}</h2>
       {note && <span className="ml-auto font-mono text-[10px] tracking-[.12em] text-dim">{note}</span>}
     </div>
     {children}

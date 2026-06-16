@@ -146,7 +146,7 @@ const JobRow = memo(function JobRow({ job, onChanged, highlight }: { job: JobDto
   return (
     <div ref={rowRef} className={`border-b border-line py-[9px] ${highlight ? 'bg-wine-dim/20' : ''}`}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-[14px] font-medium text-ink">{job.title}</span>
+        <span className="text-[14px] font-medium tracking-[.04em] text-ink">{job.title}</span>
         <span className="text-[12px] text-dim">
           {job.mode_name} × {job.paper_name} × {job.size_key} · {job.quantity} 张
         </span>
@@ -262,7 +262,7 @@ const StatusGroup = memo(function StatusGroup({ status, jobs, onChanged, highlig
     <div className="mb-7">
       <div className="flex items-baseline gap-3 border-b border-ink pb-1.5">
         <span className="font-mono text-[10px] tracking-[.22em] text-dim">{status.toUpperCase()}</span>
-        <span className="text-[14px] font-medium text-ink">{STATUS_LABEL[status as JobDto['status']]}</span>
+        <span className="text-[14px] font-medium tracking-[.04em] text-ink">{STATUS_LABEL[status as JobDto['status']]}</span>
         <span className="ml-auto font-mono text-[11px] text-dim">{jobs.length}</span>
       </div>
       {jobs.length === 0 ? (

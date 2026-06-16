@@ -102,7 +102,7 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
   return (
     <div className="border-b border-line py-[8px]">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className={`text-[14px] font-medium ${user.archived ? 'text-dim line-through' : 'text-ink'}`}>
+        <span className={`text-[14px] font-medium tracking-[.04em] ${user.archived ? 'text-dim line-through' : 'text-ink'}`}>
           {user.name}
         </span>
         <span className="text-[12px] text-dim">{user.email}</span>
