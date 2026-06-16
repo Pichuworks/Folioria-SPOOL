@@ -1,20 +1,50 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Leader, Paginator, PillBtn, specInput, usePagination } from '../spec'
+import { Field, Leader, Modal, Paginator, PillBtn, specInput, usePagination } from '../spec'
 import { actionBtn, type PaperDto, type SizeDto } from './types'
 
-function PackCostEditor({ paper, sizes, onChanged }: { paper: PaperDto; sizes: SizeDto[]; onChanged: () => void }) {
+function PaperEditModal({
+  paper,
+  sizes,
+  onClose,
+  onChanged,
+}: {
+  paper: PaperDto
+  sizes: SizeDto[]
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [name, setName] = useState(paper.name)
+  const [gsm, setGsm] = useState(paper.gsm == null ? '' : String(paper.gsm))
+  const [category, setCategory] = useState(paper.category ?? '')
+  const [supplier, setSupplier] = useState(paper.supplier ?? '')
+  const [attrError, setAttrError] = useState<string | null>(null)
+  const [attrOk, setAttrOk] = useState(false)
+
   const [sizeKey, setSizeKey] = useState('')
   const [packPrice, setPackPrice] = useState('')
   const [packCount, setPackCount] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [costError, setCostError] = useState<string | null>(null)
 
-  const submit = async (e: FormEvent) => {
+  const saveAttr = async (e: FormEvent) => {
+    e.preventDefault()
+    if (name.trim() === '') { setAttrError('名称不能为空'); return }
+    const res = await send('PATCH', `/api/pricing/papers/${paper.id}`, {
+      name: name.trim(),
+      gsm: gsm.trim() === '' ? null : Math.trunc(Number(gsm)),
+      category: category.trim() === '' ? null : category.trim(),
+      supplier: supplier.trim() === '' ? null : supplier.trim(),
+    })
+    if (res.ok) { setAttrError(null); setAttrOk(true); onChanged(); setTimeout(() => setAttrOk(false), 1500) }
+    else setAttrError('保存失败')
+  }
+
+  const addCost = async (e: FormEvent) => {
     e.preventDefault()
     const price = Math.trunc(Number(packPrice))
     const count = Math.trunc(Number(packCount))
     if (sizeKey === '' || price < 0 || count < 1) {
-      setError('选择尺寸并填写非负整数包价（_c）与正整数包内张数')
+      setCostError('选择尺寸并填写非负整数包价（_c）与正整数包内张数')
       return
     }
     const res = await send('PUT', '/api/pricing/paper-size-costs', {
@@ -27,13 +57,45 @@ function PackCostEditor({ paper, sizes, onChanged }: { paper: PaperDto; sizes: S
       setSizeKey('')
       setPackPrice('')
       setPackCount('')
-      setError(null)
+      setCostError(null)
       onChanged()
-    } else setError('保存失败')
+    } else setCostError('保存失败')
+  }
+
+  const deleteCost = async (sk: string) => {
+    const res = await send('DELETE', `/api/pricing/paper-size-costs/${paper.id}/${sk}`)
+    if (res.ok) onChanged()
   }
 
   return (
-    <div className="mt-2 border border-line bg-card p-3.5">
+    <Modal open wide title={`编辑纸张 · ${paper.name}`} onClose={onClose}>
+      {/* Attributes */}
+      <form onSubmit={(e) => void saveAttr(e)} className="grid grid-cols-2 items-end gap-3">
+        <Field label="名称">
+          <input type="text" required className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="克重 gsm">
+          <input type="number" min={1} className={specInput} value={gsm} onChange={(e) => setGsm(e.target.value)} />
+        </Field>
+        <Field label="类别">
+          <input type="text" className={specInput} value={category} onChange={(e) => setCategory(e.target.value)} />
+        </Field>
+        <Field label="供应商">
+          <input type="text" className={specInput} value={supplier} onChange={(e) => setSupplier(e.target.value)} />
+        </Field>
+        <div className="col-span-2 flex items-center gap-3">
+          <PillBtn>保存属性</PillBtn>
+          {attrOk && <span className="text-[12px] text-ink">已保存</span>}
+          {attrError && <span className="text-[12px] text-wine-ink">{attrError}</span>}
+        </div>
+      </form>
+
+      {/* Separator */}
+      <div className="my-5 border-t border-line" />
+
+      {/* Size costs */}
+      <span className="mb-2 block font-mono text-[10px] tracking-[.14em] text-dim">尺寸口径 · SIZE COSTS</span>
+
       {paper.size_costs.length > 0 && (
         <table className="mb-3 w-full text-[12.5px]">
           <thead>
@@ -42,7 +104,7 @@ function PackCostEditor({ paper, sizes, onChanged }: { paper: PaperDto; sizes: S
               <th className="pb-1.5 font-mono text-[10px] tracking-[.12em] text-dim">整包价 _c</th>
               <th className="pb-1.5 font-mono text-[10px] tracking-[.12em] text-dim">张数</th>
               <th className="pb-1.5 font-mono text-[10px] tracking-[.12em] text-dim">单张 _c</th>
-              <th className="pb-1.5 w-12" />
+              <th className="w-12 pb-1.5" />
             </tr>
           </thead>
           <tbody>
@@ -51,19 +113,9 @@ function PackCostEditor({ paper, sizes, onChanged }: { paper: PaperDto; sizes: S
                 <td className="py-[5px] font-medium text-ink">{c.size_key}</td>
                 <td className="py-[5px] font-mono text-dim">{c.pack_price_c.toLocaleString()}</td>
                 <td className="py-[5px] font-mono text-dim">{c.pack_count.toLocaleString()}</td>
-                <td className="py-[5px] font-mono text-ink">
-                  {Math.round(c.pack_price_c / c.pack_count)}
-                </td>
+                <td className="py-[5px] font-mono text-ink">{Math.round(c.pack_price_c / c.pack_count)}</td>
                 <td className="py-[5px] text-right">
-                  <button
-                    type="button"
-                    className={`${actionBtn} text-dim`}
-                    onClick={() => {
-                      void send('DELETE', `/api/pricing/paper-size-costs/${paper.id}/${c.size_key}`).then(
-                        (r) => r.ok && onChanged(),
-                      )
-                    }}
-                  >
+                  <button type="button" className={`${actionBtn} text-dim`} onClick={() => void deleteCost(c.size_key)}>
                     删除
                   </button>
                 </td>
@@ -72,7 +124,8 @@ function PackCostEditor({ paper, sizes, onChanged }: { paper: PaperDto; sizes: S
           </tbody>
         </table>
       )}
-      <form onSubmit={(e) => void submit(e)} className="flex flex-wrap items-end gap-3">
+
+      <form onSubmit={(e) => void addCost(e)} className="flex flex-wrap items-end gap-3">
         <Field label="尺寸">
           <select className={specInput} value={sizeKey} onChange={(e) => setSizeKey(e.target.value)}>
             <option value="">— 选择 —</option>
@@ -88,49 +141,9 @@ function PackCostEditor({ paper, sizes, onChanged }: { paper: PaperDto; sizes: S
           <input type="number" min={1} required className={specInput} value={packCount} onChange={(e) => setPackCount(e.target.value)} />
         </Field>
         <PillBtn>写入口径</PillBtn>
-        {error && <p className="w-full text-[12px] text-wine-ink">{error}</p>}
+        {costError && <p className="w-full text-[12px] text-wine-ink">{costError}</p>}
       </form>
-    </div>
-  )
-}
-
-function PaperEditPanel({ paper, onDone }: { paper: PaperDto; onDone: () => void }) {
-  const [name, setName] = useState(paper.name)
-  const [gsm, setGsm] = useState(paper.gsm == null ? '' : String(paper.gsm))
-  const [category, setCategory] = useState(paper.category ?? '')
-  const [supplier, setSupplier] = useState(paper.supplier ?? '')
-  const [error, setError] = useState<string | null>(null)
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (name.trim() === '') { setError('名称不能为空'); return }
-    const res = await send('PATCH', `/api/pricing/papers/${paper.id}`, {
-      name: name.trim(),
-      gsm: gsm.trim() === '' ? null : Math.trunc(Number(gsm)),
-      category: category.trim() === '' ? null : category.trim(),
-      supplier: supplier.trim() === '' ? null : supplier.trim(),
-    })
-    if (res.ok) onDone()
-    else setError('保存失败')
-  }
-
-  return (
-    <form onSubmit={(e) => void submit(e)} className="mt-2 flex flex-wrap items-end gap-3 border border-line bg-card p-3.5">
-      <Field label="名称">
-        <input type="text" required className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
-      </Field>
-      <Field label="克重 gsm">
-        <input type="number" min={1} className={specInput} value={gsm} onChange={(e) => setGsm(e.target.value)} />
-      </Field>
-      <Field label="类别">
-        <input type="text" className={specInput} value={category} onChange={(e) => setCategory(e.target.value)} />
-      </Field>
-      <Field label="供应商">
-        <input type="text" className={specInput} value={supplier} onChange={(e) => setSupplier(e.target.value)} />
-      </Field>
-      <PillBtn>保存</PillBtn>
-      {error && <p className="w-full text-[12px] text-wine-ink">{error}</p>}
-    </form>
+    </Modal>
   )
 }
 
@@ -144,8 +157,7 @@ export default function PapersTab({
   onChanged: () => void
 }) {
   const [search, setSearch] = useState('')
-  const [editing, setEditing] = useState<number | null>(null)
-  const [costEditing, setCostEditing] = useState<number | null>(null)
+  const [editingPaper, setEditingPaper] = useState<PaperDto | null>(null)
   const [showAdd, setShowAdd] = useState(false)
 
   const [name, setName] = useState('')
@@ -185,6 +197,9 @@ export default function PapersTab({
       onChanged()
     } else setNotice('创建失败')
   }
+
+  // Keep modal paper in sync with refreshed data
+  const livePaper = editingPaper ? active.find((p) => p.id === editingPaper.id) ?? null : null
 
   return (
     <div>
@@ -236,7 +251,7 @@ export default function PapersTab({
               <th className="px-3 py-2.5 text-left font-mono text-[10.5px] tracking-[.14em] text-dim">类别</th>
               <th className="px-3 py-2.5 text-left font-mono text-[10.5px] tracking-[.14em] text-dim">供应商</th>
               <th className="px-3 py-2.5 text-left font-mono text-[10.5px] tracking-[.14em] text-dim">口径</th>
-              <th className="w-24 px-3 py-2.5" />
+              <th className="w-20 px-3 py-2.5" />
             </tr>
           </thead>
           <tbody>
@@ -246,23 +261,17 @@ export default function PapersTab({
                 <td className="px-3 py-[9px] font-mono text-[12px] text-dim">{p.gsm != null ? `${p.gsm}g` : '—'}</td>
                 <td className="px-3 py-[9px] text-[12px] text-dim">{p.category ?? '—'}</td>
                 <td className="px-3 py-[9px] text-[12px] text-dim">{p.supplier ?? '—'}</td>
-                <td className="px-3 py-[9px]">
-                  <button
-                    type="button"
-                    className="font-mono text-[11px] text-dim hover:text-wine-ink"
-                    onClick={() => setCostEditing(costEditing === p.id ? null : p.id)}
-                  >
-                    {p.size_costs.length > 0
-                      ? p.size_costs.map((c) => c.size_key).join(' · ')
-                      : '无口径'}
-                  </button>
+                <td className="px-3 py-[9px] font-mono text-[11px] text-dim">
+                  {p.size_costs.length > 0
+                    ? p.size_costs.map((c) => c.size_key).join(' · ')
+                    : '无口径'}
                 </td>
                 <td className="px-3 py-[9px]">
                   <div className="flex justify-end gap-3">
                     <button
                       type="button"
                       className={`${actionBtn} text-wine-ink`}
-                      onClick={() => setEditing(editing === p.id ? null : p.id)}
+                      onClick={() => setEditingPaper(p)}
                     >
                       编辑
                     </button>
@@ -292,26 +301,15 @@ export default function PapersTab({
         </table>
       </div>
 
-      {/* Inline panels below table */}
-      {editing != null && (() => {
-        const p = active.find((x) => x.id === editing)
-        return p ? (
-          <div className="mt-3">
-            <div className="mb-1 font-mono text-[10px] tracking-[.12em] text-dim">编辑 · {p.name}</div>
-            <PaperEditPanel paper={p} onDone={() => { setEditing(null); onChanged() }} />
-          </div>
-        ) : null
-      })()}
-
-      {costEditing != null && (() => {
-        const p = active.find((x) => x.id === costEditing)
-        return p ? (
-          <div className="mt-3">
-            <div className="mb-1 font-mono text-[10px] tracking-[.12em] text-dim">口径 · {p.name}</div>
-            <PackCostEditor paper={p} sizes={sizes} onChanged={onChanged} />
-          </div>
-        ) : null
-      })()}
+      {livePaper && (
+        <PaperEditModal
+          key={livePaper.id}
+          paper={livePaper}
+          sizes={sizes}
+          onClose={() => setEditingPaper(null)}
+          onChanged={onChanged}
+        />
+      )}
 
       <Paginator page={page} totalPages={totalPages} onPage={setPage} />
 

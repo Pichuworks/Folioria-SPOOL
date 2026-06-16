@@ -5,7 +5,7 @@ import { spoolInit } from './init.js'
 import { importSeed } from './seed.js'
 import { collectForbiddenKeys, createTestUser, makeTestDb } from './test-helpers.js'
 
-/** D27 书成品/组件/工艺 管理域 CRUD + 下单域目录/实时报价（机器对客户不可见）。 */
+/** D27 书成品 — 管理域 CRUD 已移除（客户下单时自由组合），仅保留 calculator 路由测试。 */
 
 let db: DB
 let app: App
@@ -29,61 +29,33 @@ async function login(email: string): Promise<string> {
   return `${SESSION_COOKIE}=${match?.[1]}`
 }
 
-/** admin 经 API 搭一本带封面+内页+两道工艺的书，返回 ids */
-async function buildBook(admin: string): Promise<{ book: number; cover: number; inner: number; bind: number; num: number }> {
-  const mk = async (url: string, payload: object): Promise<{ id: number }> => {
-    const r = await app.inject({ method: 'POST', url, headers: { cookie: admin }, payload })
-    return r.json() as { id: number }
-  }
-  const book = await mk('/api/pricing/books', { name: '写真集' })
-  const cover = await mk(`/api/pricing/books/${book.id}/components`, { role: 'cover', paper_id: 6, size_key: 'A3', color_class: 'color' })
-  const inner = await mk(`/api/pricing/books/${book.id}/components`, { role: 'inner', paper_id: 1, size_key: 'A4', color_class: 'bw', sort: 1 })
-  const bind = await mk('/api/pricing/finishings', { name: '骑马钉', pricing: 'per_book', price_c: 2000 })
-  const num = await mk('/api/pricing/finishings', { name: '页码', pricing: 'per_page', price_c: 3 })
-  await app.inject({ method: 'PUT', url: `/api/pricing/books/${book.id}/finishings/${bind.id}`, headers: { cookie: admin } })
-  await app.inject({ method: 'PUT', url: `/api/pricing/books/${book.id}/finishings/${num.id}`, headers: { cookie: admin } })
-  return { book: book.id, cover: cover.id, inner: inner.id, bind: bind.id, num: num.id }
+/** 直接 DB 插入搭一本带封面+内页+两道工艺的书 */
+function buildBook(): { book: number; cover: number; inner: number; bind: number; num: number } {
+  const bookId = Number(db.prepare("INSERT INTO book_products (name) VALUES ('写真集')").run().lastInsertRowid)
+  const coverId = Number(
+    db.prepare(
+      "INSERT INTO book_components (book_id, role, paper_id, size_key, color_class, duplex, sort) VALUES (?, 'cover', 6, 'A3', 'color', 0, 0)",
+    ).run(bookId).lastInsertRowid,
+  )
+  const innerId = Number(
+    db.prepare(
+      "INSERT INTO book_components (book_id, role, paper_id, size_key, color_class, duplex, sort) VALUES (?, 'inner', 1, 'A4', 'bw', 0, 1)",
+    ).run(bookId).lastInsertRowid,
+  )
+  const bindId = Number(
+    db.prepare("INSERT INTO finishing_ops (name, pricing, price_c) VALUES ('骑马钉', 'per_book', 2000)").run().lastInsertRowid,
+  )
+  const numId = Number(
+    db.prepare("INSERT INTO finishing_ops (name, pricing, price_c) VALUES ('页码', 'per_page', 3)").run().lastInsertRowid,
+  )
+  db.prepare('INSERT INTO book_finishings (book_id, finishing_id) VALUES (?, ?)').run(bookId, bindId)
+  db.prepare('INSERT INTO book_finishings (book_id, finishing_id) VALUES (?, ?)').run(bookId, numId)
+  return { book: bookId, cover: coverId, inner: innerId, bind: bindId, num: numId }
 }
-
-describe('管理域 CRUD', () => {
-  it('建书 + 组件 + 工艺挂接 → GET /api/pricing/books 汇总', async () => {
-    const admin = await login('staff@folioria.jp')
-    const ids = await buildBook(admin)
-    const res = await app.inject({ method: 'GET', url: '/api/pricing/books', headers: { cookie: admin } })
-    const books = res.json() as Array<{ id: number; components: unknown[]; finishing_ids: number[] }>
-    const book = books.find((b) => b.id === ids.book)!
-    expect(book.components).toHaveLength(2)
-    expect(book.finishing_ids.sort()).toEqual([ids.bind, ids.num].sort())
-  })
-
-  it('组件未知纸/尺寸 → 409；归档组件后目录不再含它', async () => {
-    const admin = await login('staff@folioria.jp')
-    const ids = await buildBook(admin)
-    const bad = await app.inject({
-      method: 'POST',
-      url: `/api/pricing/books/${ids.book}/components`,
-      headers: { cookie: admin },
-      payload: { role: 'insert', paper_id: 999, size_key: 'A4', color_class: 'color' },
-    })
-    expect(bad.statusCode).toBe(409)
-    const del = await app.inject({ method: 'DELETE', url: `/api/pricing/book-components/${ids.cover}`, headers: { cookie: admin } })
-    expect(del.statusCode).toBe(204)
-    const cat = await app.inject({ method: 'GET', url: '/api/calculator/books' })
-    const book = (cat.json() as { books: Array<{ id: number; components: unknown[] }> }).books.find((b) => b.id === ids.book)!
-    expect(book.components).toHaveLength(1) // 仅内页（封面已归档）
-  })
-
-  it('下单域无权访问管理 CRUD：customer POST /api/pricing/books → 403', async () => {
-    const cust = await login('a@cust.example')
-    const res = await app.inject({ method: 'POST', url: '/api/pricing/books', headers: { cookie: cust }, payload: { name: 'x' } })
-    expect(res.statusCode).toBe(403)
-  })
-})
 
 describe('下单域目录 / 实时报价（机器不可见）', () => {
   it('GET /api/calculator/books：组件无 mode_id；工艺带 price_display；§6 无 cost/profit/margin', async () => {
-    const admin = await login('staff@folioria.jp')
-    await buildBook(admin)
+    buildBook()
     const res = await app.inject({ method: 'GET', url: '/api/calculator/books' })
     expect(res.statusCode).toBe(200)
     const body = res.json() as { books: Array<{ components: Array<Record<string, unknown>>; finishings: Array<Record<string, unknown>> }> }
@@ -94,8 +66,7 @@ describe('下单域目录 / 实时报价（机器不可见）', () => {
   })
 
   it('POST /api/calculator/book-quote：unit 2191 / line_total 110；组件无 mode_id；工艺贡献 [2000,33]', async () => {
-    const admin = await login('staff@folioria.jp')
-    const ids = await buildBook(admin)
+    const ids = buildBook()
     const res = await app.inject({
       method: 'POST',
       url: '/api/calculator/book-quote',
@@ -116,8 +87,7 @@ describe('下单域目录 / 实时报价（机器不可见）', () => {
   })
 
   it('内页缺张数 → 422', async () => {
-    const admin = await login('staff@folioria.jp')
-    const ids = await buildBook(admin)
+    const ids = buildBook()
     const res = await app.inject({
       method: 'POST',
       url: '/api/calculator/book-quote',
@@ -127,9 +97,7 @@ describe('下单域目录 / 实时报价（机器不可见）', () => {
   })
 
   it('member 实时报价走内部价口径（internal_sell 覆盖生效）', async () => {
-    const admin = await login('staff@folioria.jp')
-    const ids = await buildBook(admin)
-    // 内页 combo（mode1×paper1）A4 内部价压到 5
+    const ids = buildBook()
     db.prepare("UPDATE combo_prices SET internal_sell_c = 5 WHERE combo_id = 1 AND size_key = 'A4'").run()
     const member = await login('m@member.example')
     const res = await app.inject({
@@ -139,7 +107,6 @@ describe('下单域目录 / 实时报价（机器不可见）', () => {
       payload: { book_id: ids.book, count: 1, components: [{ component_id: ids.inner, sheets_per_book: 10 }] },
     })
     const q = res.json() as { unit_price_c: number }
-    // 封面 88 + 内页 5×10=50 + per_book 2000 + per_page 3×11=33 = 2171（对外为 2191）
     expect(q.unit_price_c).toBe(2171)
   })
 })

@@ -430,12 +430,31 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
 
   app.get('/api/pricing/combos', { preHandler: requireAdmin }, async () => {
     const combos = db.prepare('SELECT * FROM combos ORDER BY id').all() as Array<{ id: number }>
-    const prices = db.prepare('SELECT * FROM combo_prices').all() as Array<{ combo_id: number }>
-    const priceMap = new Map<number, typeof prices>()
+    const prices = db.prepare('SELECT * FROM combo_prices').all() as Array<{
+      combo_id: number
+      size_key: string
+    }>
+    const tiers = db.prepare('SELECT * FROM combo_price_tiers ORDER BY min_qty').all() as Array<{
+      combo_id: number
+      size_key: string
+      min_qty: number
+      sell_c: number
+      internal_sell_c: number | null
+    }>
+    const tierMap = new Map<string, typeof tiers>()
+    for (const t of tiers) {
+      const key = `${t.combo_id}:${t.size_key}`
+      const arr = tierMap.get(key)
+      if (arr) arr.push(t)
+      else tierMap.set(key, [t])
+    }
+    const priceMap = new Map<number, Array<Record<string, unknown>>>()
     for (const p of prices) {
+      const key = `${p.combo_id}:${p.size_key}`
+      const row = { ...p, tiers: tierMap.get(key) ?? [] }
       const arr = priceMap.get(p.combo_id)
-      if (arr) arr.push(p)
-      else priceMap.set(p.combo_id, [p])
+      if (arr) arr.push(row)
+      else priceMap.set(p.combo_id, [row])
     }
     return combos.map((c) => ({ ...c, prices: priceMap.get(c.id) ?? [] }))
   })
@@ -506,6 +525,17 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     return reply.status(204).send()
   })
 
+  const TIER_SCHEMA = {
+    type: 'object',
+    required: ['min_qty', 'sell_c'],
+    additionalProperties: false,
+    properties: {
+      min_qty: { type: 'integer', minimum: 2 },
+      sell_c: { type: 'integer', minimum: 0 },
+      internal_sell_c: { type: ['integer', 'null'], minimum: 0 },
+    },
+  }
+
   app.put(
     '/api/pricing/combos/:id/prices/:sizeKey',
     {
@@ -518,6 +548,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
           properties: {
             sell_c: { type: ['integer', 'null'], minimum: 0 },
             internal_sell_c: { type: ['integer', 'null'], minimum: 0 },
+            tiers: { type: 'array', items: TIER_SCHEMA },
           },
         },
       },
@@ -528,7 +559,11 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       if (!db.prepare('SELECT 1 FROM combos WHERE id = ?').get(comboId)) {
         return reply.status(404).send({ error: 'not_found' })
       }
-      const b = req.body as { sell_c?: number | null; internal_sell_c?: number | null }
+      const b = req.body as {
+        sell_c?: number | null
+        internal_sell_c?: number | null
+        tiers?: Array<{ min_qty: number; sell_c: number; internal_sell_c?: number | null }>
+      }
       const existing = db
         .prepare('SELECT sell_c, internal_sell_c FROM combo_prices WHERE combo_id = ? AND size_key = ?')
         .get(comboId, sizeKey) as { sell_c: number | null; internal_sell_c: number | null } | undefined
@@ -536,12 +571,23 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       const internal =
         'internal_sell_c' in b ? (b.internal_sell_c ?? null) : (existing?.internal_sell_c ?? null)
       try {
-        db.prepare(
-          `INSERT INTO combo_prices (combo_id, size_key, sell_c, internal_sell_c)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(combo_id, size_key) DO UPDATE SET
-             sell_c = excluded.sell_c, internal_sell_c = excluded.internal_sell_c`,
-        ).run(comboId, sizeKey, sell, internal)
+        db.transaction(() => {
+          db.prepare(
+            `INSERT INTO combo_prices (combo_id, size_key, sell_c, internal_sell_c)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(combo_id, size_key) DO UPDATE SET
+               sell_c = excluded.sell_c, internal_sell_c = excluded.internal_sell_c`,
+          ).run(comboId, sizeKey, sell, internal)
+          if (b.tiers !== undefined) {
+            db.prepare('DELETE FROM combo_price_tiers WHERE combo_id = ? AND size_key = ?').run(comboId, sizeKey)
+            const ins = db.prepare(
+              'INSERT INTO combo_price_tiers (combo_id, size_key, min_qty, sell_c, internal_sell_c) VALUES (?, ?, ?, ?, ?)',
+            )
+            for (const t of b.tiers) {
+              ins.run(comboId, sizeKey, t.min_qty, t.sell_c, t.internal_sell_c ?? null)
+            }
+          }
+        })()
       } catch (err) {
         if (isConstraint(err, 'FOREIGN KEY')) {
           return reply.status(409).send({ error: 'unknown_size' })
@@ -553,229 +599,13 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         action: 'pricing.combo_price',
         targetType: 'combo',
         targetId: String(comboId),
-        summary: `combo ${comboId} ${sizeKey}: sell_c=${sell ?? 'auto'} internal=${internal ?? 'auto'}`,
+        summary: `combo ${comboId} ${sizeKey}: sell_c=${sell ?? 'auto'} internal=${internal ?? 'auto'}${b.tiers ? ` tiers=${b.tiers.length}` : ''}`,
       })
       return db
         .prepare('SELECT * FROM combo_prices WHERE combo_id = ? AND size_key = ?')
         .get(comboId, sizeKey)
     },
   )
-
-  // ---------- 管理域: 书成品 / 组件 / 工艺（D27） ----------
-
-  // 书成品 + 组件 + 工艺一并返回（admin 维护视图）
-  app.get('/api/pricing/books', { preHandler: requireAdmin }, async () => {
-    const books = db.prepare('SELECT * FROM book_products ORDER BY id').all() as Array<{ id: number }>
-    const comps = db.prepare('SELECT * FROM book_components ORDER BY book_id, sort, id').all() as Array<{
-      book_id: number
-    }>
-    const links = db.prepare('SELECT book_id, finishing_id FROM book_finishings').all() as Array<{
-      book_id: number
-      finishing_id: number
-    }>
-    const compMap = new Map<number, typeof comps>()
-    for (const c of comps) {
-      const arr = compMap.get(c.book_id)
-      if (arr) arr.push(c)
-      else compMap.set(c.book_id, [c])
-    }
-    const linkMap = new Map<number, number[]>()
-    for (const l of links) {
-      const arr = linkMap.get(l.book_id)
-      if (arr) arr.push(l.finishing_id)
-      else linkMap.set(l.book_id, [l.finishing_id])
-    }
-    return books.map((b) => ({
-      ...b,
-      components: compMap.get(b.id) ?? [],
-      finishing_ids: linkMap.get(b.id) ?? [],
-    }))
-  })
-
-  app.post(
-    '/api/pricing/books',
-    {
-      preHandler: requireAdmin,
-      schema: {
-        body: {
-          type: 'object',
-          required: ['name'],
-          additionalProperties: false,
-          properties: { name: { type: 'string', minLength: 1 } },
-        },
-      },
-    },
-    async (req, reply) => {
-      const b = req.body as { name: string }
-      const { lastInsertRowid } = db.prepare('INSERT INTO book_products (name) VALUES (?)').run(b.name)
-      logEdit(req.user?.id ?? null, 'pricing.book', String(lastInsertRowid), `新建书成品 ${b.name}`)
-      return reply.status(201).send(db.prepare('SELECT * FROM book_products WHERE id = ?').get(lastInsertRowid))
-    },
-  )
-
-  app.patch(
-    '/api/pricing/books/:id',
-    {
-      preHandler: requireAdmin,
-      schema: {
-        params: ID_PARAM,
-        body: {
-          type: 'object',
-          additionalProperties: false,
-          minProperties: 1,
-          properties: { name: { type: 'string', minLength: 1 }, archived: { type: 'boolean' } },
-        },
-      },
-    },
-    async (req, reply) => {
-      const id = Number((req.params as { id: string }).id)
-      const existing = db.prepare('SELECT * FROM book_products WHERE id = ?').get(id) as
-        | { name: string; archived: number }
-        | undefined
-      if (!existing) return reply.status(404).send({ error: 'not_found' })
-      const b = req.body as { name?: string; archived?: boolean }
-      db.prepare('UPDATE book_products SET name = ?, archived = ? WHERE id = ?').run(
-        b.name ?? existing.name,
-        b.archived === undefined ? existing.archived : b.archived ? 1 : 0,
-        id,
-      )
-      logEdit(req.user?.id ?? null, 'pricing.book', id, `改书成品 ${id}`)
-      return db.prepare('SELECT * FROM book_products WHERE id = ?').get(id)
-    },
-  )
-
-  app.delete('/api/pricing/books/:id', { preHandler: requireAdmin, schema: { params: ID_PARAM } }, async (req, reply) => {
-    const id = Number((req.params as { id: string }).id)
-    const { changes } = db.prepare('UPDATE book_products SET archived = 1 WHERE id = ?').run(id)
-    if (changes === 0) return reply.status(404).send({ error: 'not_found' })
-    logEdit(req.user?.id ?? null, 'pricing.book', id, `归档书成品 ${id}`)
-    return reply.status(204).send()
-  })
-
-  const COMPONENT_PROPS = {
-    role: { type: 'string', enum: ['cover', 'inner', 'insert'] },
-    paper_id: { type: 'integer', minimum: 1 },
-    size_key: { type: 'string', minLength: 1 },
-    color_class: { type: 'string', minLength: 1 },
-    duplex: { type: 'boolean' },
-    sort: { type: 'integer' },
-  }
-
-  app.post(
-    '/api/pricing/books/:id/components',
-    {
-      preHandler: requireAdmin,
-      schema: {
-        params: ID_PARAM,
-        body: {
-          type: 'object',
-          required: ['role', 'paper_id', 'size_key', 'color_class'],
-          additionalProperties: false,
-          properties: COMPONENT_PROPS,
-        },
-      },
-    },
-    async (req, reply) => {
-      const bookId = Number((req.params as { id: string }).id)
-      if (!db.prepare('SELECT 1 FROM book_products WHERE id = ?').get(bookId)) {
-        return reply.status(404).send({ error: 'book_not_found' })
-      }
-      const b = req.body as {
-        role: string
-        paper_id: number
-        size_key: string
-        color_class: string
-        duplex?: boolean
-        sort?: number
-      }
-      let lastInsertRowid: number | bigint
-      try {
-        ;({ lastInsertRowid } = db
-          .prepare(
-            `INSERT INTO book_components (book_id, role, paper_id, size_key, color_class, duplex, sort)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(bookId, b.role, b.paper_id, b.size_key, b.color_class, b.duplex ? 1 : 0, b.sort ?? 0))
-      } catch (err) {
-        if (isConstraint(err, 'FOREIGN KEY')) return reply.status(409).send({ error: 'unknown_paper_or_size' })
-        throw err
-      }
-      logEdit(req.user?.id ?? null, 'pricing.book_component', String(lastInsertRowid), `书 ${bookId} 增组件 ${b.role}`)
-      return reply.status(201).send(db.prepare('SELECT * FROM book_components WHERE id = ?').get(lastInsertRowid))
-    },
-  )
-
-  app.patch(
-    '/api/pricing/book-components/:id',
-    {
-      preHandler: requireAdmin,
-      schema: {
-        params: ID_PARAM,
-        body: {
-          type: 'object',
-          additionalProperties: false,
-          minProperties: 1,
-          properties: { ...COMPONENT_PROPS, archived: { type: 'boolean' } },
-        },
-      },
-    },
-    async (req, reply) => {
-      const id = Number((req.params as { id: string }).id)
-      const existing = db.prepare('SELECT * FROM book_components WHERE id = ?').get(id) as
-        | Record<string, unknown>
-        | undefined
-      if (!existing) return reply.status(404).send({ error: 'not_found' })
-      const b = req.body as Record<string, unknown>
-      const merged = { ...existing, ...b }
-      if (typeof b['duplex'] === 'boolean') merged['duplex'] = b['duplex'] ? 1 : 0
-      if (typeof b['archived'] === 'boolean') merged['archived'] = b['archived'] ? 1 : 0
-      try {
-        db.prepare(
-          `UPDATE book_components SET role=@role, paper_id=@paper_id, size_key=@size_key,
-             color_class=@color_class, duplex=@duplex, sort=@sort, archived=@archived WHERE id=@id`,
-        ).run(merged)
-      } catch (err) {
-        if (isConstraint(err, 'FOREIGN KEY')) return reply.status(409).send({ error: 'unknown_paper_or_size' })
-        throw err
-      }
-      logEdit(req.user?.id ?? null, 'pricing.book_component', id, `改书组件 ${id}`)
-      return db.prepare('SELECT * FROM book_components WHERE id = ?').get(id)
-    },
-  )
-
-  app.delete('/api/pricing/book-components/:id', { preHandler: requireAdmin, schema: { params: ID_PARAM } }, async (req, reply) => {
-    const id = Number((req.params as { id: string }).id)
-    const { changes } = db.prepare('UPDATE book_components SET archived = 1 WHERE id = ?').run(id)
-    if (changes === 0) return reply.status(404).send({ error: 'not_found' })
-    logEdit(req.user?.id ?? null, 'pricing.book_component', id, `归档书组件 ${id}`)
-    return reply.status(204).send()
-  })
-
-  // 工艺挂接 / 摘除（幂等）
-  app.put('/api/pricing/books/:id/finishings/:fid', { preHandler: requireAdmin }, async (req, reply) => {
-    const { id, fid } = req.params as { id: string; fid: string }
-    const bookId = Number(id)
-    const finId = Number(fid)
-    if (!db.prepare('SELECT 1 FROM book_products WHERE id = ?').get(bookId)) {
-      return reply.status(404).send({ error: 'book_not_found' })
-    }
-    if (!db.prepare('SELECT 1 FROM finishing_ops WHERE id = ?').get(finId)) {
-      return reply.status(404).send({ error: 'finishing_not_found' })
-    }
-    db.prepare('INSERT OR IGNORE INTO book_finishings (book_id, finishing_id) VALUES (?, ?)').run(bookId, finId)
-    logEdit(req.user?.id ?? null, 'pricing.book_finishing', bookId, `书 ${bookId} 挂工艺 ${finId}`)
-    return reply.status(204).send()
-  })
-
-  app.delete('/api/pricing/books/:id/finishings/:fid', { preHandler: requireAdmin }, async (req, reply) => {
-    const { id, fid } = req.params as { id: string; fid: string }
-    const { changes } = db
-      .prepare('DELETE FROM book_finishings WHERE book_id = ? AND finishing_id = ?')
-      .run(Number(id), Number(fid))
-    if (changes === 0) return reply.status(404).send({ error: 'not_found' })
-    logEdit(req.user?.id ?? null, 'pricing.book_finishing', Number(id), `书 ${id} 摘工艺 ${fid}`)
-    return reply.status(204).send()
-  })
 
   // 工艺库 CRUD
   app.get('/api/pricing/finishings', { preHandler: requireAdmin }, async () =>
@@ -856,14 +686,31 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
 
   app.get('/api/admin/pricing/quotes', { preHandler: requireAdmin }, async () => {
     const currency = baseCurrency(db)
-    return listQuotable(db).map((q) => ({
-      ...q,
-      ink_display: formatMoneyC(q.ink_c, currency),
-      paper_display: formatMoneyC(q.paper_c, currency),
-      total_display: formatMoneyC(q.total_c, currency),
-      auto_display: formatMoneyC(q.auto_sell_c, currency),
-      sell_display: formatMoneyC(q.sell_c, currency),
-    }))
+    const tierKeys = new Set(
+      (db.prepare('SELECT DISTINCT combo_id, size_key FROM combo_price_tiers').all() as Array<{
+        combo_id: number
+        size_key: string
+      }>).map((t) => `${t.combo_id}:${t.size_key}`),
+    )
+    const combos = new Map(
+      (db.prepare('SELECT id, mode_id, paper_id FROM combos').all() as Array<{
+        id: number
+        mode_id: number
+        paper_id: number
+      }>).map((c) => [`${c.mode_id}:${c.paper_id}`, c.id]),
+    )
+    return listQuotable(db).map((q) => {
+      const comboId = combos.get(`${q.mode_id}:${q.paper_id}`)
+      return {
+        ...q,
+        ink_display: formatMoneyC(q.ink_c, currency),
+        paper_display: formatMoneyC(q.paper_c, currency),
+        total_display: formatMoneyC(q.total_c, currency),
+        auto_display: formatMoneyC(q.auto_sell_c, currency),
+        sell_display: formatMoneyC(q.sell_c, currency),
+        has_tiers: comboId != null && tierKeys.has(`${comboId}:${q.size_key}`),
+      }
+    })
   })
 
   app.get('/api/admin/pricing/export', { preHandler: requireAdmin }, async (_req, reply) => {

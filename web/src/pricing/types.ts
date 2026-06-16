@@ -14,6 +14,13 @@ export interface QuoteDto {
   total_display: string
   auto_display: string
   sell_display: string
+  has_tiers: boolean
+}
+
+export interface TierRow {
+  min_qty: number
+  sell_c: number
+  internal_sell_c: number | null
 }
 
 export interface ComboDto {
@@ -21,7 +28,13 @@ export interface ComboDto {
   mode_id: number
   paper_id: number
   archived: number
-  prices: Array<{ combo_id: number; size_key: string; sell_c: number | null; internal_sell_c: number | null }>
+  prices: Array<{
+    combo_id: number
+    size_key: string
+    sell_c: number | null
+    internal_sell_c: number | null
+    tiers: TierRow[]
+  }>
 }
 
 export interface ModeDto {
@@ -62,26 +75,6 @@ export interface SizeDto {
 export interface PrinterDto {
   id: number
   code: string
-}
-
-export interface BookComponentRow {
-  id: number
-  book_id: number
-  role: string
-  paper_id: number
-  size_key: string
-  color_class: string
-  duplex: number
-  sort: number
-  archived: number
-}
-
-export interface BookProductDto {
-  id: number
-  name: string
-  archived: number
-  components: BookComponentRow[]
-  finishing_ids: number[]
 }
 
 export interface FinishingDto {

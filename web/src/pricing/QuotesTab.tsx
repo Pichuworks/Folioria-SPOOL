@@ -1,6 +1,6 @@
 import { useRef, useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Leader, Paginator, PillBtn, specInput, usePagination } from '../spec'
+import { Field, Leader, Modal, Paginator, PillBtn, specInput, usePagination } from '../spec'
 import {
   actionBtn,
   FILTER_OPTIONS,
@@ -11,6 +11,7 @@ import {
   type PaperDto,
   type QuoteDto,
   type SizeDto,
+  type TierRow,
 } from './types'
 
 interface QuoteRow {
@@ -20,27 +21,149 @@ interface QuoteRow {
   cells: Map<string, QuoteDto>
 }
 
-function PriceEditPanel({
+/* ── margin helper ── */
+function MarginPreview({ sell, totalC }: { sell: string; totalC: number }) {
+  if (sell.trim() === '') return null
+  const s = Number(sell)
+  if (!Number.isFinite(s) || s <= 0) return <span className="text-[12px] text-dim">N/A</span>
+  const margin = ((s - totalC) / s) * 100
+  const cls = margin < 0 ? 'text-wine-ink' : margin < 67 ? 'text-warn' : 'text-ink'
+  const label = margin < 0 ? '亏本' : margin < 67 ? '低毛利' : ''
+  return (
+    <span className={`text-[12px] font-mono ${cls}`}>
+      毛利 {margin.toFixed(1)}%{label && ` · ${label}`}
+    </span>
+  )
+}
+
+/* ── tier inline editor ── */
+function TierEditor({
+  tiers,
+  onChange,
+}: {
+  tiers: TierRow[]
+  onChange: (t: TierRow[]) => void
+}) {
+  const [qty, setQty] = useState('')
+  const [price, setPrice] = useState('')
+  const [iPrice, setIPrice] = useState('')
+
+  const add = () => {
+    const q = Math.trunc(Number(qty))
+    const p = Math.trunc(Number(price))
+    if (q < 2 || p < 0) return
+    if (tiers.some((t) => t.min_qty === q)) return
+    const ip = iPrice.trim() === '' ? null : Math.trunc(Number(iPrice))
+    const next = [...tiers, { min_qty: q, sell_c: p, internal_sell_c: ip }].sort(
+      (a, b) => a.min_qty - b.min_qty,
+    )
+    onChange(next)
+    setQty('')
+    setPrice('')
+    setIPrice('')
+  }
+
+  const remove = (minQty: number) => onChange(tiers.filter((t) => t.min_qty !== minQty))
+
+  return (
+    <div>
+      <span className="mb-2 block font-mono text-[10px] tracking-[.14em] text-dim">梯度定价 · TIERS</span>
+      {tiers.length > 0 && (
+        <table className="mb-2 w-full text-[12.5px]">
+          <thead>
+            <tr className="border-b border-line text-left">
+              <th className="pb-1 font-mono text-[10px] tracking-[.12em] text-dim">{'≥'} 张数</th>
+              <th className="pb-1 font-mono text-[10px] tracking-[.12em] text-dim">售价 _c</th>
+              <th className="pb-1 font-mono text-[10px] tracking-[.12em] text-dim">内部价 _c</th>
+              <th className="w-8 pb-1" />
+            </tr>
+          </thead>
+          <tbody>
+            {tiers.map((t) => (
+              <tr key={t.min_qty} className="border-b border-line last:border-b-0">
+                <td className="py-[4px] font-mono text-ink">{t.min_qty}</td>
+                <td className="py-[4px] font-mono text-ink">{t.sell_c.toLocaleString()}</td>
+                <td className="py-[4px] font-mono text-dim">{t.internal_sell_c?.toLocaleString() ?? '—'}</td>
+                <td className="py-[4px] text-right">
+                  <button type="button" className={`${actionBtn} text-dim`} onClick={() => remove(t.min_qty)}>
+                    {'×'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="flex items-end gap-2">
+        <Field label={`${'≥'} 张数`}>
+          <input
+            type="number"
+            min={2}
+            className={`${specInput} w-20`}
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+          />
+        </Field>
+        <Field label="售价 _c">
+          <input
+            type="number"
+            min={0}
+            className={`${specInput} w-24`}
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+          />
+        </Field>
+        <Field label="内部价 _c">
+          <input
+            type="number"
+            min={0}
+            className={`${specInput} w-24`}
+            value={iPrice}
+            onChange={(e) => setIPrice(e.target.value)}
+          />
+        </Field>
+        <button
+          type="button"
+          className="mb-[2px] px-2 py-1.5 font-mono text-[10px] tracking-[.1em] text-wine-ink hover:opacity-70"
+          onClick={add}
+        >
+          + 添加
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── price edit modal ── */
+function PriceEditModal({
   combo,
   quote,
+  modeName,
+  paperName,
+  onClose,
   onDone,
 }: {
   combo: ComboDto
   quote: QuoteDto
+  modeName: string
+  paperName: string
+  onClose: () => void
   onDone: () => void
 }) {
   const existing = combo.prices.find((p) => p.size_key === quote.size_key)
   const [sell, setSell] = useState(existing?.sell_c == null ? '' : String(existing.sell_c))
   const [internal, setInternal] = useState(existing?.internal_sell_c == null ? '' : String(existing.internal_sell_c))
+  const [tiers, setTiers] = useState<TierRow[]>(existing?.tiers ?? [])
   const [error, setError] = useState<string | null>(null)
+
+  const parse = (v: string): number | null | false => {
+    if (v.trim() === '') return null
+    const n = Number(v)
+    return Number.isSafeInteger(n) && n >= 0 ? n : false
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    const parse = (v: string): number | null | false => {
-      if (v.trim() === '') return null
-      const n = Number(v)
-      return Number.isSafeInteger(n) && n >= 0 ? n : false
-    }
     const s = parse(sell)
     const i = parse(internal)
     if (s === false || i === false) {
@@ -50,28 +173,68 @@ function PriceEditPanel({
     const res = await send('PUT', `/api/pricing/combos/${combo.id}/prices/${quote.size_key}`, {
       sell_c: s,
       internal_sell_c: i,
+      tiers,
     })
     if (res.ok) onDone()
     else setError('保存失败')
   }
 
+  const f = FLAG_STYLE[quote.flag]
+
   return (
-    <form onSubmit={(e) => void submit(e)} className="flex flex-wrap items-end gap-3 border border-line bg-card p-3.5">
-      <span className="w-full font-mono text-[10px] tracking-[.14em] text-dim">
-        {quote.size_key} · 墨耗 {quote.ink_display} + 纸张 {quote.paper_display} = 成本 {quote.total_display} · 地板 {quote.auto_display}
-      </span>
-      <Field label="手动售价 _c（留空 = 自动地板价）">
-        <input type="number" min={0} className={specInput} value={sell} onChange={(e) => setSell(e.target.value)} />
-      </Field>
-      <Field label="内部价 _c（留空 = 同对外）">
-        <input type="number" min={0} className={specInput} value={internal} onChange={(e) => setInternal(e.target.value)} />
-      </Field>
-      <PillBtn>保存</PillBtn>
-      {error && <p className="w-full text-[12px] text-wine-ink">{error}</p>}
-    </form>
+    <Modal open wide title="编辑报价" onClose={onClose}>
+      <div className="mb-4">
+        <span className="text-[14px] font-medium text-ink">{modeName}</span>
+        <span className="text-dim"> {'×'} </span>
+        <span className="text-[14px] text-ink">{paperName}</span>
+        <span className="ml-2 font-mono text-[12px] text-dim">@ {quote.size_key}</span>
+      </div>
+
+      {/* Cost breakdown */}
+      <div className="mb-4 border border-line bg-deep/30 px-4 py-3">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[12.5px]">
+          <span className="text-dim">墨耗</span>
+          <span className="font-mono text-ink">{quote.ink_display}</span>
+          <span className="text-dim">纸张</span>
+          <span className="font-mono text-ink">{quote.paper_display}</span>
+          <span className="text-dim">总成本</span>
+          <span className="font-mono font-medium text-ink">{quote.total_display}</span>
+          <span className="text-dim">自动地板价</span>
+          <span className="font-mono text-ink">{quote.auto_display}</span>
+          <span className="text-dim">当前状态</span>
+          <span className={`font-mono text-[12px] ${f.cls}`}>{f.label}</span>
+        </div>
+      </div>
+
+      {/* Edit form */}
+      <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="手动售价 _c（留空 = 自动地板价）">
+            <input type="number" min={0} className={specInput} value={sell} onChange={(e) => setSell(e.target.value)} />
+          </Field>
+          <Field label="内部价 _c（留空 = 同对外）">
+            <input type="number" min={0} className={specInput} value={internal} onChange={(e) => setInternal(e.target.value)} />
+          </Field>
+        </div>
+
+        <MarginPreview sell={sell || String(quote.sell_c)} totalC={quote.total_c} />
+
+        {/* Separator */}
+        <div className="border-t border-line" />
+
+        {/* Tiers */}
+        <TierEditor tiers={tiers} onChange={setTiers} />
+
+        <div className="flex items-center gap-3 pt-1">
+          <PillBtn>保存</PillBtn>
+          {error && <span className="text-[12px] text-wine-ink">{error}</span>}
+        </div>
+      </form>
+    </Modal>
   )
 }
 
+/* ── add combo form (unchanged) ── */
 function AddComboForm({
   modes,
   papers,
@@ -152,7 +315,7 @@ export default function QuotesTab({
 }) {
   const [search, setSearch] = useState('')
   const [flagFilter, setFlagFilter] = useState('all')
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editTarget, setEditTarget] = useState<{ quote: QuoteDto; combo: ComboDto } | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ updated: number; skipped: { row: number; reason: string }[] } | null>(null)
@@ -193,15 +356,6 @@ export default function QuotesTab({
   }, [rows, search, flagFilter, modeName, paperName])
 
   const { page, totalPages, paged, setPage } = usePagination(filtered, 20)
-
-  const editingQuote = useMemo(() => {
-    if (!editing) return null
-    const [mId, pId, sKey] = editing.split(':')
-    const row = rows.find((r) => r.key === `${mId}:${pId}`)
-    const q = row?.cells.get(sKey!)
-    const combo = comboBy.get(`${mId}:${pId}`)
-    return q && combo ? { quote: q, combo } : null
-  }, [editing, rows, comboBy])
 
   const archiveCombo = async (combo: ComboDto) => {
     if (!window.confirm('归档该组合？其全部尺寸将从报价中下架。')) return
@@ -300,7 +454,7 @@ export default function QuotesTab({
                 <span className="ml-2 text-wine-ink">跳过 {importResult.skipped.length} 条</span>
               )}
             </span>
-            <button type="button" className="text-dim hover:text-ink" onClick={() => setImportResult(null)}>✕</button>
+            <button type="button" className="text-dim hover:text-ink" onClick={() => setImportResult(null)}>{'✕'}</button>
           </div>
           {importResult.skipped.length > 0 && (
             <ul className="mt-2 space-y-0.5 font-mono text-[11px] text-dim">
@@ -328,7 +482,7 @@ export default function QuotesTab({
           <thead>
             <tr className="border-b border-ink bg-card">
               <th className="sticky left-0 z-10 min-w-[220px] bg-card px-4 py-2.5 text-left font-mono text-[10.5px] tracking-[.14em] text-dim">
-                模式 × 纸张
+                模式 {'×'} 纸张
               </th>
               {sizes.map((s) => (
                 <th
@@ -350,7 +504,7 @@ export default function QuotesTab({
                     <span className="text-[13px] font-medium text-ink">
                       {modeName.get(row.mode_id)}
                     </span>
-                    <span className="text-dim"> × </span>
+                    <span className="text-dim"> {'×'} </span>
                     <span className="text-[13px] text-ink">{paperName.get(row.paper_id)}</span>
                   </td>
                   {sizes.map((s) => {
@@ -358,18 +512,16 @@ export default function QuotesTab({
                     if (!q) {
                       return (
                         <td key={s.key} className="px-2 py-[9px] text-center">
-                          <span className="text-dim/40">—</span>
+                          <span className="text-dim/40">{'—'}</span>
                         </td>
                       )
                     }
                     const f = FLAG_STYLE[q.flag]
-                    const cellKey = `${row.mode_id}:${row.paper_id}:${s.key}`
-                    const isEditing = editing === cellKey
                     return (
                       <td
                         key={s.key}
-                        className={`cursor-pointer px-2 py-[9px] text-center transition-colors ${FLAG_BG[q.flag] ?? ''} ${isEditing ? 'ring-2 ring-wine ring-inset' : 'hover:bg-deep/40'}`}
-                        onClick={() => combo && setEditing(isEditing ? null : cellKey)}
+                        className={`cursor-pointer px-2 py-[9px] text-center transition-colors ${FLAG_BG[q.flag] ?? ''} hover:bg-deep/40`}
+                        onClick={() => combo && setEditTarget({ quote: q, combo })}
                         title={`墨耗 ${q.ink_display} + 纸张 ${q.paper_display} = 成本 ${q.total_display}\n地板价 ${q.auto_display} · 售价 ${q.sell_display} (${q.source})`}
                       >
                         <span className={`font-mono text-[12.5px] ${f.cls === 'text-dim' ? 'text-ink' : f.cls}`}>
@@ -379,6 +531,9 @@ export default function QuotesTab({
                           <span className={`ml-0.5 text-[9px] ${f.cls}`}>
                             {q.flag === 'LOSS' ? '!' : '~'}
                           </span>
+                        )}
+                        {q.has_tiers && (
+                          <span className="ml-0.5 text-[9px] text-dim">{'▾'}</span>
                         )}
                       </td>
                     )
@@ -408,18 +563,19 @@ export default function QuotesTab({
         </table>
       </div>
 
-      {/* Edit panel below table */}
-      {editingQuote && (
-        <div className="mt-4">
-          <PriceEditPanel
-            combo={editingQuote.combo}
-            quote={editingQuote.quote}
-            onDone={() => {
-              setEditing(null)
-              onChanged()
-            }}
-          />
-        </div>
+      {/* Price edit modal */}
+      {editTarget && (
+        <PriceEditModal
+          combo={editTarget.combo}
+          quote={editTarget.quote}
+          modeName={modeName.get(editTarget.quote.mode_id) ?? ''}
+          paperName={paperName.get(editTarget.quote.paper_id) ?? ''}
+          onClose={() => setEditTarget(null)}
+          onDone={() => {
+            setEditTarget(null)
+            onChanged()
+          }}
+        />
       )}
 
       <Paginator page={page} totalPages={totalPages} onPage={setPage} />

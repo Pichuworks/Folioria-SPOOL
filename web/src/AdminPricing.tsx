@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import BooksTab from './pricing/BooksTab'
 import FinishingsTab from './pricing/FinishingsTab'
 import ModesTab from './pricing/ModesTab'
 import PapersTab from './pricing/PapersTab'
 import QuotesTab from './pricing/QuotesTab'
 import SizesTab from './pricing/SizesTab'
 import type {
-  BookProductDto,
   ComboDto,
   FinishingDto,
   ModeDto,
@@ -24,7 +22,6 @@ const TABS = [
   { key: 'papers', label: '纸张' },
   { key: 'modes', label: '模式' },
   { key: 'sizes', label: '尺寸' },
-  { key: 'books', label: '书册' },
   { key: 'finishings', label: '工艺' },
 ] as const
 
@@ -38,7 +35,6 @@ function PricingBody() {
   const [papers, setPapers] = useState<PaperDto[] | null>(null)
   const [sizes, setSizes] = useState<SizeDto[] | null>(null)
   const [printers, setPrinters] = useState<PrinterDto[] | null>(null)
-  const [books, setBooks] = useState<BookProductDto[] | null>(null)
   const [finishings, setFinishings] = useState<FinishingDto[] | null>(null)
 
   const reload = useCallback(() => {
@@ -49,13 +45,12 @@ function PricingBody() {
       send<PaperDto[]>('GET', '/api/pricing/papers').then((r) => r.ok && setPapers(r.data)),
       send<SizeDto[]>('GET', '/api/pricing/sizes').then((r) => r.ok && setSizes(r.data)),
       send<PrinterDto[]>('GET', '/api/equipment').then((r) => r.ok && setPrinters(r.data)),
-      send<BookProductDto[]>('GET', '/api/pricing/books').then((r) => r.ok && setBooks(r.data)),
       send<FinishingDto[]>('GET', '/api/pricing/finishings').then((r) => r.ok && setFinishings(r.data)),
     ])
   }, [])
   useEffect(reload, [reload])
 
-  if (!quotes || !combos || !modes || !papers || !sizes || !printers || !books || !finishings) {
+  if (!quotes || !combos || !modes || !papers || !sizes || !printers || !finishings) {
     return <Skeleton />
   }
 
@@ -64,7 +59,6 @@ function PricingBody() {
     papers: papers.filter((p) => p.archived === 0).length,
     modes: modes.filter((m) => m.archived === 0).length,
     sizes: sizes.length,
-    books: books.filter((b) => b.archived === 0).length,
     finishings: finishings.filter((f) => f.archived === 0).length,
   }
 
@@ -85,9 +79,6 @@ function PricingBody() {
       )}
       {tab === 'sizes' && (
         <SizesTab sizes={sizes} onChanged={reload} />
-      )}
-      {tab === 'books' && (
-        <BooksTab books={books} finishings={finishings} papers={papers} sizes={sizes} onChanged={reload} />
       )}
       {tab === 'finishings' && (
         <FinishingsTab finishings={finishings} onChanged={reload} />

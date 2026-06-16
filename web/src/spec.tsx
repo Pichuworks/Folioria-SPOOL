@@ -167,7 +167,7 @@ export const PillBtn = ({ children, full, type, onClick }: { children: ReactNode
 
 /* ── Modal ── */
 
-export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+export function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: ReactNode }) {
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -178,7 +178,7 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" onClick={onClose}>
-      <div className="mx-4 w-full max-w-lg border border-ink bg-paper p-6 shadow-e1" onClick={(e) => e.stopPropagation()}>
+      <div className={`mx-4 w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} border border-ink bg-paper p-6 shadow-e1`} onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-baseline justify-between border-b border-ink pb-3">
           <h3 className="text-[20px] font-semibold text-ink">{title}</h3>
           <button type="button" onClick={onClose} className="text-[18px] text-dim hover:text-ink">×</button>

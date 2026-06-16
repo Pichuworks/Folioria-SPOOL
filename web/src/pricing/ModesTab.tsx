@@ -1,9 +1,19 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Leader, PillBtn, specInput } from '../spec'
+import { Field, Leader, Modal, PillBtn, specInput } from '../spec'
 import { actionBtn, type ModeDto, type PrinterDto, type SizeDto } from './types'
 
-function ModeEditPanel({ mode, sizes, onDone }: { mode: ModeDto; sizes: SizeDto[]; onDone: () => void }) {
+function ModeEditModal({
+  mode,
+  sizes,
+  onClose,
+  onDone,
+}: {
+  mode: ModeDto
+  sizes: SizeDto[]
+  onClose: () => void
+  onDone: () => void
+}) {
   const [name, setName] = useState(mode.name)
   const [inkPrice, setInkPrice] = useState(String(mode.ink_price_c))
   const [mlPerBatch, setMlPerBatch] = useState(mode.ml_per_batch == null ? '' : String(mode.ml_per_batch))
@@ -38,41 +48,45 @@ function ModeEditPanel({ mode, sizes, onDone }: { mode: ModeDto; sizes: SizeDto[
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="mt-2 grid grid-cols-2 items-end gap-3 border border-line bg-card p-3.5 md:grid-cols-4">
-      <Field label="名称">
-        <input type="text" required className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
-      </Field>
-      <Field label={mode.pricing_mode === 'ml' ? '墨价 _c/ml' : '墨价 _c/套'}>
-        <input type="number" min={0} required className={specInput} value={inkPrice} onChange={(e) => setInkPrice(e.target.value)} />
-      </Field>
-      {mode.pricing_mode === 'ml' && (
-        <Field label="每批 ml">
-          <input type="number" min={1} className={specInput} value={mlPerBatch} onChange={(e) => setMlPerBatch(e.target.value)} />
+    <Modal open title={`编辑模式 · ${mode.name}`} onClose={onClose}>
+      <form onSubmit={(e) => void submit(e)} className="grid grid-cols-2 items-end gap-4">
+        <Field label="名称">
+          <input type="text" required className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-      )}
-      <Field label={`产能（${refSize} 张/批）`}>
-        <input type="number" min={1} required className={specInput} value={yieldSheets} onChange={(e) => setYieldSheets(e.target.value)} />
-      </Field>
-      <Field label="基准尺寸">
-        <select className={specInput} value={refSize} onChange={(e) => setRefSize(e.target.value)}>
-          {sizes.map((s) => (
-            <option key={s.key} value={s.key}>{s.key}</option>
-          ))}
-        </select>
-      </Field>
-      <Field label="最大尺寸">
-        <select className={specInput} value={maxSize} onChange={(e) => setMaxSize(e.target.value)}>
-          {sizes.map((s) => (
-            <option key={s.key} value={s.key}>{s.key}</option>
-          ))}
-        </select>
-      </Field>
-      <Field label="色彩档（bw/color/photo…）">
-        <input type="text" className={specInput} value={colorClass} onChange={(e) => setColorClass(e.target.value)} />
-      </Field>
-      <PillBtn>保存</PillBtn>
-      {error && <p className="col-span-full text-[12px] text-wine-ink">{error}</p>}
-    </form>
+        <Field label={mode.pricing_mode === 'ml' ? '墨价 _c/ml' : '墨价 _c/套'}>
+          <input type="number" min={0} required className={specInput} value={inkPrice} onChange={(e) => setInkPrice(e.target.value)} />
+        </Field>
+        {mode.pricing_mode === 'ml' && (
+          <Field label="每批 ml">
+            <input type="number" min={1} className={specInput} value={mlPerBatch} onChange={(e) => setMlPerBatch(e.target.value)} />
+          </Field>
+        )}
+        <Field label={`产能（${refSize} 张/批）`}>
+          <input type="number" min={1} required className={specInput} value={yieldSheets} onChange={(e) => setYieldSheets(e.target.value)} />
+        </Field>
+        <Field label="基准尺寸">
+          <select className={specInput} value={refSize} onChange={(e) => setRefSize(e.target.value)}>
+            {sizes.map((s) => (
+              <option key={s.key} value={s.key}>{s.key}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="最大尺寸">
+          <select className={specInput} value={maxSize} onChange={(e) => setMaxSize(e.target.value)}>
+            {sizes.map((s) => (
+              <option key={s.key} value={s.key}>{s.key}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="色彩档（bw/color/photo…）">
+          <input type="text" className={specInput} value={colorClass} onChange={(e) => setColorClass(e.target.value)} />
+        </Field>
+        <div className="flex items-end pb-1">
+          <PillBtn>保存</PillBtn>
+        </div>
+        {error && <p className="col-span-2 text-[12px] text-wine-ink">{error}</p>}
+      </form>
+    </Modal>
   )
 }
 
@@ -163,6 +177,8 @@ export default function ModesTab({
       onChanged()
     } else setNotice(res.status === 422 ? 'ml 计价必须填每批毫升数' : '创建失败，检查输入')
   }
+
+  const editingMode = editing != null ? active.find((m) => m.id === editing) ?? null : null
 
   return (
     <div>
@@ -323,7 +339,7 @@ export default function ModesTab({
                           <button
                             type="button"
                             className={`${actionBtn} text-wine-ink`}
-                            onClick={() => setEditing(editing === m.id ? null : m.id)}
+                            onClick={() => setEditing(m.id)}
                           >
                             编辑
                           </button>
@@ -345,16 +361,6 @@ export default function ModesTab({
                 </tbody>
               </table>
             </div>
-
-            {/* Edit panel inline under the group */}
-            {editing != null && groupModes.find((m) => m.id === editing) && (() => {
-              const m = groupModes.find((x) => x.id === editing)!
-              return (
-                <div className="mt-1 mb-2">
-                  <ModeEditPanel mode={m} sizes={sizes} onDone={() => { setEditing(null); onChanged() }} />
-                </div>
-              )
-            })()}
           </div>
         ))}
 
@@ -364,6 +370,15 @@ export default function ModesTab({
           </p>
         )}
       </div>
+
+      {editingMode && (
+        <ModeEditModal
+          mode={editingMode}
+          sizes={sizes}
+          onClose={() => setEditing(null)}
+          onDone={() => { setEditing(null); onChanged() }}
+        />
+      )}
 
       <div className="pt-3 text-right font-mono text-[10px] tracking-[.1em] text-dim">
         {active.length} 种模式

@@ -38,27 +38,17 @@ async function auditActions(admin: string): Promise<string[]> {
 }
 
 describe('PC1 定价/配置编辑审计扩面', () => {
-  it('mode/paper/size + 书成品/组件/工艺编辑各落 pricing.* 审计', async () => {
+  it('mode/paper/size/工艺编辑各落 pricing.* 审计', async () => {
     const admin = await login('staff@folioria.jp')
     await app.inject({ method: 'PATCH', url: '/api/pricing/modes/1', headers: { cookie: admin }, payload: { ink_price_c: 99 } })
     await app.inject({ method: 'PATCH', url: '/api/pricing/papers/1', headers: { cookie: admin }, payload: { notes: '测试' } })
     await app.inject({ method: 'POST', url: '/api/pricing/sizes', headers: { cookie: admin }, payload: { key: 'ZZ', label: '测试尺寸', area: 1 } })
-    const bookRes = await app.inject({ method: 'POST', url: '/api/pricing/books', headers: { cookie: admin }, payload: { name: '审计写真集' } })
-    const bookId = (bookRes.json() as { id: number }).id
-    await app.inject({
-      method: 'POST',
-      url: `/api/pricing/books/${bookId}/components`,
-      headers: { cookie: admin },
-      payload: { role: 'inner', paper_id: 1, size_key: 'A4', color_class: 'bw' },
-    })
     await app.inject({ method: 'POST', url: '/api/pricing/finishings', headers: { cookie: admin }, payload: { name: '骑马钉', pricing: 'per_book', price_c: 2000 } })
 
     const actions = await auditActions(admin)
     expect(actions).toContain('pricing.mode')
     expect(actions).toContain('pricing.paper')
     expect(actions).toContain('pricing.size')
-    expect(actions).toContain('pricing.book')
-    expect(actions).toContain('pricing.book_component')
     expect(actions).toContain('pricing.finishing')
   })
 })
