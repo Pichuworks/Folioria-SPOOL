@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, MagSec, PillBtn, Skeleton, specInput, TabBar } from './spec'
+import { Btn, Field, MagSec, PillBtn, Skeleton, specInput, TabBar } from './spec'
 
 interface Criterion {
   id?: number
@@ -218,10 +218,10 @@ function TiersTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pt-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-dim">{tiers.length} 个等级</span>
-        <PillBtn onClick={() => setEditing('new')}>新建等级</PillBtn>
+        <Btn variant="outline" size="sm" onClick={() => setEditing('new')}>新建等级</Btn>
       </div>
 
       {editing === 'new' && (
@@ -307,10 +307,10 @@ function MembersTab() {
   const activeTiers = tiers.filter((t) => !t.archived)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pt-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-dim">{members.length} 条绑定</span>
-        <PillBtn onClick={() => setAssignForm(!assignForm)}>指派会员</PillBtn>
+        <Btn variant="outline" size="sm" onClick={() => setAssignForm(!assignForm)}>指派会员</Btn>
       </div>
 
       {assignForm && (
