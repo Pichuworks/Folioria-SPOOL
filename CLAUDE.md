@@ -32,6 +32,11 @@ Folioria 印刷工坊管理系统。库存 → 报价 → 下单 → 生产 → 
 - 不要重构与当前任务无关的代码；不要写多余注释
 - 不确定的业务语义：查 prd.md 附录 A 决策记录，仍不确定就停下来问，不要猜
 
+## Easter egg
+- 数据源: `web/scripts/encode-egg.mjs`（角色、对话、互动对）
+- 修改后重新生成: `node web/scripts/encode-egg.mjs > web/src/easter/payload.ts`
+- payload.ts 是 @generated，禁止手编辑
+
 ## commit
 feat / fix / refactor / style / data / docs / test / chore
 例: `fix(pricing): manual price must not be silently raised to floor`

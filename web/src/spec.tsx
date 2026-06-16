@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useSyncExternalStore, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useSyncExternalStore, useState, type ReactNode } from 'react'
 import PinnedBanner from './PinnedBanner'
+
+const EggOverlay = lazy(() => import('./easter/Overlay'))
 
 /* Asagaya modern·杂志语域 × eri 配色，全站统一壳：刊头 / 墨标签节头 / 点线行 / 直角控件 / 对折页码 */
 
@@ -44,55 +46,83 @@ export function Folio({ center }: { center: string }) {
 }
 
 function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [eggActive, setEggActive] = useState(false)
+  const [eggKey, setEggKey] = useState('')
+  const bufRef = useRef<string[]>([])
+
   useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    if (!open || eggActive) return
+    bufRef.current = []
+    const handler = async (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key.length !== 1) return
+      const buf = bufRef.current
+      buf.push(e.key.toLowerCase())
+      if (buf.length > 8) buf.shift()
+      if (buf.length === 8) {
+        const { checkTrigger } = await import('./easter/codec')
+        if (await checkTrigger(buf.join(''))) {
+          setEggKey(buf.join(''))
+          setEggActive(true)
+        }
+      }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
+  }, [open, eggActive, onClose])
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" onClick={onClose}>
-      <div className="mx-4 w-full max-w-md border border-ink bg-paper p-8 shadow-e1" onClick={(e) => e.stopPropagation()}>
-        {/* 刊头 */}
-        <div className="mb-6 border-b border-ink pb-5 text-center">
-          <div className="ink-press text-[36px] font-bold leading-none tracking-[.22em]">枫光映刻</div>
-          <div className="mt-2 font-script text-[16px] text-dim">Maplescape Folioria</div>
-          <div className="mt-3 font-mono text-[10px] tracking-[.3em] text-wine-ink">
-            Powered by CRISIRIS S.P.O.O.L.
+    <>
+      {eggActive && (
+        <Suspense fallback={null}>
+          <EggOverlay decryptionKey={eggKey} onClose={() => setEggActive(false)} />
+        </Suspense>
+      )}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" onClick={onClose}>
+        <div className="mx-4 w-full max-w-md border border-ink bg-paper p-8 shadow-e1" onClick={(e) => e.stopPropagation()}>
+          {/* 刊头 */}
+          <div className="mb-6 border-b border-ink pb-5 text-center">
+            <div className="ink-press text-[36px] font-bold leading-none tracking-[.22em]">枫光映刻</div>
+            <div className="mt-2 font-script text-[16px] text-dim">Maplescape Folioria</div>
+            <div className="mt-3 font-mono text-[10px] tracking-[.3em] text-wine-ink">
+              Powered by CRISIRIS S.P.O.O.L.
+            </div>
+            <div className="mt-1.5 font-mono text-[9px] tracking-[.18em] text-dim">
+              STOCK · PRICING · ORDERS · OPERATIONS · LOGISTICS
+            </div>
           </div>
-          <div className="mt-1.5 font-mono text-[9px] tracking-[.18em] text-dim">
-            STOCK · PRICING · ORDERS · OPERATIONS · LOGISTICS
+          {/* 规格行 */}
+          <div className="[&>*:last-child]:border-b-0">
+            <AboutRow label="版本" value={`v${__APP_VERSION__}`} />
+            <AboutRow label="构建" value={`build ${__BUILD_NUMBER__}`} />
           </div>
-        </div>
-        {/* 规格行 */}
-        <div className="[&>*:last-child]:border-b-0">
-          <AboutRow label="版本" value={`v${__APP_VERSION__}`} />
-          <AboutRow label="构建" value={`build ${__BUILD_NUMBER__}`} />
-        </div>
-        {/* 开发者 */}
-        <div className="mt-6 pt-5 text-center">
-          <div className="text-[13px] tracking-[.04em] text-ink">Developed by <a href="https://github.com/Pichuworks/" target="_blank" rel="noopener noreferrer" className="font-medium text-ink hover:text-wine-ink">Pichuworks</a></div>
-          <div className="mt-3 text-[11px] leading-relaxed tracking-[.02em] text-dim">
-            由<br />Crisamielle Aveniris · 诸泪折虹制作委员会<br />提供设计与技术支持
+          {/* 开发者 */}
+          <div className="mt-6 pt-5 text-center">
+            <div className="text-[13px] tracking-[.04em] text-ink">Developed by <a href="https://github.com/Pichuworks/" target="_blank" rel="noopener noreferrer" className="font-medium text-ink hover:text-wine-ink">Pichuworks</a></div>
+            <div className="mt-3 text-[11px] leading-relaxed tracking-[.02em] text-dim">
+              由<br />Crisamielle Aveniris · 诸泪折虹制作委员会<br />提供设计与技术支持
+            </div>
           </div>
-        </div>
-        {/* 版权 */}
-        <div className="mt-5 border-t border-ink pt-4 text-center font-mono text-[10px] tracking-[.14em] text-dim">
-          © 2026 Maplescape Folioria. ALL RIGHTS RESERVED.
-        </div>
-        <div className="mt-5 flex justify-center">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-line px-5 py-2 text-[12px] tracking-[.06em] text-dim hover:border-ink hover:text-ink"
-          >
-            关闭
-          </button>
+          {/* 版权 */}
+          <div className="mt-5 border-t border-ink pt-4 text-center font-mono text-[10px] tracking-[.14em] text-dim">
+            © 2026 Maplescape Folioria. ALL RIGHTS RESERVED.
+          </div>
+          <div className="mt-5 flex justify-center">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-line px-5 py-2 text-[12px] tracking-[.06em] text-dim hover:border-ink hover:text-ink"
+            >
+              关闭
+            </button>
+          </div>
+          <div className="mt-4 select-none text-center font-mono text-[8px] leading-relaxed tracking-[.08em]" style={{ color: 'var(--color-dim)', opacity: 0.08 }}>
+            この場所を知っている人へ。<br />致那些了解这里的人。
+          </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
