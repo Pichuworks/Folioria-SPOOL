@@ -25,13 +25,88 @@ export const Masthead = ({ nav }: { nav: ReactNode }) => (
   </header>
 )
 
-export const Folio = ({ center, right }: { center: string; right?: ReactNode }) => (
-  <footer className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-ink pb-7 pt-3 font-mono text-[10.5px] tracking-[.14em] text-dim">
-    <span>FOLIORIA · S.P.O.O.L.</span>
-    <span>{center}</span>
-    <span>{right ?? `v${__APP_VERSION__} · b${__BUILD_NUMBER__} · © 2026 FOLIORIA`}</span>
-  </footer>
-)
+export function Folio({ center, right }: { center: string; right?: ReactNode }) {
+  const [aboutOpen, setAboutOpen] = useState(false)
+  return (
+    <>
+      <footer className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-ink pb-7 pt-3 font-mono text-[10.5px] tracking-[.14em] text-dim">
+        <span>FOLIORIA · S.P.O.O.L.</span>
+        <span>{center}</span>
+        <span>
+          {right ?? (
+            <button type="button" onClick={() => setAboutOpen(true)} className="cursor-pointer text-dim hover:text-ink">
+              v{__APP_VERSION__} · b{__BUILD_NUMBER__} · © 2026 FOLIORIA
+            </button>
+          )}
+        </span>
+      </footer>
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+    </>
+  )
+}
+
+function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" onClick={onClose}>
+      <div className="mx-4 w-full max-w-md border border-ink bg-paper p-8 shadow-e1" onClick={(e) => e.stopPropagation()}>
+        {/* 刊头 */}
+        <div className="mb-6 border-b border-ink pb-5 text-center">
+          <div className="ink-press text-[36px] font-bold leading-none tracking-[.14em]">枫光映刻</div>
+          <div className="mt-2 font-script text-[16px] text-dim">Maplescape Folioria</div>
+          <div className="mt-3 font-mono text-[10px] tracking-[.3em] text-wine-ink">
+            S.P.O.O.L. — STOCK · PRICING · ORDERS · OPERATIONS · LOGISTICS
+          </div>
+        </div>
+        {/* 规格行 */}
+        <div className="space-y-0">
+          <AboutRow label="版本" value={`v${__APP_VERSION__}`} />
+          <AboutRow label="构建" value={`b${__BUILD_NUMBER__}`} />
+          <AboutRow label="前端" value="React 18 · Vite · Tailwind v4" />
+          <AboutRow label="后端" value="Fastify v5 · TypeScript" />
+          <AboutRow label="数据库" value="SQLite · WAL · STRICT" />
+        </div>
+        {/* 开发者 */}
+        <div className="mt-6 border-t border-line pt-4 text-center">
+          <div className="text-[12px] tracking-[.06em] text-dim">开发</div>
+          <div className="mt-1 text-[15px] font-medium">Pichuworks</div>
+          <div className="mt-0.5 font-mono text-[11px] tracking-[.05em] text-dim">pichuworks@gmail.com</div>
+        </div>
+        {/* 版权 */}
+        <div className="mt-5 border-t border-ink pt-4 text-center font-mono text-[10px] tracking-[.14em] text-dim">
+          © 2026 FOLIORIA. ALL RIGHTS RESERVED.
+        </div>
+        <div className="mt-5 flex justify-center">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-line px-5 py-2 text-[12px] tracking-[.06em] text-dim hover:border-ink hover:text-ink"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AboutRow({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="flex items-baseline gap-3 border-b border-line py-[9px]">
+      <span className="min-w-14 text-[13px] font-medium">{label}</span>
+      <Leader />
+      <span className="text-right font-mono text-[12px] tracking-[.05em] text-ink">{value}</span>
+      {sub && <span className="font-mono text-[10px] tracking-[.05em] text-dim">({sub})</span>}
+    </div>
+  )
+}
 
 export const MagSec = ({
   tag,
