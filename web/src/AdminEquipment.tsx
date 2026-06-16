@@ -341,7 +341,7 @@ function EquipmentBody() {
   if (!printers || !consumables) return <Skeleton />
 
   return (
-    <MagSec tag="设备" title="设备档案" note={`${printers.length} UNITS · DUAL-TRIGGER CALIBRATION`}>
+    <MagSec title="设备档案">
       {printers.map((p) => (
         <PrinterCard key={p.id} printer={p} consumables={consumables} onChanged={reload} />
       ))}

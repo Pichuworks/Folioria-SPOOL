@@ -242,7 +242,7 @@ function UsersBody() {
 
   return (
     <div>
-      <MagSec tag="01" title="用户管理" note={`${users.length} ACCOUNTS · B1 双域`}>
+      <MagSec title="用户管理" note={`${users.length} 人`}>
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <input
             type="text"

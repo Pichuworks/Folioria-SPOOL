@@ -113,7 +113,7 @@ export const MagSec = ({
 }: {
   tag?: string
   title: string
-  note?: string
+  note?: string | undefined
   id?: string
   children: ReactNode
 }) => (

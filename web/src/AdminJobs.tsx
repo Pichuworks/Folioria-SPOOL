@@ -403,7 +403,7 @@ function JobsBody() {
 
   return (
     <div>
-      <MagSec tag="01" title="新建作业" note="WIZARD · COST PREVIEW">
+      <MagSec title="新建作业">
         <form onSubmit={(e) => void submit(e)} className="grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
           <div className="space-y-5 border-b border-ink p-7 md:border-b-0 md:border-r">
             <div className="font-mono text-[10px] tracking-[.14em] text-dim">JOB SPEC</div>
@@ -538,7 +538,7 @@ function JobsBody() {
         </form>
       </MagSec>
 
-      <MagSec tag="02" title="作业台账" note={`TOTAL ${jobs?.length ?? 0} · LATEST 500`}>
+      <MagSec title="作业台账" note={jobs ? `${jobs.length} 条` : undefined}>
         {jobs === null ? (
           <p className="py-2 text-[13px] text-dim">台账加载中…</p>
         ) : (

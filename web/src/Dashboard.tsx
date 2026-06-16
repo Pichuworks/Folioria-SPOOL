@@ -1,13 +1,28 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
-import { fetchDashboard, getDashboardCache, send, type DashboardDto } from './api'
+import CustomerGate from './CustomerGate'
+import {
+  fetchDashboard,
+  fetchMe,
+  fetchOrders,
+  getDashboardCache,
+  getMeCache,
+  ORDER_STATUS_LABEL,
+  send,
+  type DashboardDto,
+  type MeDto,
+  type OrderDto,
+} from './api'
 import type { TrendPoint } from './DashboardCharts'
-import { MagSec, Skeleton, SpecRow } from './spec'
+import { StatusBadge } from './OrderView'
+import { Leader, MagSec, PillLink, Skeleton, SpecRow } from './spec'
 
 const TrendChart = lazy(() => import('./DashboardCharts').then((m) => ({ default: m.TrendChart })))
 const EquipmentChart = lazy(() => import('./DashboardCharts').then((m) => ({ default: m.EquipmentChart })))
 
-function DashboardBody() {
+/* ── Admin Dashboard (existing) ── */
+
+function AdminDashboardBody() {
   const [data, setData] = useState<DashboardDto | null>(getDashboardCache)
   const [trend, setTrend] = useState<TrendPoint[] | null>(null)
 
@@ -23,13 +38,13 @@ function DashboardBody() {
   return (
     <div>
       <div className="grid grid-cols-1 gap-x-12 md:grid-cols-2">
-        <MagSec tag="01" title="待办" note="ACTIVE">
+        <MagSec title="待办">
           <SpecRow label="活跃作业" note="草稿/排队/打印中" value={data.todo.jobs_active} />
           <SpecRow label="在途订单" note="报价至待取" value={data.todo.orders_active} />
           <SpecRow label="维护提醒" value={data.todo.maintenance_alerts} />
         </MagSec>
 
-        <MagSec tag="02" title="库存预警" note="UNRESOLVED">
+        <MagSec title="库存预警">
           {data.inventory_alerts.length === 0 ? (
             <p className="py-2 text-[13px] text-dim">无未解决预警</p>
           ) : (
@@ -46,7 +61,7 @@ function DashboardBody() {
           )}
         </MagSec>
 
-        <MagSec tag="03" title="本月" note="MONTHLY">
+        <MagSec title="本月">
           <SpecRow label="完成作业" note={`${data.monthly.pages} 面`} value={data.monthly.jobs_done} />
           <SpecRow label="收入" value={data.monthly.revenue_display} />
           <SpecRow label="外部成本" value={data.monthly.external_cost_display} />
@@ -62,7 +77,7 @@ function DashboardBody() {
           </div>
         </MagSec>
 
-        <MagSec tag="04" title="设备" note="FLEET">
+        <MagSec title="设备">
           {data.equipment.map((p) => (
             <div key={p.code} className="flex items-baseline gap-3 border-b border-line py-[9px]">
               <span className="min-w-16 text-[14px] font-medium text-ink">{p.code}</span>
@@ -76,14 +91,14 @@ function DashboardBody() {
       </div>
 
       {trend && (
-        <MagSec tag="05" title="近 6 月趋势" note="REVENUE · COST · PROFIT">
+        <MagSec title="近 6 月趋势">
           <Suspense fallback={null}>
             <TrendChart trend={trend} />
           </Suspense>
         </MagSec>
       )}
 
-      <MagSec tag="06" title="设备累计" note="TOTAL PAGES BY UNIT">
+      <MagSec title="设备累计">
         <Suspense fallback={null}>
           <EquipmentChart equipment={data.equipment} />
         </Suspense>
@@ -92,6 +107,114 @@ function DashboardBody() {
   )
 }
 
+/* ── Customer Dashboard ── */
+
+const ACTIONABLE = new Set<OrderDto['status']>(['file_pending'])
+const IN_PROGRESS = new Set<OrderDto['status']>(['confirmed', 'in_production', 'file_approved'])
+const PICKUP = new Set<OrderDto['status']>(['ready'])
+
+function hasRejectedFile(o: OrderDto) {
+  return o.items.some((i) => i.file_status === 'rejected')
+}
+
+function OrderRow({ o }: { o: OrderDto }) {
+  return (
+    <a
+      href={`#/order/${o.access_token}`}
+      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line py-[12px] hover:bg-card"
+    >
+      <span className="font-mono text-[13px] text-ink">{o.order_number}</span>
+      <StatusBadge status={o.status} />
+      {hasRejectedFile(o) && (
+        <span className="font-mono text-[10px] tracking-[.1em] text-wine-ink">需改稿</span>
+      )}
+      {o.quote_expired && (
+        <span className="font-mono text-[10px] tracking-[.1em] text-warn">报价过期</span>
+      )}
+      <span className="text-[12px] text-dim">
+        {o.created_at.slice(0, 10)} · {o.items.length} 行
+      </span>
+      <Leader />
+      <span className="font-mono text-[13.5px] text-wine-ink">{o.total_display}</span>
+    </a>
+  )
+}
+
+function CustomerDashboardBody() {
+  const [orders, setOrders] = useState<OrderDto[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void fetchOrders().then((res) => {
+      if (res.ok) setOrders(res.data)
+      else setError(`加载失败（${res.status}）`)
+    })
+  }, [])
+
+  if (error) return <p className="pt-13 text-[14px] text-wine-ink">{error}</p>
+  if (!orders) return <p className="pt-13 text-[14px] text-dim">加载中…</p>
+
+  if (orders.length === 0) {
+    return (
+      <MagSec title="面板">
+        <p className="text-[14px] text-dim">还没有订单。</p>
+        <div className="mt-4">
+          <PillLink href="#/quote" kind="primary">去自助报价下单 →</PillLink>
+        </div>
+      </MagSec>
+    )
+  }
+
+  const actionable = orders.filter((o) => ACTIONABLE.has(o.status) || hasRejectedFile(o))
+  const pickup = orders.filter((o) => PICKUP.has(o.status))
+  const inProgress = orders.filter((o) => IN_PROGRESS.has(o.status))
+  const quoted = orders.filter((o) => o.status === 'quoted')
+  const finished = orders.filter((o) => o.status === 'delivered' || o.status === 'cancelled')
+
+  return (
+    <div>
+      {actionable.length > 0 && (
+        <MagSec title="需要处理" note={`${actionable.length} 单`}>
+          {actionable.map((o) => <OrderRow key={o.id} o={o} />)}
+        </MagSec>
+      )}
+
+      {pickup.length > 0 && (
+        <MagSec title="待取件" note={`${pickup.length} 单`}>
+          {pickup.map((o) => <OrderRow key={o.id} o={o} />)}
+        </MagSec>
+      )}
+
+      {inProgress.length > 0 && (
+        <MagSec title="进行中" note={`${inProgress.length} 单`}>
+          {inProgress.map((o) => <OrderRow key={o.id} o={o} />)}
+        </MagSec>
+      )}
+
+      {quoted.length > 0 && (
+        <MagSec title="报价中" note={`${quoted.length} 单`}>
+          {quoted.map((o) => <OrderRow key={o.id} o={o} />)}
+        </MagSec>
+      )}
+
+      {finished.length > 0 && (
+        <MagSec title="已完结" note={`${finished.length} 单`}>
+          {finished.map((o) => <OrderRow key={o.id} o={o} />)}
+        </MagSec>
+      )}
+    </div>
+  )
+}
+
+/* ── Role dispatch ── */
+
 export default function Dashboard() {
-  return <AdminGate>{() => <DashboardBody />}</AdminGate>
+  const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
+  useEffect(() => {
+    fetchMe().then(setMe).catch(() => setMe(null))
+  }, [])
+
+  if (me === undefined) return <Skeleton />
+  if (me?.role === 'admin') return <AdminGate>{() => <AdminDashboardBody />}</AdminGate>
+  return <CustomerGate>{() => <CustomerDashboardBody />}</CustomerGate>
 }

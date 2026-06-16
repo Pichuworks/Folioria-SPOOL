@@ -375,7 +375,7 @@ export default function OrderView({ token }: { token: string }) {
   if (order === undefined) return <p className="pt-13 text-[14px] text-dim">订单加载中…</p>
   if (order === null) {
     return (
-      <MagSec tag="订单" title="订单查询" note="ORDER LOOKUP">
+      <MagSec title="订单查询">
         <p className="text-[15px] text-wine-ink">没有找到对应的订单。</p>
         <p className="mt-2 text-[13px] leading-[1.85] text-dim">
           请核对查询链接是否完整；订单号（FOL-…）不能用于查询，需要使用下单时获得的专属链接。
@@ -435,7 +435,7 @@ export default function OrderView({ token }: { token: string }) {
   }
 
   return (
-    <MagSec tag="订单" title={order.order_number} note="ORDER DETAIL">
+    <MagSec title={order.order_number}>
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge status={order.status} />
         {order.quote_expired && (

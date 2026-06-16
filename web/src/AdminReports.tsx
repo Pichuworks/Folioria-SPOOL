@@ -58,7 +58,7 @@ function ReportsBody() {
         </Field>
       </div>
 
-      <MagSec tag="01" title="月度损益" note={monthly ? monthly.month : '…'}>
+      <MagSec title="月度损益" note={monthly ? monthly.month : undefined}>
         {!monthly ? (
           <p className="py-2 text-[13px] text-dim">加载中…</p>
         ) : (
@@ -98,7 +98,7 @@ function ReportsBody() {
         </div>
       </MagSec>
 
-      <MagSec tag="02" title="设备利用" note="PAGES BY UNIT">
+      <MagSec title="设备利用">
         {!usage ? (
           <p className="py-2 text-[13px] text-dim">加载中…</p>
         ) : (
@@ -122,7 +122,7 @@ function ReportsBody() {
         </div>
       </MagSec>
 
-      <MagSec tag="03" title="纸张消耗" note="CONSUME + SCRAP">
+      <MagSec title="纸张消耗">
         {!consumption ? (
           <p className="py-2 text-[13px] text-dim">加载中…</p>
         ) : consumption.rows.length === 0 ? (
@@ -147,7 +147,7 @@ function ReportsBody() {
       </MagSec>
 
       {snapshots && snapshots.length > 0 && (
-        <MagSec tag="04" title="历史快照" note="MONTHLY ARCHIVE">
+        <MagSec title="历史快照">
           {snapshots.map((s) => (
             <div key={s.month} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[8px]">
               <span className="min-w-16 font-mono text-[13px] font-medium text-ink">{s.month}</span>

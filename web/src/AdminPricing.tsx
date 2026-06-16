@@ -65,7 +65,7 @@ function PricingBody() {
   const tabsWithCounts = TABS.map((t) => ({ ...t, count: counts[t.key] }))
 
   return (
-    <MagSec tag="PRICE" title="价目管理" note="CRUD · MATRIX · EXPORT">
+    <MagSec title="价目管理">
       <TabBar tabs={tabsWithCounts} active={tab} onChange={(k) => setTab(k as TabKey)} />
 
       {tab === 'quotes' && (

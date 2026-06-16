@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react'
-import Account, { AccountMenu } from './Account'
+import Account, { AccountMenu, DashboardPill } from './Account'
 import {
   AUTH_EVENT,
   fetchMe,
@@ -34,10 +34,10 @@ const AdminSettings = lazy(() => import('./AdminSettings'))
 const AdminUsers = lazy(() => import('./AdminUsers'))
 
 /** 下单域路由：公开导航三态（guest / 下单用户 / admin）都可见 */
-const STOREFRONT_ROUTES: Record<string, { nav: string; title: string; folio: string; view: ComponentType }> = {
+const STOREFRONT_ROUTES: Record<string, { nav: string; title: string; folio: string; view: ComponentType; auth?: boolean }> = {
   '#/quote': { nav: '自助报价', title: '自助报价 · 在线下单', folio: 'QUOTE & ORDER', view: Quote },
-  '#/price-list': { nav: '价目表', title: '公开价目表', folio: 'PRICE LIST', view: PriceList },
-  '#/my/orders': { nav: '我的订单', title: '我的订单', folio: 'MY ORDERS', view: MyOrders },
+  '#/price-list': { nav: '价目表', title: '价目表', folio: 'PRICE LIST', view: PriceList },
+  '#/my/orders': { nav: '我的订单', title: '我的订单', folio: 'MY ORDERS', view: MyOrders, auth: true },
 }
 
 /** 管理域路由：仅 admin 登录态出现在导航（公开导航不罗列管理链接） */
@@ -137,42 +137,43 @@ export default function App() {
   }
 
   const resolved = resolve(hash)
-  if (!resolved) return <Home me={me ?? null} />
 
-  const tab = (active: boolean) =>
-    active ? 'whitespace-nowrap font-medium text-wine-ink' : 'whitespace-nowrap text-dim hover:text-ink'
+  const tab = (h: string, activeKey: string | null) =>
+    h === activeKey ? 'whitespace-nowrap font-medium text-wine-ink' : 'whitespace-nowrap text-dim hover:text-ink'
 
-  // 导航三态：guest（公开导航）/ 下单用户（公开导航 + 我的订单高亮语义）/ admin（公开导航 + 管理组）
-  const isAdmin = me?.role === 'admin'
-  const nav = (
-    <>
-      <a href="#/" className="whitespace-nowrap text-dim hover:text-ink">首页</a>
-      {Object.entries(STOREFRONT_ROUTES).map(([h, r]) => {
-        // 我的订单仅登录态出现在导航；guest 走右上角账号控件登录
-        if (h === '#/my/orders' && !me) return null
-        return (
-          <a key={h} href={h} className={tab(h === resolved.navKey)}>
-            {r.nav}
-          </a>
-        )
-      })}
-      {isAdmin && (
-        <>
-          <span aria-hidden="true" className="hidden h-4 w-px bg-line md:block" />
-          {Object.entries(ADMIN_ROUTES).map(([h, r]) => (
-            <a key={h} href={h} className={tab(h === resolved.navKey)}>
-              {r.nav}
-            </a>
-          ))}
-        </>
-      )}
-      <span aria-hidden="true" className="hidden h-4 w-px bg-line md:block" />
-      <AccountMenu me={me ?? null} />
-    </>
-  )
+  const buildNav = (activeKey: string | null): ReactNode => {
+    const isAdmin = me?.role === 'admin'
+    return (
+      <>
+        <a href="#/" className={tab('#/', activeKey)}>首页</a>
+        {Object.entries(STOREFRONT_ROUTES).map(([h, r]) => {
+          if (r.auth && !me) return null
+          if (h === '#/my/orders') return null
+          return <a key={h} href={h} className={tab(h, activeKey)}>{r.nav}</a>
+        })}
+        {isAdmin && (
+          <>
+            <span aria-hidden="true" className="hidden h-4 w-px bg-line md:block" />
+            {Object.entries(ADMIN_ROUTES).map(([h, r]) => {
+              if (h === '#/dashboard') return null
+              return <a key={h} href={h} className={tab(h, activeKey)}>{r.nav}</a>
+            })}
+          </>
+        )}
+        <span aria-hidden="true" className="hidden h-4 w-px bg-line md:block" />
+        {me && <DashboardPill admin={isAdmin ?? false} active={activeKey === '#/dashboard'} />}
+        <AccountMenu me={me ?? null} />
+      </>
+    )
+  }
+
+  if (!resolved) {
+    if (me) return <Home me={me} nav={buildNav('#/')} />
+    return <Home me={null} />
+  }
 
   return (
-    <Shell center={resolved.folio} nav={nav}>
+    <Shell center={resolved.folio} nav={buildNav(resolved.navKey)}>
       <h1 className="sr-only">{resolved.title}</h1>
       <Suspense fallback={<Skeleton />}>
         {resolved.node}

@@ -81,12 +81,12 @@ function SettingsBody() {
 
   return (
     <div>
-      <MagSec tag="01" title="实例" note="IMMUTABLE">
+      <MagSec title="实例">
         <SpecRow label="基准货币" note="产生业务数据后锁定，换币种 = 新实例" value={settings.base_currency} strong />
         <SpecRow label="初始化时间" value={settings.initialized_at?.slice(0, 10) ?? '—'} />
       </MagSec>
 
-      <MagSec tag="02" title="定价参数" note="C7 / C9">
+      <MagSec title="定价参数">
         <form onSubmit={(e) => void submit(e)} className="max-w-xl space-y-4 border border-ink bg-card p-6">
           <Field label="最低毛利率（基点，6700 = 67%）">
             <input type="number" min={0} max={9999} required className={specInput} value={form.min_margin_bp} onChange={num('min_margin_bp')} />
@@ -144,7 +144,7 @@ function SettingsBody() {
         </form>
       </MagSec>
 
-      <MagSec tag="03" title="角色权限" note="ROLE MATRIX">
+      <MagSec title="角色权限">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-[13px]">
             <thead>
@@ -173,7 +173,7 @@ function SettingsBody() {
       </MagSec>
 
       {sysInfo && (
-        <MagSec tag="04" title="系统信息" note="READ-ONLY">
+        <MagSec title="系统信息">
           <SpecRow label="Node.js" value={sysInfo.node_version} />
           <SpecRow label="数据库大小" value={sysInfo.db_size} />
           <SpecRow label="用户数" value={sysInfo.user_count} />

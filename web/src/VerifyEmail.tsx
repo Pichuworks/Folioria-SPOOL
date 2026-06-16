@@ -20,7 +20,7 @@ export default function VerifyEmail({ token }: { token: string }) {
   }, [token])
 
   return (
-    <MagSec tag="验证" title="邮箱验证" note="EMAIL VERIFICATION">
+    <MagSec title="邮箱验证">
       {state === 'pending' ? (
         <p className="text-[14px] text-dim">验证中…</p>
       ) : state === 'ok' ? (

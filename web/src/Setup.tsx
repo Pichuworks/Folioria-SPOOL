@@ -41,7 +41,7 @@ export default function Setup({ onDone }: { onDone: (me: MeDto) => void }) {
   }
 
   return (
-    <MagSec tag="初始化" title="实例初始化" note="FIRST RUN">
+    <MagSec title="实例初始化">
       <p className="mb-5 max-w-xl text-[13px] leading-[1.85] text-dim">
         欢迎使用 S.P.O.O.L.。请设定实例基准货币并创建首位管理员。基准货币在产生业务数据后将锁定（换币种 = 新实例）。
       </p>

@@ -23,15 +23,14 @@ const ACTION_LABEL: Record<string, string> = {
 
 function AuditBody() {
   const [rows, setRows] = useState<AuditEntry[] | null>(null)
+  const { page, totalPages, paged, setPage } = usePagination(rows ?? [], 50)
   useEffect(() => {
     void send<AuditEntry[]>('GET', '/api/admin/audit').then((r) => r.ok && setRows(r.data))
   }, [])
   if (!rows) return <Skeleton />
 
-  const { page, totalPages, paged, setPage } = usePagination(rows, 50)
-
   return (
-    <MagSec tag="01" title="操作审计" note={`${rows.length} ENTRIES · 定价/折扣/收款/角色/设置`}>
+    <MagSec title="操作审计" note={`${rows.length} 条`}>
       {rows.length === 0 && <p className="text-[13px] text-dim">暂无审计记录。</p>}
       {paged.map((r) => (
         <div key={r.id} className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-[7px]">

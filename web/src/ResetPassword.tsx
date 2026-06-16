@@ -13,7 +13,7 @@ export default function ResetPassword({ token }: { token: string }) {
   }
 
   return (
-    <MagSec tag="重置" title="重置密码" note="PASSWORD RESET">
+    <MagSec title="重置密码">
       {state === 'ok' ? (
         <div>
           <p className="text-[15px] text-ink">密码已重置——所有旧登录已失效，请用新密码登录。</p>

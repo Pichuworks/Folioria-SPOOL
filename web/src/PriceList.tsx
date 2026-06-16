@@ -54,7 +54,7 @@ export default function PriceList() {
   if (!data) return <p className="pt-13 text-[14px] text-dim">价目加载中…</p>
 
   return (
-    <MagSec tag="价目" title="公开价目表" note={`${rows.length} 种 · 单张价 · 实时推导`}>
+    <MagSec title="价目表" note={`${rows.length} 种`}>
       {/* Mobile: compact card list */}
       <div className="border border-ink md:hidden">
         {rows.map((r) => (

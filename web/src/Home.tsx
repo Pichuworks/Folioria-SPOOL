@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { AccountMenu } from './Account'
 import { fetchOptions, getOptionsCache, type MeDto, type OptionsDto } from './api'
 import { Leader, MagSec, PillLink, Shell } from './spec'
@@ -60,8 +60,7 @@ const minRows = (o: OptionsDto | null): PriceRow[] | null => {
     .slice(0, 5)
 }
 
-/** 首页导航三态：guest（登录/注册入口）/ 下单用户（我的订单）/ admin（管理台入口） */
-export default function Home({ me }: { me: MeDto | null }) {
+export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode }) {
   const [rows, setRows] = useState<PriceRow[] | null>(() => minRows(getOptionsCache()))
 
   useEffect(() => {
@@ -71,21 +70,19 @@ export default function Home({ me }: { me: MeDto | null }) {
   }, [])
 
   const anchor = 'whitespace-nowrap text-dim hover:text-ink'
+  const guestNav = (
+    <>
+      <a href="#craft" className={anchor}>工艺</a>
+      <a href="#paper" className={anchor}>纸张</a>
+      <a href="#price" className={anchor}>价格</a>
+      <a href="#flow" className={anchor}>流程</a>
+      <a href="#/price-list" className={anchor}>价目表</a>
+      <PillLink href="#/quote" kind="primary">自助报价</PillLink>
+      <AccountMenu me={me} />
+    </>
+  )
   return (
-    <Shell
-      center="WWW.FOLIORIA.COM"
-      nav={
-        <>
-          <a href="#craft" className={anchor}>工艺</a>
-          <a href="#paper" className={anchor}>纸张</a>
-          <a href="#price" className={anchor}>价格</a>
-          <a href="#flow" className={anchor}>流程</a>
-          <a href="#/price-list" className={anchor}>价目表</a>
-          <PillLink href="#/quote" kind="primary">自助报价</PillLink>
-          <AccountMenu me={me} />
-        </>
-      }
-    >
+    <Shell center="WWW.FOLIORIA.COM" nav={nav ?? guestNav}>
 
         {/* 跨页 hero */}
         <div className="relative overflow-hidden border-b border-ink md:min-h-[430px]">
@@ -99,7 +96,6 @@ export default function Home({ me }: { me: MeDto | null }) {
             枫林叶下，光影映成。文作入纸，时光刻上。
           </span>
           <div className="max-w-[560px] py-10 md:absolute md:bottom-11 md:left-0 md:py-0">
-            <div className="mb-3.5 font-mono text-[12.5px] tracking-[.3em] text-wine-ink">MAPLESCAPE FOLIORIA · 枫光映刻</div>
             <h1 className="text-[38px] font-medium leading-[1.15] tracking-[.02em] md:text-[56px]">
               这里是
               <br />
@@ -115,7 +111,7 @@ export default function Home({ me }: { me: MeDto | null }) {
           </div>
         </div>
 
-        <MagSec tag="01" title="工艺" id="craft">
+        <MagSec title="工艺" id="craft">
             <div className="grid grid-cols-1 border-l border-t border-line md:grid-cols-3">
               {CRAFTS.map((c) => (
                 <div key={c.title} className="border-b border-r border-line p-7">
@@ -127,7 +123,7 @@ export default function Home({ me }: { me: MeDto | null }) {
             </div>
           </MagSec>
 
-          <MagSec tag="02" title="纸张" id="paper">
+          <MagSec title="纸张" id="paper">
             <div className="flex h-[110px] border border-ink">
               {PAPERS.map((p, i) => (
                 <div
@@ -148,7 +144,7 @@ export default function Home({ me }: { me: MeDto | null }) {
             </div>
           </MagSec>
 
-          <MagSec tag="03" title="价格" id="price">
+          <MagSec title="价格" id="price">
             {rows === null ? (
               <p className="text-[13px] text-dim">价目加载中…</p>
             ) : rows.length === 0 ? (
@@ -171,7 +167,7 @@ export default function Home({ me }: { me: MeDto | null }) {
             </div>
           </MagSec>
 
-        <MagSec tag="04" title="流程" id="flow">
+        <MagSec title="流程" id="flow">
           <div className="grid grid-cols-1 gap-x-8 md:grid-cols-4">
             {STEPS.map((s) => (
               <div key={s.n} className="border-t-2 border-ink pt-3">

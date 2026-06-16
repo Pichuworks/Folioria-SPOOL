@@ -3,11 +3,10 @@ import { changePassword, forgotPassword, login, register, type MeDto } from './a
 import { Field, PillBtn, specInput } from './spec'
 
 /** 共享登录卡：两域（下单 / 管理）统一入口，不再做品牌化区分 */
-export function AuthCard({ tag, title, children }: { tag: string; title: string; children: ReactNode }) {
+export function AuthCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mx-auto mt-16 max-w-sm border border-ink bg-card p-7">
-      <div className="mb-5 flex items-center gap-3 border-b border-ink pb-3">
-        <span className="bg-ink px-2.5 py-1 font-mono text-[10px] tracking-[.22em] text-paper">{tag}</span>
+      <div className="mb-5 border-b border-ink pb-3">
         <h2 className="text-[20px] font-semibold text-ink">{title}</h2>
       </div>
       {children}
@@ -73,7 +72,7 @@ export function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
 
   if (mode === 'forgot') {
     return (
-      <AuthCard tag="ATELIER" title="重置密码">
+      <AuthCard title="重置密码">
         {forgotSent ? (
           <div className="space-y-4">
             <p className="text-[13px] leading-[1.85] text-ink">
@@ -99,7 +98,7 @@ export function AuthForms({ onLogin }: { onLogin: (me: MeDto) => void }) {
   }
 
   return (
-    <AuthCard tag="ATELIER" title={mode === 'login' ? '登录' : '注册账号'}>
+    <AuthCard title={mode === 'login' ? '登录' : '注册账号'}>
       <div className="mb-5 flex gap-6">
         <button type="button" className={tabClass(mode === 'login')} onClick={() => switchMode('login')}>
           登录
@@ -182,7 +181,7 @@ export function ChangePasswordForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <AuthCard tag="ROTATION" title="首次登录须修改密码">
+    <AuthCard title="首次登录须修改密码">
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
         <Field label="当前密码">
           <input type="password" required className={specInput} value={oldPw} onChange={(e) => setOldPw(e.target.value)} />

@@ -528,7 +528,7 @@ export default function Quote() {
                     ? '该组合暂不可报价。'
                     : quoteState === 'error'
                       ? '报价服务暂时不可用。'
-                      : '选齐属性后显示报价。'}
+                      : ' '}
               </p>
             )}
             <button

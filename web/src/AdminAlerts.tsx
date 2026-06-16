@@ -103,7 +103,7 @@ function AlertsBody() {
         )}
       </MagSec>
 
-      <MagSec tag="02" title="通知投递日志" note={notes ? `LATEST ${notes.length}` : '…'}>
+      <MagSec title="通知投递日志" note={notes ? `${notes.length} 条` : undefined}>
         {!notes ? (
           <p className="py-2 text-[13px] text-dim">加载中…</p>
         ) : notes.length === 0 ? (

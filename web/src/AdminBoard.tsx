@@ -39,7 +39,7 @@ function BoardBody() {
 
   const totalActive = lanes.reduce((n, l) => n + l.jobs.length, 0)
   return (
-    <MagSec tag="01" title="生产排程" note={`${totalActive} ACTIVE JOBS · queued / printing`}>
+    <MagSec title="生产排程" note={`${totalActive} 个活跃作业`}>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {lanes.map((l) => {
           const offline = l.status === 'offline' || l.status === 'maintenance'

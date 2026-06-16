@@ -75,7 +75,7 @@ function TimelineSection({ filteredLog, actionFilter, setActionFilter, targetLab
   const { page, totalPages, paged, setPage } = usePagination(filteredLog, 50)
 
   return (
-    <MagSec tag="03" title="出入库时间线" note={`${filteredLog.length} 条`}>
+    <MagSec title="出入库时间线" note={`${filteredLog.length} 条`}>
       <div className="mb-3 max-w-56">
         <Field label="按动作筛选">
           <select className={specInput} value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setPage(0) }}>
@@ -366,7 +366,7 @@ function InventoryBody() {
 
   return (
     <div>
-      <MagSec tag="01" title="纸张库存" note={`${stocks.length} FILES`}>
+      <MagSec title="纸张库存" note={`${stocks.length} 项`}>
         <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
           {byPaper.map((g) => (
             <div key={g.name} className="mb-6">
@@ -383,7 +383,7 @@ function InventoryBody() {
         </div>
       </MagSec>
 
-      <MagSec tag="02" title="耗材" note="LIFE GAUGE">
+      <MagSec title="耗材">
         {consumables.length === 0 ? (
           <p className="py-2 text-[13px] text-dim">无在册耗材</p>
         ) : (

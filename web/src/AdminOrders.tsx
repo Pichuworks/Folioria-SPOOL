@@ -504,7 +504,7 @@ function KanbanBody() {
     setOrders((prev) => (prev ? prev.map((x) => (x.id === o.id ? { ...x, ...o } : x)) : prev))
 
   return (
-    <MagSec tag="01" title="订单看板" note={`ACTIVE ${orders.length - cancelled.length} · CANCELLED ${cancelled.length}`}>
+    <MagSec title="订单看板">
       <div className="grid grid-cols-2 gap-px border border-ink bg-ink md:grid-cols-3 lg:grid-cols-6">
         {COLUMNS.map((col) => {
           const colOrders = orders.filter((o) => col.statuses.includes(o.status))
