@@ -1,5 +1,5 @@
 import { type DB } from './db.js'
-import { roundHalfUp, type Money } from './money.js'
+import { money, type Money } from './money.js'
 
 export interface TierRow {
   id: number
@@ -85,10 +85,16 @@ export function getUserDiscountBp(db: DB, userId: string): number {
   return tier?.discount_bp ?? 0
 }
 
-/** 会员折扣绝对金额：round_half_up(subtotal * bp / 10000) */
+/** 会员折扣绝对金额：integer divmod half-up(subtotal * bp / 10000) */
 export function membershipDiscountAmount(subtotal: Money, discountBp: number): Money {
   if (discountBp <= 0) return 0 as Money
-  return roundHalfUp((subtotal as number) * discountBp / 10000) as Money
+  const prod = (subtotal as number) * discountBp
+  if (!Number.isSafeInteger(prod)) {
+    throw new RangeError(`membershipDiscountAmount: product exceeds safe integer range: ${prod}`)
+  }
+  const rem = prod % 10000
+  const base = (prod - rem) / 10000
+  return money(rem >= 5000 ? base + 1 : base)
 }
 
 const BUILTIN_DIMENSIONS: Record<string, string> = {

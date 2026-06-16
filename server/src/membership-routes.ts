@@ -237,8 +237,20 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
       const bound = db
         .prepare('SELECT COUNT(*) AS n FROM user_memberships WHERE tier_id = ?')
         .get(id) as { n: number }
-      if (bound.n > 0) {
-        return reply.status(409).send({ error: 'tier_has_members' })
+      const referenced = db
+        .prepare('SELECT COUNT(*) AS n FROM orders WHERE membership_tier_id = ?')
+        .get(id) as { n: number }
+
+      if (bound.n > 0 || referenced.n > 0) {
+        db.prepare('UPDATE membership_tiers SET archived = 1 WHERE id = ?').run(id)
+        audit(db, {
+          actorId: req.user?.id ?? null,
+          action: 'membership.tier.archive',
+          targetType: 'membership_tier',
+          targetId: String(id),
+          summary: `归档等级 ${existing.code}（有 ${bound.n} 绑定 / ${referenced.n} 订单引用）`,
+        })
+        return reply.status(204).send()
       }
 
       db.transaction(() => {

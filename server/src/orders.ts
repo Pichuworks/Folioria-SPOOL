@@ -3,8 +3,8 @@ import { priceBook, priceBookSpec, type BookLineInput, type BookSpecInput } from
 import { type DB } from './db.js'
 import { finishingContribution, type FinishingPricing } from './finishing.js'
 import { getLog } from './logger.js'
-import { getEffectiveTier, getUserDiscountBp, membershipDiscountAmount } from './membership.js'
-import { lineTotal, moneyC, sumMoney, type Money } from './money.js'
+import { getEffectiveTier, membershipDiscountAmount } from './membership.js'
+import { lineTotal, money, moneyC, sumMoney, type Money, type Qty } from './money.js'
 import { quote } from './pricing.js'
 
 /** 带 statusCode 抛出，由 app 全局 errorHandler 映射为 { error: message }（<500 不落日志） */
@@ -338,10 +338,10 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
 
   const subtotal = sumMoney([...priced.map((p) => p.line_total), ...books.map((b) => b.line_total), ...customBooks.map((b) => b.line_total)])
 
-  const discountBp = getUserDiscountBp(db, input.customerId)
-  const mbrDiscount = membershipDiscountAmount(subtotal, discountBp)
   const effectiveTier = getEffectiveTier(db, input.customerId)
-  const total = (subtotal as number) - (mbrDiscount as number) as unknown as Money
+  const discountBp = effectiveTier?.discount_bp ?? 0
+  const mbrDiscount = membershipDiscountAmount(subtotal, discountBp)
+  const total = money(((subtotal as number) - (mbrDiscount as number)) as Qty)
 
   const now = new Date()
   const nowIso = now.toISOString()

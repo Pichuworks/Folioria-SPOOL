@@ -1003,7 +1003,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
               new Date().toISOString(),
               id,
             )
-            checkAutoUpgrade(db, order.customer_id)
+            try { checkAutoUpgrade(db, order.customer_id) } catch { /* best-effort; delivery must not fail */ }
           } else {
             db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id)
           }
