@@ -31,18 +31,18 @@ function calcCover(
   sheets: number, mmPerSheet: number,
   binding: 'perfect' | 'saddle' | 'hardcover',
 ): CoverDims {
-  const spine = +(sheets * mmPerSheet).toFixed(2)
+  const spine = sheets * mmPerSheet
   if (binding === 'saddle') {
     return {
       spine: 0, trimW, trimH,
       totalW: 2 * trimW + 2 * BLEED,
       totalH: trimH + 2 * BLEED,
-      hasSpine: false, thinSpine: true,
+      hasSpine: false, thinSpine: false,
     }
   }
   return {
     spine, trimW, trimH,
-    totalW: +(2 * trimW + spine + 2 * BLEED).toFixed(2),
+    totalW: 2 * trimW + spine + 2 * BLEED,
     totalH: trimH + 2 * BLEED,
     hasSpine: true,
     thinSpine: spine < 3,
@@ -55,6 +55,8 @@ const BINDINGS: Array<{ key: BindingType; label: string }> = [
   { key: 'saddle', label: '骑马钉' },
   { key: 'hardcover', label: '精装' },
 ]
+
+function fmtNum(n: number): string { return +n.toFixed(2) + '' }
 
 function generatePsScript(dims: CoverDims, binding: BindingType): string {
   const { totalW, totalH, spine, trimW, hasSpine } = dims
@@ -72,14 +74,16 @@ function generatePsScript(dims: CoverDims, binding: BindingType): string {
   const backX = BLEED + trimW / 2
 
   const lines = [
+    `var origUnits = app.preferences.rulerUnits;`,
+    `app.preferences.rulerUnits = Units.MM;`,
     `var resolution = 300;`,
-    `var pageW = ${totalW};`,
-    `var pageH = ${totalH};`,
+    `var pageW = ${fmtNum(totalW)};`,
+    `var pageH = ${fmtNum(totalH)};`,
     `var docRef = app.documents.add(pageW, pageH, resolution, "封面", NewDocumentMode.CMYK, DocumentFill.TRANSPARENT);`,
     `var doc = app.activeDocument;`,
     ``,
-    `var LY = [${vGuides.join(',')}];`,
-    `var LX = [${hGuides.join(',')}];`,
+    `var LY = [${vGuides.map(fmtNum).join(',')}];`,
+    `var LX = [${hGuides.map(fmtNum).join(',')}];`,
     `for (var i = 0; i < LY.length; i++) doc.guides.add(Direction.VERTICAL, LY[i]);`,
     `for (var i = 0; i < LX.length; i++) doc.guides.add(Direction.HORIZONTAL, LX[i]);`,
   ]
@@ -109,6 +113,9 @@ function generatePsScript(dims: CoverDims, binding: BindingType): string {
     addLabel('书脊', '书脊位置', spineX, Math.min(spine * 0.6, 14), true)
   }
 
+  lines.push(``)
+  lines.push(`app.preferences.rulerUnits = origUnits;`)
+
   return lines.join('\n')
 }
 
@@ -127,6 +134,9 @@ function CoverDiagram({ dims, binding }: { dims: CoverDims; binding: BindingType
         <pattern id="bleed-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="6" className="stroke-wine-dim/30" strokeWidth="1" />
         </pattern>
+        <marker id="arr" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto">
+          <path d="M0,0 L4,2 L0,4" className="fill-dim" />
+        </marker>
       </defs>
       <g transform="translate(20, 28)">
         {/* bleed area */}
@@ -149,7 +159,7 @@ function CoverDiagram({ dims, binding }: { dims: CoverDims; binding: BindingType
         )}
         {/* dimension: total width */}
         <line x1={0} y1={h + 10} x2={w} y2={h + 10} className="stroke-dim" strokeWidth="0.5" markerEnd="url(#arr)" markerStart="url(#arr)" />
-        <text x={w / 2} y={h + 22} textAnchor="middle" className="fill-dim text-[9px] font-mono">{totalW}mm</text>
+        <text x={w / 2} y={h + 22} textAnchor="middle" className="fill-dim text-[9px] font-mono">{+totalW.toFixed(2)}mm</text>
         {/* dimension: height */}
         <line x1={w + 8} y1={0} x2={w + 8} y2={h} className="stroke-dim" strokeWidth="0.5" />
         <text x={w + 12} y={h / 2} textAnchor="start" dominantBaseline="central" className="fill-dim text-[9px] font-mono" transform={`rotate(90, ${w + 12}, ${h / 2})`}>{totalH}mm</text>
@@ -157,11 +167,6 @@ function CoverDiagram({ dims, binding }: { dims: CoverDims; binding: BindingType
         <text x={b / 2} y={-6} textAnchor="middle" className="fill-wine-ink text-[8px]">{BLEED}</text>
         <text x={w - b / 2} y={-6} textAnchor="middle" className="fill-wine-ink text-[8px]">{BLEED}</text>
       </g>
-      <defs>
-        <marker id="arr" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto">
-          <path d="M0,0 L4,2 L0,4" className="fill-dim" />
-        </marker>
-      </defs>
     </svg>
   )
 }
@@ -189,7 +194,7 @@ export default function CoverSize() {
   }, [papers])
 
   const selectedSize = sizes.find((s) => s.key === sizeKey)
-  const selectedPaper = papers.find((p) => p.id === paperId)
+  const selectedPaper = innerPapers.find((p) => p.id === paperId)
 
   const sheets = Math.ceil(pages / 2)
 
@@ -209,7 +214,7 @@ export default function CoverSize() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `封面模板_${sizeKey}_${dims.totalW}x${dims.totalH}mm.jsx`
+    a.download = `封面模板_${sizeKey}_${+dims.totalW.toFixed(2)}x${+dims.totalH.toFixed(2)}mm.jsx`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -288,12 +293,17 @@ export default function CoverSize() {
                 } />
                 <SpecRow label="展开宽度" strong value={
                   dims.hasSpine
-                    ? <>{dims.trimW}<span className="text-dim">+{dims.spine.toFixed(2)}+</span>{dims.trimW}<span className="text-dim">+{2 * BLEED}出血</span> = {dims.totalW.toFixed(2)}mm</>
+                    ? <>{dims.trimW}<span className="text-dim">+{dims.spine.toFixed(2)}+</span>{dims.trimW}<span className="text-dim">+{2 * BLEED}出血</span> = {+dims.totalW.toFixed(2)}mm</>
                     : <>{dims.trimW}<span className="text-dim">+</span>{dims.trimW}<span className="text-dim">+{2 * BLEED}出血</span> = {dims.totalW}mm</>
                 } />
                 <SpecRow label="展开高度" value={<>{dims.trimH}<span className="text-dim">+{2 * BLEED}出血</span> = {dims.totalH}mm</>} />
                 <SpecRow label="出血" value={`${BLEED}mm（四边）`} />
                 <SpecRow label="分辨率" value="300 DPI · CMYK" />
+                {binding === 'hardcover' && (
+                  <p className="mt-3 text-[11.5px] leading-relaxed text-wine-ink">
+                    ⚠ 精装封面需额外考虑纸板厚度（约 2mm）和包边余量（约 15mm），此处仅计算书芯展开尺寸，实际封面用纸需另行计算。
+                  </p>
+                )}
               </div>
             ) : (
               <p className="py-8 text-center text-[13px] text-dim">选择纸张后显示尺寸。</p>
