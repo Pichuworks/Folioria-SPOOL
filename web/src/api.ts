@@ -959,6 +959,7 @@ export interface AnnouncementDto {
   body: string
   audience: 'public' | 'all' | 'customers' | 'staff'
   pinned: boolean
+  pin_sort: number
   published_at: string | null
   expires_at: string | null
   author_id: string
@@ -973,6 +974,7 @@ export interface PublicAnnouncementDto {
   title: string
   body: string
   pinned: boolean
+  pin_sort: number
   published_at: string
 }
 
@@ -982,6 +984,7 @@ export interface UserAnnouncementDto {
   body: string
   audience: string
   pinned: boolean
+  pin_sort: number
   published_at: string
   read: boolean
 }
@@ -1013,6 +1016,7 @@ export const createAnnouncement = (body: {
   body?: string
   audience?: string
   pinned?: boolean
+  pin_sort?: number
   expires_at?: string | null
   publish?: boolean
 }) => send<AnnouncementDto>('POST', '/api/admin/announcements', body)

@@ -59,7 +59,7 @@ function AnnouncementsBody() {
 
   return (
     <div>
-      <MagSec tag="01" title="公告管理" note={visible ? `${visible.length} 条` : undefined}>
+      <MagSec title="公告管理" note={visible ? `${visible.length} 条` : undefined}>
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -81,7 +81,7 @@ function AnnouncementsBody() {
             <div key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line py-[9px]">
               {a.pinned && (
                 <span className="border border-wine px-1.5 py-px font-mono text-[9.5px] tracking-[.14em] text-wine-ink">
-                  PINNED
+                  PINNED#{a.pin_sort}
                 </span>
               )}
               {audienceBadge(a.audience)}
@@ -137,6 +137,7 @@ function EditModal({ item, onClose, onSaved }: { item: AnnouncementDto | null; o
   const [body, setBody] = useState(item?.body ?? '')
   const [audience, setAudience] = useState(item?.audience ?? 'all')
   const [pinned, setPinned] = useState(item?.pinned ?? false)
+  const [pinSort, setPinSort] = useState(item?.pin_sort ?? 0)
   const [expiresAt, setExpiresAt] = useState(item?.expires_at?.slice(0, 16) ?? '')
   const [busy, setBusy] = useState(false)
 
@@ -145,12 +146,12 @@ function EditModal({ item, onClose, onSaved }: { item: AnnouncementDto | null; o
     setBusy(true)
     const exp = expiresAt ? new Date(expiresAt).toISOString() : null
     if (item) {
-      const patch: Record<string, unknown> = { title, body, audience, pinned, expires_at: exp }
+      const patch: Record<string, unknown> = { title, body, audience, pinned, pin_sort: pinSort, expires_at: exp }
       if (publish && !item.published_at) patch.published_at = new Date().toISOString()
       else if (!publish && item.published_at) patch.published_at = null
       await updateAnnouncement(item.id, patch)
     } else {
-      await createAnnouncement({ title, body, audience, pinned, expires_at: exp, publish })
+      await createAnnouncement({ title, body, audience, pinned, pin_sort: pinSort, expires_at: exp, publish })
     }
     setBusy(false)
     onSaved()
@@ -178,10 +179,25 @@ function EditModal({ item, onClose, onSaved }: { item: AnnouncementDto | null; o
             <input type="datetime-local" className={specInput} value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
           </Field>
         </div>
-        <label className="flex items-center gap-2 text-[13px] text-dim">
-          <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-          置顶横幅（同时仅一条生效）
-        </label>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-[13px] text-dim">
+            <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
+            置顶滚动横幅
+          </label>
+          {pinned && (
+            <label className="flex items-center gap-2 text-[13px] text-dim">
+              排序
+              <input
+                type="number"
+                min={0}
+                className={`${specInput} w-20`}
+                value={pinSort}
+                onChange={(e) => setPinSort(Math.max(0, parseInt(e.target.value) || 0))}
+              />
+              <span className="text-[11px]">（越小越靠前）</span>
+            </label>
+          )}
+        </div>
         <div className="flex gap-3 pt-2">
           <button
             type="button"

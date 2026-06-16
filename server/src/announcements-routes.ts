@@ -10,6 +10,7 @@ interface AnnouncementRow {
   body: string
   audience: string
   pinned: number
+  pin_sort: number
   published_at: string | null
   expires_at: string | null
   author_id: string
@@ -54,6 +55,7 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
                 title: { type: 'string' },
                 body: { type: 'string' },
                 pinned: { type: 'boolean' },
+                pin_sort: { type: 'integer' },
                 published_at: { type: 'string' },
               },
             },
@@ -65,13 +67,13 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
       const now = new Date().toISOString()
       const rows = db
         .prepare(
-          `SELECT id, title, body, pinned, published_at FROM announcements
+          `SELECT id, title, body, pinned, pin_sort, published_at FROM announcements
            WHERE published_at IS NOT NULL AND archived = 0
              AND (expires_at IS NULL OR expires_at > ?)
              AND audience = 'public'
-           ORDER BY pinned DESC, published_at DESC LIMIT 20`,
+           ORDER BY pinned DESC, pin_sort ASC, published_at DESC LIMIT 20`,
         )
-        .all(now) as Array<Pick<AnnouncementRow, 'id' | 'title' | 'body' | 'pinned' | 'published_at'>>
+        .all(now) as Array<Pick<AnnouncementRow, 'id' | 'title' | 'body' | 'pinned' | 'pin_sort' | 'published_at'>>
       return rows.map((r) => ({ ...r, pinned: r.pinned !== 0 }))
     },
   )
@@ -85,15 +87,15 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
     const where = visibleWhere(audiences)
     const rows = db
       .prepare(
-        `SELECT a.id, a.title, a.body, a.audience, a.pinned, a.published_at,
+        `SELECT a.id, a.title, a.body, a.audience, a.pinned, a.pin_sort, a.published_at,
                 CASE WHEN ar.user_id IS NOT NULL THEN 1 ELSE 0 END AS read
          FROM announcements a
          LEFT JOIN announcement_reads ar ON ar.announcement_id = a.id AND ar.user_id = ?
          WHERE ${where}
-         ORDER BY a.pinned DESC, a.published_at DESC`,
+         ORDER BY a.pinned DESC, a.pin_sort ASC, a.published_at DESC`,
       )
       .all(req.user!.id, now, ...audiences) as Array<{
-      id: string; title: string; body: string; audience: string; pinned: number; published_at: string; read: number
+      id: string; title: string; body: string; audience: string; pinned: number; pin_sort: number; published_at: string; read: number
     }>
     return rows.map((r) => ({ ...r, pinned: r.pinned !== 0, read: r.read !== 0 }))
   })
@@ -142,7 +144,7 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
         `SELECT a.*, u.name AS author_name
          FROM announcements a
          LEFT JOIN users u ON u.id = a.author_id
-         ORDER BY a.created_at DESC`,
+         ORDER BY a.pinned DESC, a.pin_sort ASC, a.created_at DESC`,
       )
       .all() as Array<AnnouncementRow & { author_name: string | null }>
     return rows.map((r) => ({ ...toBool(r), author_name: r.author_name }))
@@ -158,6 +160,7 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
         body: { type: 'string', maxLength: 10000 },
         audience: { type: 'string', enum: ['public', 'all', 'customers', 'staff'] },
         pinned: { type: 'boolean' },
+        pin_sort: { type: 'integer', minimum: 0 },
         expires_at: { type: ['string', 'null'] },
         publish: { type: 'boolean' },
       },
@@ -168,12 +171,13 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
     '/api/admin/announcements',
     { preHandler: requireAdmin, schema: createSchema },
     async (req, reply) => {
-      const { title, body = '', audience = 'all', pinned = false, expires_at = null, publish = false } =
+      const { title, body = '', audience = 'all', pinned = false, pin_sort = 0, expires_at = null, publish = false } =
         req.body as {
           title: string
           body?: string
           audience?: string
           pinned?: boolean
+          pin_sort?: number
           expires_at?: string | null
           publish?: boolean
         }
@@ -181,15 +185,10 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
       const id = randomUUID()
       const published_at = publish ? now : null
 
-      db.transaction(() => {
-        if (pinned) {
-          db.prepare('UPDATE announcements SET pinned = 0 WHERE pinned = 1').run()
-        }
-        db.prepare(
-          `INSERT INTO announcements (id, title, body, audience, pinned, published_at, expires_at, author_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(id, title, body, audience, pinned ? 1 : 0, published_at, expires_at, req.user!.id, now, now)
-      })()
+      db.prepare(
+        `INSERT INTO announcements (id, title, body, audience, pinned, pin_sort, published_at, expires_at, author_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(id, title, body, audience, pinned ? 1 : 0, pin_sort, published_at, expires_at, req.user!.id, now, now)
 
       audit(db, {
         actorId: req.user!.id,
@@ -214,6 +213,7 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
         body: { type: 'string', maxLength: 10000 },
         audience: { type: 'string', enum: ['public', 'all', 'customers', 'staff'] },
         pinned: { type: 'boolean' },
+        pin_sort: { type: 'integer', minimum: 0 },
         expires_at: { type: ['string', 'null'] },
         published_at: { type: ['string', 'null'] },
       },
@@ -238,6 +238,9 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
         if (key === 'pinned') {
           sets.push('pinned = ?')
           params.push(val ? 1 : 0)
+        } else if (key === 'pin_sort') {
+          sets.push('pin_sort = ?')
+          params.push(val)
         } else if (PATCH_COLS.has(key)) {
           sets.push(`${key} = ?`)
           params.push(val)
@@ -245,12 +248,7 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
       }
       params.push(id)
 
-      db.transaction(() => {
-        if (updates.pinned === true) {
-          db.prepare('UPDATE announcements SET pinned = 0 WHERE pinned = 1 AND id != ?').run(id)
-        }
-        db.prepare(`UPDATE announcements SET ${sets.join(', ')} WHERE id = ?`).run(...params)
-      })()
+      db.prepare(`UPDATE announcements SET ${sets.join(', ')} WHERE id = ?`).run(...params)
 
       audit(db, {
         actorId: req.user!.id,

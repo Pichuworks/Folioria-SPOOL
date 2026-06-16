@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { renderMarkdown } from './markdown'
 import { AccountMenu } from './Account'
 import { fetchOptions, fetchPublicAnnouncements, getOptionsCache, type MeDto, type OptionsDto, type PublicAnnouncementDto } from './api'
 import { Leader, MagSec, PillLink, Shell } from './spec'
@@ -71,6 +72,7 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
     void fetchPublicAnnouncements().then(setAnnouncements)
   }, [])
 
+  const nonPinned = announcements.filter((a) => !a.pinned)
   const anchor = 'whitespace-nowrap text-dim hover:text-ink'
   const guestNav = (
     <>
@@ -113,13 +115,17 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
           </div>
         </div>
 
-        {announcements.length > 0 && (
+        {nonPinned.length > 0 && (
           <div className="mt-6 flex flex-col gap-3">
-            {announcements.map((a) => (
-              <div key={a.id} className={`border px-6 py-4 ${a.pinned ? 'border-wine bg-wine-dim/10' : 'border-line'}`}>
-                {a.pinned && <div className="mb-1 font-mono text-[10px] tracking-[.18em] text-wine-ink">NOTICE</div>}
+            {nonPinned.map((a) => (
+              <div key={a.id} className="border border-line px-6 py-4">
                 <h3 className="text-[15px] font-medium">{a.title}</h3>
-                {a.body && <p className="mt-1.5 text-[13px] leading-[1.85] text-dim">{a.body}</p>}
+                {a.body && (
+                  <div
+                    className="prose-ann mt-1.5 text-[13px] leading-[1.85] text-dim"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(a.body) }}
+                  />
+                )}
                 <span className="mt-1 block font-mono text-[10px] tracking-[.08em] text-dim">{a.published_at.slice(0, 10)}</span>
               </div>
             ))}

@@ -23,6 +23,13 @@
   --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.06);
   --shadow-e2: 0 2px 8px rgb(0 0 0 / 0.08);
   --shadow-e3: 0 8px 24px rgb(0 0 0 / 0.1);
+
+  --animate-marquee: marquee var(--marquee-duration, 30s) linear infinite;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 body {
@@ -46,6 +53,19 @@ h4 {
 p {
   text-wrap: pretty;
 }
+
+.prose-ann { overflow-wrap: break-word; }
+.prose-ann p { margin-top: 0.5em; margin-bottom: 0.5em; }
+.prose-ann p:first-child { margin-top: 0; }
+.prose-ann a { color: var(--color-wine-ink); text-decoration: underline; }
+.prose-ann a:hover { opacity: 0.8; }
+.prose-ann img { max-width: 100%; margin-top: 0.75em; margin-bottom: 0.75em; border: 1px solid var(--color-line); }
+.prose-ann strong { font-weight: 600; color: var(--color-ink); }
+.prose-ann ul, .prose-ann ol { padding-left: 1.5em; margin-top: 0.5em; margin-bottom: 0.5em; }
+.prose-ann li { margin-top: 0.2em; }
+.prose-ann code { font-family: var(--font-mono); font-size: 0.9em; background: var(--color-deep); padding: 0.1em 0.35em; }
+.prose-ann blockquote { border-left: 2px solid var(--color-line); padding-left: 1em; color: var(--color-dim); margin: 0.5em 0; }
+.prose-ann h1, .prose-ann h2, .prose-ann h3 { font-weight: 600; color: var(--color-ink); margin-top: 0.75em; margin-bottom: 0.25em; }
 
 .ink-press {
   text-shadow:

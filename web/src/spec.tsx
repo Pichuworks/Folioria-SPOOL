@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore, useState, type ReactNode } from 'react'
+import PinnedBanner from './PinnedBanner'
 
 /* Asagaya modern·杂志语域 × eri 配色，全站统一壳：刊头 / 墨标签节头 / 点线行 / 直角控件 / 对折页码 */
 
@@ -9,6 +10,9 @@ export const Shell = ({ nav, center, children }: { nav: ReactNode; center: strin
     <LoadingBar />
     <div className="mx-auto max-w-[1200px] px-5 md:px-10">
       <Masthead nav={nav} />
+    </div>
+    <PinnedBanner />
+    <div className="mx-auto max-w-[1200px] px-5 md:px-10">
       <main className="min-h-[60vh] pb-16">{children}</main>
       <Folio center={center} />
     </div>

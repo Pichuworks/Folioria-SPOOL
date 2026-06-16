@@ -259,20 +259,20 @@ describe('草稿 / 过期不可见', () => {
   })
 })
 
-// ── pinned 互斥 ────────────────────────────────────────────────
+// ── 多置顶与排序 ──────────────────────────────────────────────
 
-describe('pinned 互斥', () => {
-  it('新 pin 自动取消旧 pin', async () => {
+describe('多置顶与排序', () => {
+  it('允许多条 pinned 同时生效', async () => {
     const a = await createAnn({ title: 'A', pinned: true, publish: true })
     const b = await createAnn({ title: 'B', pinned: true, publish: true })
 
     const list = await app.inject({ method: 'GET', url: '/api/admin/announcements', headers: { cookie: adminCookie } })
     const items = list.json() as AnnDto[]
-    expect(items.find((i) => i.id === a.id)!.pinned).toBe(false)
+    expect(items.find((i) => i.id === a.id)!.pinned).toBe(true)
     expect(items.find((i) => i.id === b.id)!.pinned).toBe(true)
   })
 
-  it('PATCH pin 也触发互斥', async () => {
+  it('PATCH pin 不影响已有 pinned', async () => {
     const a = await createAnn({ title: 'A', pinned: true, publish: true })
     const b = await createAnn({ title: 'B', publish: true })
 
@@ -285,8 +285,20 @@ describe('pinned 互斥', () => {
 
     const list = await app.inject({ method: 'GET', url: '/api/admin/announcements', headers: { cookie: adminCookie } })
     const items = list.json() as AnnDto[]
-    expect(items.find((i) => i.id === a.id)!.pinned).toBe(false)
+    expect(items.find((i) => i.id === a.id)!.pinned).toBe(true)
     expect(items.find((i) => i.id === b.id)!.pinned).toBe(true)
+  })
+
+  it('pin_sort 控制置顶顺序', async () => {
+    await createAnn({ title: 'Z', audience: 'public', pinned: true, pin_sort: 10, publish: true })
+    await createAnn({ title: 'A', audience: 'public', pinned: true, pin_sort: 1, publish: true })
+
+    const list = await app.inject({ method: 'GET', url: '/api/public-announcements' })
+    const items = list.json() as Array<{ title: string; pinned: boolean; pin_sort: number }>
+    const pinned = items.filter((i) => i.pinned)
+    expect(pinned).toHaveLength(2)
+    expect(pinned[0]!.title).toBe('A')
+    expect(pinned[1]!.title).toBe('Z')
   })
 })
 

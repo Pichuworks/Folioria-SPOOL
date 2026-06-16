@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { renderMarkdown } from './markdown'
 import { fetchUserAnnouncements, markAnnouncementRead, type UserAnnouncementDto } from './api'
 import CustomerGate from './CustomerGate'
 import { MagSec } from './spec'
@@ -38,7 +39,10 @@ function AnnouncementsBody() {
               )}
             </div>
             {a.body && (
-              <p className="mt-2 whitespace-pre-wrap text-[13.5px] leading-[1.85] text-dim">{a.body}</p>
+              <div
+                className="prose-ann mt-2 text-[13.5px] leading-[1.85] text-dim"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(a.body) }}
+              />
             )}
           </div>
         ))
