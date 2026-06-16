@@ -1,15 +1,18 @@
 import type { SpriteInstance } from './types'
 
 export default function Sprite({ s }: { s: SpriteInstance }) {
-  const { cfg, x, facingRight, bouncePhase, bubble, soloYOffset, state } = s
+  const { cfg, x, facingRight, bouncePhase, bubble, soloYOffset, state, isAlt } = s
   const moveSolo = s.soloType === 'sprint' || s.soloType === 'big_bounce' || s.soloType === 'cat_antics'
   const bouncing = state === 'walk' || (state === 'solo' && moveSolo)
   const bounceY = bouncing ? Math.sin(bouncePhase) * cfg.bounceHeight : 0
 
+  const displayName = isAlt && cfg.altDisplayName ? cfg.altDisplayName : cfg.displayName
+  const displayColor = isAlt && cfg.altColor ? cfg.altColor : cfg.color
+
   const hasDual = !!cfg.color2
   const bg = hasDual
     ? `linear-gradient(90deg, ${cfg.color} 50%, ${cfg.color2} 50%)`
-    : cfg.color
+    : displayColor
 
   return (
     <div
@@ -22,9 +25,9 @@ export default function Sprite({ s }: { s: SpriteInstance }) {
     >
       <div
         className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[7px] tracking-[.08em]"
-        style={{ color: cfg.color, opacity: 0.45 }}
+        style={{ color: displayColor, opacity: 0.45 }}
       >
-        {cfg.displayName}
+        {displayName}
       </div>
       <div
         style={{
@@ -38,7 +41,7 @@ export default function Sprite({ s }: { s: SpriteInstance }) {
       />
       {bubble && (
         <div
-          className="egg-bubble absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px]"
+          className="egg-bubble absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px]"
           style={{ color: '#f5e6c8' }}
         >
           {bubble}

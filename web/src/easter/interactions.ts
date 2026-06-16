@@ -85,6 +85,7 @@ export class InteractionEngine {
     this.catIds.clear()
     for (let i = 0; i < sprites.length; i++) {
       this.idIndex.set(sprites[i]!.cfg.id, i)
+      if (sprites[i]!.cfg.altId) this.idIndex.set(sprites[i]!.cfg.altId!, i)
       if (sprites[i]!.cfg.isCat) this.catIds.add(sprites[i]!.cfg.id)
     }
   }
@@ -302,6 +303,6 @@ export class InteractionEngine {
     s.state = 'interact'
     s.stateTimer = 0
     s.bubble = dialogue
-    s.bubbleTimer = 2.8
+    s.bubbleTimer = 3.5
   }
 }

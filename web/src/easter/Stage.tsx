@@ -20,6 +20,8 @@ function init(cfg: SpriteConfig, w: number): SpriteInstance {
     soloDuration: 0,
     soloBubbles: [],
     soloBubbleIdx: 0,
+    isAlt: false,
+    switchTimer: cfg.altId ? 15 + Math.random() * 20 : 0,
   }
 }
 
@@ -129,13 +131,21 @@ export default function Stage({ sprites: cfgs, decryptionKey }: Props) {
           }
         }
 
+        if (s.cfg.altId) {
+          s.switchTimer -= dt
+          if (s.switchTimer <= 0) {
+            s.isAlt = !s.isAlt
+            s.switchTimer = 15 + Math.random() * 20
+          }
+        }
+
         if (s.bubble) {
           s.bubbleTimer -= dt
           if (s.bubbleTimer <= 0) s.bubble = null
         }
         if (!s.bubble && s.state !== 'interact' && s.cfg.dialogues.length > 0 && Math.random() < 0.0008) {
           s.bubble = s.cfg.dialogues[Math.floor(Math.random() * s.cfg.dialogues.length)] ?? null
-          s.bubbleTimer = 2.2 + Math.random()
+          s.bubbleTimer = 3.0 + Math.random() * 1.5
         }
       }
 

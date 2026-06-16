@@ -33,7 +33,7 @@ const CHARS = [
     dl:['喝茶吗','bonne nuit'],
   },
   {
-    id:'mutsumi', n:'若叶睦', f:'若叶', g:'睦', d:'睦子', x:1,
+    id:'mutsumi', n:'若叶睦', f:'若叶', g:'睦', d:'睦', x:1,
     q:'A → D → F♯',
     m:'……花。今天也开了。',
     c:'#779977', sp:0.5, pc:0.5, pd:[3,7], bh:2,
@@ -325,6 +325,17 @@ const GROUP = [
   { ty:'meeting',         ch:0.0003, cd:40 },
 ]
 
+// ── Ending screen ──
+
+const ENDING = [
+  '枫光映刻',
+  'Maplescape Folioria',
+  '由',
+  'Crisamielle Aveniris · 诸泪折虹制作委员会',
+  '诸位提供设计与技术支持',
+  '若叶睦 提供命名；天王寺璃奈 进行初始化设计与开发',
+]
+
 // ── Tagline + hint ──
 
 const TAGLINE = ['Crisamielle Aveniris', 'Folia Impressa Animae']
@@ -387,7 +398,9 @@ const so = SOLO.map(r => ({
   dl: (r.dl || []).map(l => e(l)),
 }))
 
-const payload = { s, z, t, h, b, k, ix, cx, so, ge: GROUP }
+const ed = ENDING.map(l => e(l))
+
+const payload = { s, z, t, h, b, k, ix, cx, so, ge: GROUP, ed }
 
 // ── Output ──
 

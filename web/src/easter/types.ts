@@ -21,6 +21,9 @@ export interface SpriteConfig {
   bounceHeight: number
   isCat?: boolean
   dialogues: string[]
+  altId?: string
+  altDisplayName?: string
+  altColor?: string
 }
 
 export type Phase = 'entering' | 'playing' | 'finale' | 'idle'
@@ -48,4 +51,6 @@ export interface SpriteInstance {
   soloDuration: number
   soloBubbles: string[]
   soloBubbleIdx: number
+  isAlt: boolean
+  switchTimer: number
 }

@@ -6,17 +6,23 @@ interface Props {
   stars: StarEntry[]
   finalMsg: StarEntry | null
   tagline: string[]
+  ending: string[]
   glitchEnabled: boolean
   onFinale: () => void
 }
 
-export default function Credits({ stars, finalMsg, tagline, glitchEnabled, onFinale }: Props) {
+type FinalePhase = 'nozomu' | 'ending' | null
+
+export default function Credits({ stars, finalMsg, tagline, ending, glitchEnabled, onFinale }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const msgRefs = useRef<(HTMLDivElement | null)[]>([])
   const offsetRef = useRef(0)
   const finaleRef = useRef(false)
-  const [showFinale, setShowFinale] = useState(false)
+  const phaseRef = useRef<FinalePhase>(null)
+  const [finalePhase, setFinalePhase] = useState<FinalePhase>(null)
+
+  useEffect(() => { phaseRef.current = finalePhase }, [finalePhase])
 
   useEffect(() => {
     const box = boxRef.current
@@ -33,22 +39,25 @@ export default function Credits({ stars, finalMsg, tagline, glitchEnabled, onFin
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.1)
       last = now
-      offsetRef.current -= SPEED * dt
-      track.style.transform = `translateY(${offsetRef.current}px)`
 
-      for (let i = 0; i < msgRefs.current.length; i++) {
-        const el = msgRefs.current[i]
-        if (!el || el.dataset.entered) continue
-        if (el.offsetTop + offsetRef.current < boxH - 40) {
-          el.style.opacity = '1'
-          el.dataset.entered = '1'
+      if (phaseRef.current === null) {
+        offsetRef.current -= SPEED * dt
+        track.style.transform = `translateY(${offsetRef.current}px)`
+
+        for (let i = 0; i < msgRefs.current.length; i++) {
+          const el = msgRefs.current[i]
+          if (!el || el.dataset.entered) continue
+          if (el.offsetTop + offsetRef.current < boxH - 40) {
+            el.style.opacity = '1'
+            el.dataset.entered = '1'
+          }
         }
-      }
 
-      if (!finaleRef.current && offsetRef.current < -(track.scrollHeight - boxH * 0.3)) {
-        finaleRef.current = true
-        setShowFinale(true)
-        onFinale()
+        if (!finaleRef.current && offsetRef.current < -(track.scrollHeight - boxH * 0.3)) {
+          finaleRef.current = true
+          setFinalePhase('nozomu')
+          onFinale()
+        }
       }
 
       raf = requestAnimationFrame(tick)
@@ -59,11 +68,39 @@ export default function Credits({ stars, finalMsg, tagline, glitchEnabled, onFin
   }, [stars, onFinale])
 
   useEffect(() => {
+    if (finalePhase === 'nozomu') {
+      const t = setTimeout(() => setFinalePhase('ending'), 10000)
+      return () => clearTimeout(t)
+    }
+    if (finalePhase === 'ending') {
+      const t = setTimeout(() => {
+        const box = boxRef.current
+        const track = trackRef.current
+        if (box && track) {
+          offsetRef.current = box.clientHeight
+          track.style.transform = `translateY(${offsetRef.current}px)`
+        }
+        finaleRef.current = false
+        for (const el of msgRefs.current) {
+          if (el) {
+            el.style.opacity = '0'
+            delete el.dataset.entered
+          }
+        }
+        setFinalePhase(null)
+      }, 60000)
+      return () => clearTimeout(t)
+    }
+  }, [finalePhase])
+
+  useEffect(() => {
     const box = boxRef.current
     if (!box) return
     const onWheel = (ev: WheelEvent) => {
       ev.preventDefault()
-      offsetRef.current -= ev.deltaY * 0.5
+      if (phaseRef.current === null) {
+        offsetRef.current -= ev.deltaY * 0.5
+      }
     }
     box.addEventListener('wheel', onWheel, { passive: false })
     return () => box.removeEventListener('wheel', onWheel)
@@ -83,7 +120,7 @@ export default function Credits({ stars, finalMsg, tagline, glitchEnabled, onFin
         <div style={{ height: '60vh' }} />
       </div>
 
-      {showFinale && finalMsg && (
+      {finalePhase === 'nozomu' && finalMsg && (
         <div className="fixed inset-0 z-[4] flex flex-col items-center justify-center" style={{ bottom: 80 }}>
           <div className="egg-fadein text-center">
             <div className="mx-auto mb-3 h-[4px] w-[4px] rounded-full" style={{ backgroundColor: '#f5e6c8' }} />
@@ -102,6 +139,46 @@ export default function Credits({ stars, finalMsg, tagline, glitchEnabled, onFin
                   key={i}
                   className="font-mono text-[11px] tracking-[.25em]"
                   style={{ color: '#8B6914', animationDelay: `${1.5 + i * 0.5}s` }}
+                >
+                  {line}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {finalePhase === 'ending' && (
+        <div className="fixed inset-0 z-[4] flex flex-col items-center justify-center" style={{ bottom: 80 }}>
+          <div className="egg-fadein text-center">
+            {ending.length >= 6 && (
+              <>
+                <div className="mb-1 text-[20px] tracking-[.12em]" style={{ color: '#e8dcc8', fontFamily: 'var(--font-serif)' }}>
+                  {ending[0]}
+                </div>
+                <div className="mb-8 font-mono text-[13px] tracking-[.2em]" style={{ color: '#8B6914' }}>
+                  {ending[1]}
+                </div>
+                <div className="mb-4 text-[12px]" style={{ color: '#c8bfb080' }}>
+                  {ending[2]}
+                </div>
+                <div className="mb-2 text-[14px] leading-relaxed" style={{ color: '#c8bfb0' }}>
+                  {ending[3]}
+                </div>
+                <div className="mb-6 text-[14px] leading-relaxed" style={{ color: '#c8bfb0' }}>
+                  {ending[4]}
+                </div>
+                <div className="mb-10 text-[12px] leading-relaxed" style={{ color: '#c8bfb0a0' }}>
+                  {ending[5]}
+                </div>
+              </>
+            )}
+            <div className="space-y-1">
+              {tagline.map((line, i) => (
+                <div
+                  key={i}
+                  className="font-mono text-[11px] tracking-[.25em]"
+                  style={{ color: '#8B6914' }}
                 >
                   {line}
                 </div>

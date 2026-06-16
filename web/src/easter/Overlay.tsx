@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { decode, checkTrigger } from './codec'
 import { _d } from './payload'
 import type { StarEntry, SpriteConfig, Phase } from './types'
@@ -22,10 +22,11 @@ const CSS = `
 }
 .egg-fadein{animation:egg-fadein-kf 2s ease-out forwards}
 @keyframes egg-bubble-kf{
-  0%{opacity:0}15%{opacity:1}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-8px)}
+  0%{opacity:0}10%{opacity:1}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-8px)}
 }
-.egg-bubble{animation:egg-bubble-kf 2.5s ease-out forwards}
+.egg-bubble{animation:egg-bubble-kf 4s ease-out forwards;text-shadow:0 0 4px #0a0f1a,0 0 8px #0a0f1a,0 1px 2px #0a0f1a}
 .egg-msg{transition:opacity 1.2s ease-out}
+.egg-root{font-variant-emoji:text}
 `
 
 interface Props {
@@ -39,9 +40,12 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
   const [sprites, setSprites] = useState<SpriteConfig[]>([])
   const [finalMsg, setFinalMsg] = useState<StarEntry | null>(null)
   const [tagline, setTagline] = useState<string[]>([])
+  const [ending, setEnding] = useState<string[]>([])
   const [glitch, setGlitch] = useState(false)
   const [vis, setVis] = useState(false)
   const keyRef = useRef(decryptionKey)
+
+  const handleFinale = useCallback(() => setPhase('finale'), [])
 
   useEffect(() => {
     const d = (s: string) => decode(s, keyRef.current)
@@ -58,20 +62,29 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
     })))
 
     const bMap = _d.b as Record<string, { sp: number; pc: number; pd: number[]; bh: number; dl: string[]; cat?: number }>
-    const charSprites: SpriteConfig[] = _d.s.map(ch => {
-      const b = bMap[ch.i]!
-      return {
-        id: ch.i,
-        displayName: d(ch.d),
-        color: ch.c,
-        speed: b.sp,
-        pauseChance: b.pc,
-        pauseDuration: [b.pd[0], b.pd[1]] as [number, number],
-        bounceHeight: b.bh,
-        isCat: !!b.cat,
-        dialogues: b.dl.map(l => d(l)),
-      }
-    })
+    const mutsumiCh = _d.s.find(ch => ch.i === 'mutsumi')
+    const charSprites: SpriteConfig[] = _d.s
+      .filter(ch => ch.i !== 'mutsumi')
+      .map(ch => {
+        const b = bMap[ch.i]!
+        const cfg: SpriteConfig = {
+          id: ch.i,
+          displayName: d(ch.d),
+          color: ch.c,
+          speed: b.sp,
+          pauseChance: b.pc,
+          pauseDuration: [b.pd[0], b.pd[1]] as [number, number],
+          bounceHeight: b.bh,
+          isCat: !!b.cat,
+          dialogues: b.dl.map(l => d(l)),
+        }
+        if (ch.i === 'mortis' && mutsumiCh) {
+          cfg.altId = 'mutsumi'
+          cfg.altDisplayName = d(mutsumiCh.d)
+          cfg.altColor = mutsumiCh.c
+        }
+        return cfg
+      })
     const catSprites: SpriteConfig[] = _d.k.map(cat => ({
       id: cat.i,
       displayName: d(cat.d),
@@ -99,6 +112,7 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
     })
 
     setTagline(_d.t.map(l => d(l)))
+    setEnding(((_d as any).ed ?? []).map((l: string) => d(l)))
   }, [])
 
   useEffect(() => {
@@ -133,7 +147,7 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[60]"
+      className="egg-root fixed inset-0 z-[60]"
       style={{ backgroundColor: '#0a0f1a', opacity: vis ? 1 : 0, transition: 'opacity 1.5s ease-in' }}
     >
       <style>{CSS}</style>
@@ -144,8 +158,9 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
             stars={stars}
             finalMsg={finalMsg}
             tagline={tagline}
+            ending={ending}
             glitchEnabled={glitch}
-            onFinale={() => setPhase('finale')}
+            onFinale={handleFinale}
           />
           <Stage sprites={sprites} decryptionKey={keyRef.current} />
         </>
