@@ -24,6 +24,7 @@ import {
   type OrderItemRow,
   type OrderRow,
 } from './orders.js'
+import { checkAutoUpgrade } from './membership.js'
 import { getPayments, PaymentError, projectStatus, recordPayment, type PaymentRow } from './payments.js'
 
 // ---------- 序列化白名单（D5/§6）：下单域响应仅含售价侧字段，cost/profit/margin 不进 schema ----------
@@ -194,6 +195,9 @@ export const ORDER_SCHEMA = {
     subtotal_display: { type: 'string' },
     discount: { type: 'integer' },
     discount_display: { type: 'string' },
+    membership_discount: { type: 'integer' },
+    membership_discount_display: { type: 'string' },
+    membership_tier_name: { type: ['string', 'null'] },
     total: { type: 'integer' },
     total_display: { type: 'string' },
     payment_status: { type: 'string' },
@@ -433,6 +437,11 @@ export function orderDto(db: DB, order: OrderRow, currency: Currency, opts: DtoO
     subtotal_display: formatMoney(money(order.subtotal), currency),
     discount: order.discount,
     discount_display: formatMoney(money(order.discount), currency),
+    membership_discount: order.membership_discount,
+    membership_discount_display: formatMoney(money(order.membership_discount), currency),
+    membership_tier_name: order.membership_tier_id
+      ? ((db.prepare('SELECT name FROM membership_tiers WHERE id = ?').get(order.membership_tier_id) as { name: string } | undefined)?.name ?? null)
+      : null,
     total: order.total,
     total_display: formatMoney(money(order.total), currency),
     payment_status: order.payment_status,
@@ -994,6 +1003,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
               new Date().toISOString(),
               id,
             )
+            try { checkAutoUpgrade(db, order.customer_id) } catch { /* best-effort; delivery must not fail */ }
           } else {
             db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id)
           }
@@ -1244,11 +1254,12 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
       if (!['quoted', 'file_pending', 'file_approved'].includes(order.status)) {
         return reply.status(409).send({ error: `not_editable_from_${order.status}` })
       }
-      if (discount > order.subtotal) {
+      const maxDiscount = order.subtotal - order.membership_discount
+      if (discount > maxDiscount) {
         return reply.status(422).send({ error: 'discount_exceeds_subtotal' })
       }
       // D28: 折扣不可把应付压到已收之下（否则 paid_amount > total，投影失真，须先退款）
-      const newTotal = order.subtotal - discount
+      const newTotal = order.subtotal - discount - order.membership_discount
       if (newTotal < order.paid_amount) {
         return reply.status(422).send({ error: 'discount_below_paid' })
       }

@@ -35,6 +35,7 @@ const AdminPricing = lazy(() => import('./AdminPricing'))
 const AdminReports = lazy(() => import('./AdminReports'))
 const AdminSettings = lazy(() => import('./AdminSettings'))
 const AdminAnnouncements = lazy(() => import('./AdminAnnouncements'))
+const AdminMembership = lazy(() => import('./AdminMembership'))
 const AdminUsers = lazy(() => import('./AdminUsers'))
 
 /** 下单域路由：公开导航三态（guest / 下单用户 / admin）都可见 */
@@ -56,6 +57,7 @@ const ADMIN_ROUTES: Record<string, { nav: string; title: string; folio: string; 
   '#/admin/pricing': { nav: '价目', title: '价目管理', folio: 'PRICE BOOK', view: AdminPricing },
   '#/admin/equipment': { nav: '设备', title: '设备管理', folio: 'PRESS FLEET', view: AdminEquipment },
   '#/admin/users': { nav: '用户', title: '用户管理', folio: 'STAFF ROSTER', view: AdminUsers },
+  '#/admin/membership': { nav: '会员', title: '会员管理', folio: 'MEMBERSHIP', view: AdminMembership },
   '#/admin/announcements': { nav: '公告', title: '公告管理', folio: 'BULLETIN BOARD', view: AdminAnnouncements },
   '#/admin/alerts': { nav: '报警', title: '报警与通知', folio: 'ALERT INBOX', view: AdminAlerts },
   '#/admin/settings': { nav: '设置', title: '系统设置', folio: 'HOUSE RULES', view: AdminSettings },

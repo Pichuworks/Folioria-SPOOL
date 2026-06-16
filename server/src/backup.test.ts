@@ -34,7 +34,7 @@ describe('T15 备份（VACUUM INTO，禁止 cp）', () => {
     expect(report.ok).toBe(true)
     expect(report.integrity).toBe('ok')
     expect(report.foreign_key_violations).toBe(0)
-    expect(report.user_version).toBe(25)
+    expect(report.user_version).toBe(26)
 
     const backup = openDb(file)
     expect((backup.prepare('SELECT COUNT(*) n FROM combos').get() as { n: number }).n).toBe(70)
