@@ -18,7 +18,7 @@ import {
   type ProductsDto,
   type QuoteDto,
 } from './api'
-import { type BookCartLine } from './BookConfigurator'
+import type { BookCartLine } from './BookConfigurator'
 const BookConfigurator = lazy(() => import('./BookConfigurator'))
 import { VerifyBanner } from './CustomerGate'
 import CustomerGate from './CustomerGate'
