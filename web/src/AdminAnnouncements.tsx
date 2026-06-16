@@ -7,7 +7,7 @@ import {
   updateAnnouncement,
   type AnnouncementDto,
 } from './api'
-import { Field, Leader, MagSec, Modal, specInput, TabBar } from './spec'
+import { Btn, Field, Leader, MagSec, Modal, specInput, TabBar } from './spec'
 
 type Tab = 'all' | 'draft' | 'published' | 'expired' | 'archived'
 
@@ -61,13 +61,7 @@ function AnnouncementsBody() {
     <div>
       <MagSec title="公告管理" note={visible ? `${visible.length} 条` : undefined}>
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => { setEditing(null); setCreating(true) }}
-            className="inline-flex items-center gap-2 rounded-full border border-wine bg-wine px-[18px] py-2 text-[13px] font-medium text-cream shadow-e1 transition-opacity hover:opacity-90"
-          >
-            新建公告
-          </button>
+          <Btn onClick={() => { setEditing(null); setCreating(true) }}>新建公告</Btn>
         </div>
 
         <TabBar tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
@@ -199,22 +193,12 @@ function EditModal({ item, onClose, onSaved }: { item: AnnouncementDto | null; o
           )}
         </div>
         <div className="flex gap-3 pt-2">
-          <button
-            type="button"
-            disabled={busy || !title.trim()}
-            onClick={() => void save(false)}
-            className="rounded-full border border-line px-4 py-2 text-[13px] text-dim transition-opacity hover:text-ink disabled:opacity-50"
-          >
+          <Btn variant="subtle" disabled={busy || !title.trim()} onClick={() => void save(false)}>
             {item?.published_at ? '撤回为草稿' : '保存草稿'}
-          </button>
-          <button
-            type="button"
-            disabled={busy || !title.trim()}
-            onClick={() => void save(true)}
-            className="rounded-full border border-wine bg-wine px-4 py-2 text-[13px] font-medium text-cream shadow-e1 transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
+          </Btn>
+          <Btn disabled={busy || !title.trim()} onClick={() => void save(true)}>
             {item?.published_at ? '保存' : '发布'}
-          </button>
+          </Btn>
         </div>
       </div>
     </Modal>

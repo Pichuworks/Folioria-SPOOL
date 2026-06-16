@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { ORDER_STATUS_LABEL, send, type OrderDto } from './api'
-import { Field, Leader, MagSec, Modal, Paginator, PillBtn, Skeleton, SpecRow, specInput, usePagination } from './spec'
+import { Btn, Field, Leader, MagSec, Modal, Paginator, PillBtn, Skeleton, SpecRow, specInput, usePagination } from './spec'
 
 interface UserDto {
   id: string
@@ -260,13 +260,7 @@ function UsersBody() {
             <option value="active">活跃</option>
             <option value="disabled">已停用</option>
           </select>
-          <button
-            type="button"
-            className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-wine bg-wine px-4 py-1.5 text-[12px] font-medium tracking-[.02em] text-cream hover:opacity-90"
-            onClick={() => setShowCreate(true)}
-          >
-            + 添加用户
-          </button>
+          <Btn size="sm" className="ml-auto" onClick={() => setShowCreate(true)}>+ 添加用户</Btn>
         </div>
 
         {filtered.length === 0 ? (

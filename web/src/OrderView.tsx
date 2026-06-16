@@ -16,7 +16,7 @@ import {
   type OrderDto,
   type OrderItemDto,
 } from './api'
-import { Leader, MagSec, SpecRow } from './spec'
+import { Btn, Leader, MagSec, SpecRow } from './spec'
 
 const CAT_LABEL: Record<string, string> = {
   bw: '黑白',
@@ -162,14 +162,9 @@ function BookCompFile({
               e.target.value = ''
             }}
           />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => fileInput.current?.click()}
-            className="rounded-full border border-wine px-2.5 py-0.5 text-[11px] text-wine-ink hover:opacity-80 disabled:opacity-50"
-          >
+          <Btn variant="ghost" size="xs" disabled={busy} onClick={() => fileInput.current?.click()}>
             {busy ? '上传中…' : comp.has_file ? '重新上传' : '上传文件'}
-          </button>
+          </Btn>
         </>
       )}
       {err && <span className="text-[11.5px] text-wine-ink">{err}</span>}
@@ -327,14 +322,9 @@ const ItemRow = memo(function ItemRow({
                 e.target.value = ''
               }}
             />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => fileInput.current?.click()}
-              className="rounded-full border border-wine px-3 py-1 text-[12px] text-wine-ink hover:opacity-80 disabled:opacity-50"
-            >
+            <Btn variant="ghost" size="sm" disabled={busy} onClick={() => fileInput.current?.click()}>
               {busy ? '上传中…' : item.has_file ? '重新上传' : '上传文件'}
-            </button>
+            </Btn>
             <span className="text-[10.5px] text-dim">PDF / TIFF / PNG · ≤200MB</span>
           </>
         )}
@@ -520,36 +510,18 @@ export default function OrderView({ token }: { token: string }) {
           <Timeline order={order} />
           {order.is_guest && me && (
             <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => void claim()}
-                className="rounded-full border border-wine px-4 py-2 text-[13px] text-wine-ink hover:opacity-80"
-              >
-                认领此订单到我的账号
-              </button>
+              <Btn variant="ghost" onClick={() => void claim()}>认领此订单到我的账号</Btn>
               <p className="mt-1.5 text-[11px] leading-[1.7] text-dim">需当前账号邮箱与下单邮箱一致且已验证。</p>
             </div>
           )}
           {canCancel && (
             <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => void cancel()}
-                className="rounded-full border border-line px-4 py-2 text-[13px] text-dim hover:border-wine hover:text-wine-ink"
-              >
-                取消订单
-              </button>
+              <Btn variant="subtle" onClick={() => void cancel()}>取消订单</Btn>
             </div>
           )}
           {(order.items.length > 0 || (order.books?.length ?? 0) > 0) && (
             <div className="mt-5">
-              <button
-                type="button"
-                onClick={reorder}
-                className="rounded-full border border-wine px-4 py-2 text-[13px] text-wine-ink hover:opacity-80"
-              >
-                一键再下单 ↻
-              </button>
+              <Btn variant="ghost" onClick={reorder}>一键再下单 ↻</Btn>
               <p className="mt-1.5 text-[11px] text-dim">按现价重报后填入下单清单，可再调整。</p>
             </div>
           )}

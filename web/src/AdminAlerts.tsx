@@ -10,7 +10,7 @@ import {
   type NotificationLogDto,
   type ScanResult,
 } from './api'
-import { Leader, MagSec, TabBar } from './spec'
+import { Btn, Leader, MagSec, TabBar } from './spec'
 
 const sevClass = (s: string) =>
   s === 'critical' ? 'text-wine-ink' : s === 'warning' ? 'text-warn' : 'text-dim'
@@ -59,9 +59,9 @@ function AlertsBody() {
       {tab === 'alerts' && (
         <div className="pt-5">
           <div className="mb-4 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => void runScan()} disabled={busy} className="inline-flex items-center gap-2 rounded-full border border-wine bg-wine px-[18px] py-2 text-[13px] font-medium text-cream shadow-e1 transition-opacity hover:opacity-90 disabled:opacity-50">
+            <Btn onClick={() => void runScan()} disabled={busy}>
               {busy ? '扫描中…' : '立即扫描'}
-            </button>
+            </Btn>
             <label className="flex items-center gap-2 text-[12.5px] text-dim">
               <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
               含已解决（历史）

@@ -16,7 +16,7 @@ import {
   type OrderItemDto,
 } from './api'
 import { FILE_STATUS_LABEL, PrecheckNotes } from './OrderView'
-import { Field, Leader, MagSec, Skeleton, SpecRow, specInput } from './spec'
+import { Btn, Drawer, Field, Leader, MagSec, Skeleton, SpecRow, specInput } from './spec'
 
 /** §3.2 看板六列：报价中→审稿→已确认→生产中→待取→已完成（cancelled 折叠在下方） */
 const COLUMNS: Array<{ label: string; statuses: Array<OrderDto['status']> }> = [
@@ -115,26 +115,14 @@ const ReviewRow = memo(function ReviewRow({
         {item.job_id && <span className="font-mono text-[10px] text-dim">JOB {item.job_id.slice(0, 8)}</span>}
         {reviewable && (
           <span className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="rounded-full border border-ink px-3 py-0.5 text-[12px] text-ink hover:bg-card"
-              onClick={() => void review('approved')}
-            >
-              通过
-            </button>
+            <Btn variant="outline" size="sm" onClick={() => void review('approved')}>通过</Btn>
             <input
               placeholder="驳回意见"
               className="w-44 border border-line bg-card px-2 py-0.5 text-[12px] text-ink outline-none focus:border-wine"
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
-            <button
-              type="button"
-              className="rounded-full border border-wine px-3 py-0.5 text-[12px] text-wine-ink hover:opacity-80"
-              onClick={() => void review('rejected')}
-            >
-              驳回
-            </button>
+            <Btn variant="danger" size="sm" onClick={() => void review('rejected')}>驳回</Btn>
           </span>
         )}
         {err && <span className="text-wine-ink">{err}</span>}
@@ -191,26 +179,14 @@ const BookComponentReviewRow = memo(function BookComponentReviewRow({
       {comp.file_note && <span className="text-warn">意见：{comp.file_note}</span>}
       {reviewable && (
         <span className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            className="rounded-full border border-ink px-2.5 py-0.5 text-[11.5px] text-ink hover:bg-card"
-            onClick={() => void review('approved')}
-          >
-            通过
-          </button>
+          <Btn variant="outline" size="xs" onClick={() => void review('approved')}>通过</Btn>
           <input
             placeholder="驳回意见"
             className="w-36 border border-line bg-card px-2 py-0.5 text-[11.5px] text-ink outline-none focus:border-wine"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
-          <button
-            type="button"
-            className="rounded-full border border-wine px-2.5 py-0.5 text-[11.5px] text-wine-ink hover:opacity-80"
-            onClick={() => void review('rejected')}
-          >
-            驳回
-          </button>
+          <Btn variant="danger" size="xs" onClick={() => void review('rejected')}>驳回</Btn>
         </span>
       )}
       {err && <span className="text-wine-ink">{err}</span>}
@@ -328,7 +304,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
   const cancellable = !['delivered', 'cancelled'].includes(order.status)
 
   return (
-    <div className="mt-6 border border-ink bg-card p-6">
+    <div>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-ink pb-3">
         <span className="font-mono text-[15px] text-ink">{order.order_number}</span>
         <span className="font-mono text-[10.5px] tracking-[.14em] text-wine-ink">
@@ -382,18 +358,11 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
           <div className="mt-4 space-y-3">
             <div className="flex flex-wrap gap-2">
               {(ACTIONS[order.status] ?? []).map((a) => (
-                <button
-                  key={a.to}
-                  type="button"
-                  onClick={() => void advance(a.to)}
-                  className="rounded-full border border-wine bg-wine px-4 py-1.5 text-[13px] font-medium text-cream hover:opacity-90"
-                >
-                  {a.label} →
-                </button>
+                <Btn key={a.to} onClick={() => void advance(a.to)}>{a.label} →</Btn>
               ))}
               {cancellable && (
-                <button
-                  type="button"
+                <Btn
+                  variant="subtle"
                   onClick={() => {
                     const paidWarn =
                       order.paid_amount > 0
@@ -401,10 +370,9 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
                         : ''
                     if (window.confirm(`取消订单 ${order.order_number}？未完成作业将一并取消。${paidWarn}`)) void advance('cancelled')
                   }}
-                  className="rounded-full border border-line px-4 py-1.5 text-[13px] text-dim hover:border-wine hover:text-wine-ink"
                 >
                   取消订单
-                </button>
+                </Btn>
               )}
             </div>
 
@@ -442,13 +410,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
                 <Field label="方式 / 备注">
                   <input className={specInput} value={payMethod} onChange={(e) => setPayMethod(e.target.value)} />
                 </Field>
-                <button
-                  type="button"
-                  onClick={() => void savePayment()}
-                  className="rounded-full border border-ink px-4 py-2 text-[13px] text-ink hover:bg-paper"
-                >
-                  记一笔
-                </button>
+                <Btn variant="outline" onClick={() => void savePayment()}>记一笔</Btn>
               </div>
             </div>
 
@@ -462,13 +424,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
                     value={discount}
                     onChange={(e) => setDiscount(e.target.value)}
                   />
-                  <button
-                    type="button"
-                    onClick={() => void saveDiscount()}
-                    className="border border-ink px-4 py-2 text-[13px] text-ink hover:bg-card"
-                  >
-                    保存
-                  </button>
+                  <Btn variant="outline" onClick={() => void saveDiscount()}>保存</Btn>
                 </div>
               </div>
             )}
@@ -546,7 +502,9 @@ function KanbanBody() {
         })}
       </div>
 
-      {selected && <OrderDetail order={selected} onUpdated={updateOne} onRefresh={refresh} />}
+      <Drawer open={!!selected} onClose={() => setSelectedId(null)} title={selected?.order_number ?? ''}>
+        {selected && <OrderDetail order={selected} onUpdated={updateOne} onRefresh={refresh} />}
+      </Drawer>
 
       {cancelled.length > 0 && (
         <div className="mt-5">

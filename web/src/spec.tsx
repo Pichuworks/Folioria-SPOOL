@@ -168,6 +168,59 @@ export const PillBtn = ({ children, full, type, onClick }: { children: ReactNode
   </button>
 )
 
+/* ── Btn ── */
+
+type BtnVariant = 'primary' | 'ghost' | 'outline' | 'subtle' | 'danger'
+type BtnSize = 'xs' | 'sm' | 'md' | 'lg'
+
+const btnBase = 'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border transition-opacity disabled:opacity-50'
+
+const btnVariants: Record<BtnVariant, string> = {
+  primary: 'border-wine bg-wine text-cream shadow-e1 font-medium hover:opacity-90',
+  ghost: 'border-wine text-wine-ink hover:opacity-80',
+  outline: 'border-ink text-ink hover:bg-card',
+  subtle: 'border-line text-dim hover:border-wine hover:text-wine-ink',
+  danger: 'border-wine text-wine-ink hover:opacity-80',
+}
+
+const btnSizes: Record<BtnSize, string> = {
+  xs: 'px-2.5 py-0.5 text-[11px]',
+  sm: 'px-3 py-0.5 text-[12px]',
+  md: 'px-4 py-1.5 text-[13px]',
+  lg: 'px-[18px] py-2.5 text-[14px] tracking-[.02em]',
+}
+
+export function Btn({
+  variant = 'primary',
+  size = 'md',
+  full,
+  type,
+  disabled,
+  onClick,
+  className,
+  children,
+}: {
+  variant?: BtnVariant
+  size?: BtnSize
+  full?: boolean
+  type?: 'button' | 'submit'
+  disabled?: boolean
+  onClick?: () => void
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <button
+      type={type ?? 'button'}
+      disabled={disabled}
+      onClick={onClick}
+      className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${full ? 'w-full' : ''} ${className ?? ''}`}
+    >
+      {children}
+    </button>
+  )
+}
+
 /* ── Modal ── */
 
 export function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: ReactNode }) {
@@ -187,6 +240,39 @@ export function Modal({ open, onClose, title, wide, children }: { open: boolean;
           <button type="button" onClick={onClose} className="text-[18px] text-dim hover:text-ink">×</button>
         </div>
         {children}
+      </div>
+    </div>
+  )
+}
+
+/* ── Drawer ── */
+
+export function Drawer({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 transition-colors duration-300 ${open ? 'bg-ink/40' : 'pointer-events-none bg-transparent'}`}
+      onClick={onClose}
+    >
+      <div
+        className={`absolute inset-y-0 right-0 w-full max-w-3xl border-l border-ink bg-paper shadow-e3 transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex h-full flex-col overflow-hidden">
+          <div className="flex items-baseline justify-between border-b border-ink px-6 py-4">
+            <h3 className="text-[20px] font-semibold text-ink">{title}</h3>
+            <button type="button" onClick={onClose} className="text-[18px] text-dim hover:text-ink">×</button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            {children}
+          </div>
+        </div>
       </div>
     </div>
   )
