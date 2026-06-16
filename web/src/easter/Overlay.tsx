@@ -8,14 +8,12 @@ import Stage from './Stage'
 
 const CSS = `
 @keyframes egg-shimmer-kf{
-  0%{filter:blur(0);color:#e8dcc8}
-  8%{filter:blur(3px)}
-  16%{filter:blur(0);color:#c9a55a;text-shadow:0 0 6px #c9a55a40}
-  80%{color:#c9a55a;text-shadow:0 0 6px #c9a55a40}
-  88%{filter:blur(3px)}
-  100%{filter:blur(0);color:#e8dcc8}
+  0%{color:#e8dcc8;text-shadow:none}
+  40%{color:#c9a55a;text-shadow:0 0 8px #c9a55a80}
+  70%{color:#c9a55a;text-shadow:0 0 6px #c9a55a40}
+  100%{color:#e8dcc8;text-shadow:none}
 }
-.egg-shimmer{animation:egg-shimmer-kf 1.2s ease-in-out forwards}
+.egg-shimmer{animation:egg-shimmer-kf 1s ease-in-out}
 @keyframes egg-fadein-kf{
   from{opacity:0;transform:translateY(20px)}
   to{opacity:1;transform:translateY(0)}

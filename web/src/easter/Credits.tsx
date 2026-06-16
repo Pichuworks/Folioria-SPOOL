@@ -21,6 +21,7 @@ export default function Credits({ stars, finalMsg, tagline, ending, glitchEnable
   const finaleRef = useRef(false)
   const phaseRef = useRef<FinalePhase>(null)
   const [finalePhase, setFinalePhase] = useState<FinalePhase>(null)
+  const [cycle, setCycle] = useState(0)
 
   useEffect(() => { phaseRef.current = finalePhase }, [finalePhase])
 
@@ -53,7 +54,7 @@ export default function Credits({ stars, finalMsg, tagline, ending, glitchEnable
           }
         }
 
-        if (!finaleRef.current && offsetRef.current < -(track.scrollHeight - boxH * 0.3)) {
+        if (!finaleRef.current && offsetRef.current < -(track.scrollHeight - boxH * 0.5)) {
           finaleRef.current = true
           setFinalePhase('nozomu')
           onFinale()
@@ -87,6 +88,7 @@ export default function Credits({ stars, finalMsg, tagline, ending, glitchEnable
             delete el.dataset.entered
           }
         }
+        setCycle(c => c + 1)
         setFinalePhase(null)
       }, 60000)
       return () => clearTimeout(t)
@@ -111,13 +113,13 @@ export default function Credits({ stars, finalMsg, tagline, ending, glitchEnable
       <div ref={trackRef} className="relative">
         {stars.map((s, i) => (
           <StarMessage
-            key={s.id}
+            key={`${s.id}-${cycle}`}
             ref={(el) => { msgRefs.current[i] = el }}
             star={s}
             glitchEnabled={glitchEnabled}
           />
         ))}
-        <div style={{ height: '60vh' }} />
+        <div style={{ height: '30vh' }} />
       </div>
 
       {finalePhase === 'nozomu' && finalMsg && (
