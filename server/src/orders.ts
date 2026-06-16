@@ -3,7 +3,8 @@ import { priceBook, priceBookSpec, type BookLineInput, type BookSpecInput } from
 import { type DB } from './db.js'
 import { finishingContribution, type FinishingPricing } from './finishing.js'
 import { getLog } from './logger.js'
-import { lineTotal, moneyC, sumMoney } from './money.js'
+import { getEffectiveTier, getUserDiscountBp, membershipDiscountAmount } from './membership.js'
+import { lineTotal, moneyC, sumMoney, type Money } from './money.js'
 import { quote } from './pricing.js'
 
 /** 带 statusCode 抛出，由 app 全局 errorHandler 映射为 { error: message }（<500 不落日志） */
@@ -70,6 +71,8 @@ export interface OrderRow {
   guest_contact: string | null
   delivery_method: string
   delivery_address: string | null
+  membership_discount: number
+  membership_tier_id: number | null
 }
 
 /** D23: 已验证用户认领访客单（仅 guest_email 与本人邮箱一致时），改绑 customer_id 并清访客字段 */
@@ -335,6 +338,11 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
 
   const subtotal = sumMoney([...priced.map((p) => p.line_total), ...books.map((b) => b.line_total), ...customBooks.map((b) => b.line_total)])
 
+  const discountBp = getUserDiscountBp(db, input.customerId)
+  const mbrDiscount = membershipDiscountAmount(subtotal, discountBp)
+  const effectiveTier = getEffectiveTier(db, input.customerId)
+  const total = (subtotal as number) - (mbrDiscount as number) as unknown as Money
+
   const now = new Date()
   const nowIso = now.toISOString()
   const validUntil = new Date(now.getTime() + cfg.quote_valid_days * 86_400_000).toISOString()
@@ -343,9 +351,10 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
   db.transaction(() => {
     db.prepare(
       `INSERT INTO orders (id, order_number, access_token, customer_id, contact_info, is_internal,
-                           subtotal, discount, total, status, quote_valid_until, created_at, notes,
+                           subtotal, discount, total, membership_discount, membership_tier_id,
+                           status, quote_valid_until, created_at, notes,
                            guest_email, guest_name, guest_contact, delivery_method, delivery_address)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'quoted', ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'quoted', ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       orderId,
       nextOrderNumber(db, now),
@@ -354,7 +363,9 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
       input.contactInfo ?? null,
       input.internal ? 1 : 0,
       subtotal,
-      subtotal,
+      total,
+      mbrDiscount,
+      effectiveTier?.tier_id ?? null,
       validUntil,
       nowIso,
       input.notes ?? null,
