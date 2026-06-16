@@ -24,6 +24,7 @@ import { spoolInit } from './init.js'
 import { formatMoney, money } from './money.js'
 import { importSeed } from './seed.js'
 import { registerAlertsRoutes } from './alerts-routes.js'
+import { registerAnnouncementsRoutes } from './announcements-routes.js'
 import { registerDashboardRoutes } from './dashboard-routes.js'
 import { registerEquipmentRoutes } from './equipment-routes.js'
 import { defaultUploadDir, registerFilesRoutes } from './files-routes.js'
@@ -152,6 +153,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   registerDashboardRoutes(app, db)
   registerSettingsRoutes(app, db)
   registerReportsRoutes(app, db)
+  registerAnnouncementsRoutes(app, db)
 
   // ---------- 首次运行: Web 初始化向导（包住 CLI 同款 spoolInit，幂等自锁） ----------
 

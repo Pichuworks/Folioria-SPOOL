@@ -950,3 +950,75 @@ export async function fetchFinishingCatalog(): Promise<FinishingCatalogDto | nul
   if (!res.ok) return null
   return (await res.json()) as FinishingCatalogDto
 }
+
+// ---------- 公告 ----------
+
+export interface AnnouncementDto {
+  id: string
+  title: string
+  body: string
+  audience: 'public' | 'all' | 'customers' | 'staff'
+  pinned: boolean
+  published_at: string | null
+  expires_at: string | null
+  author_id: string
+  author_name: string | null
+  archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface PublicAnnouncementDto {
+  id: string
+  title: string
+  body: string
+  pinned: boolean
+  published_at: string
+}
+
+export interface UserAnnouncementDto {
+  id: string
+  title: string
+  body: string
+  audience: string
+  pinned: boolean
+  published_at: string
+  read: boolean
+}
+
+export async function fetchPublicAnnouncements(): Promise<PublicAnnouncementDto[]> {
+  const res = await fetch('/api/public-announcements')
+  if (!res.ok) return []
+  return (await res.json()) as PublicAnnouncementDto[]
+}
+
+export async function fetchUserAnnouncements(): Promise<UserAnnouncementDto[]> {
+  const res = await send<UserAnnouncementDto[]>('GET', '/api/announcements')
+  return res.ok ? res.data : []
+}
+
+export async function fetchUnreadCount(): Promise<number> {
+  const res = await send<{ count: number }>('GET', '/api/announcements/unread-count')
+  return res.ok ? res.data.count : 0
+}
+
+export const markAnnouncementRead = (id: string) =>
+  send('POST', `/api/announcements/${id}/read`)
+
+export const fetchAdminAnnouncements = () =>
+  send<AnnouncementDto[]>('GET', '/api/admin/announcements')
+
+export const createAnnouncement = (body: {
+  title: string
+  body?: string
+  audience?: string
+  pinned?: boolean
+  expires_at?: string | null
+  publish?: boolean
+}) => send<AnnouncementDto>('POST', '/api/admin/announcements', body)
+
+export const updateAnnouncement = (id: string, body: Record<string, unknown>) =>
+  send<AnnouncementDto>('PATCH', `/api/admin/announcements/${id}`, body)
+
+export const archiveAnnouncement = (id: string) =>
+  send('PATCH', `/api/admin/announcements/${id}/archive`)

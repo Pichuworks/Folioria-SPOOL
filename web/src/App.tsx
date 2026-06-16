@@ -1,14 +1,16 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import Account, { AccountMenu, DashboardPill } from './Account'
 import {
   AUTH_EVENT,
   fetchMe,
   fetchPublicConfig,
+  fetchUnreadCount,
   getMeCache,
   getPublicConfigCache,
   type MeDto,
   type PublicConfigDto,
 } from './api'
+import Announcements from './Announcements'
 import Home from './Home'
 import Login from './Login'
 import MyOrders from './MyOrders'
@@ -32,6 +34,7 @@ const AdminOrders = lazy(() => import('./AdminOrders'))
 const AdminPricing = lazy(() => import('./AdminPricing'))
 const AdminReports = lazy(() => import('./AdminReports'))
 const AdminSettings = lazy(() => import('./AdminSettings'))
+const AdminAnnouncements = lazy(() => import('./AdminAnnouncements'))
 const AdminUsers = lazy(() => import('./AdminUsers'))
 
 /** 下单域路由：公开导航三态（guest / 下单用户 / admin）都可见 */
@@ -40,6 +43,7 @@ const STOREFRONT_ROUTES: Record<string, { nav: string; title: string; folio: str
   '#/cover-size': { nav: '封面尺寸', title: '封面尺寸计算', folio: 'COVER SIZE', view: CoverSize },
   '#/price-list': { nav: '价目表', title: '价目表', folio: 'PRICE LIST', view: PriceList },
   '#/my/orders': { nav: '我的订单', title: '我的订单', folio: 'MY ORDERS', view: MyOrders, auth: true },
+  '#/announcements': { nav: '公告', title: '公告', folio: 'NOTICES', view: Announcements, auth: true },
 }
 
 /** 管理域路由：仅 admin 登录态出现在导航（公开导航不罗列管理链接） */
@@ -52,6 +56,7 @@ const ADMIN_ROUTES: Record<string, { nav: string; title: string; folio: string; 
   '#/admin/pricing': { nav: '价目', title: '价目管理', folio: 'PRICE BOOK', view: AdminPricing },
   '#/admin/equipment': { nav: '设备', title: '设备管理', folio: 'PRESS FLEET', view: AdminEquipment },
   '#/admin/users': { nav: '用户', title: '用户管理', folio: 'STAFF ROSTER', view: AdminUsers },
+  '#/admin/announcements': { nav: '公告', title: '公告管理', folio: 'BULLETIN BOARD', view: AdminAnnouncements },
   '#/admin/alerts': { nav: '报警', title: '报警与通知', folio: 'ALERT INBOX', view: AdminAlerts },
   '#/admin/settings': { nav: '设置', title: '系统设置', folio: 'HOUSE RULES', view: AdminSettings },
   '#/admin/reports': { nav: '报表', title: '月度报表', folio: 'LEDGER DIGEST', view: AdminReports },
@@ -109,13 +114,27 @@ export default function App() {
   const [hash, setHash] = useState(() => window.location.hash || '#/')
   const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
   const [config, setConfig] = useState<PublicConfigDto | undefined>(getPublicConfigCache)
+  const [unread, setUnread] = useState(0)
+  const meRef = useRef(me)
+  meRef.current = me
 
   useEffect(() => {
-    const onHash = () => setHash(window.location.hash || '#/')
-    const onAuth = () => setMe(getMeCache())
+    const onHash = () => {
+      setHash(window.location.hash || '#/')
+      if (meRef.current) void fetchUnreadCount().then(setUnread)
+    }
+    const onAuth = () => {
+      const m = getMeCache()
+      setMe(m)
+      if (m) void fetchUnreadCount().then(setUnread)
+      else setUnread(0)
+    }
     window.addEventListener('hashchange', onHash)
     window.addEventListener(AUTH_EVENT, onAuth)
-    fetchMe().then(setMe).catch(() => setMe(null))
+    fetchMe().then((m) => {
+      setMe(m)
+      if (m) void fetchUnreadCount().then(setUnread)
+    }).catch(() => setMe(null))
     fetchPublicConfig().then(setConfig).catch(() => {})
     return () => {
       window.removeEventListener('hashchange', onHash)
@@ -151,7 +170,16 @@ export default function App() {
         {Object.entries(STOREFRONT_ROUTES).map(([h, r]) => {
           if (r.auth && !me) return null
           if (h === '#/my/orders') return null
-          return <a key={h} href={h} className={tab(h, activeKey)}>{r.nav}</a>
+          return (
+            <a key={h} href={h} className={tab(h, activeKey)}>
+              {r.nav}
+              {h === '#/announcements' && unread > 0 && (
+                <span className="ml-1 inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-wine px-1 text-[9px] font-medium leading-none text-cream">
+                  {unread}
+                </span>
+              )}
+            </a>
+          )
         })}
         {isAdmin && (
           <>
