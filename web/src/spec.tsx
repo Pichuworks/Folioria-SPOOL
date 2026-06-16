@@ -10,9 +10,7 @@ export const Shell = ({ nav, center, children }: { nav: ReactNode; center: strin
     <LoadingBar />
     <div className="mx-auto max-w-[1200px] px-5 md:px-10">
       <Masthead nav={nav} />
-    </div>
-    <PinnedBanner />
-    <div className="mx-auto max-w-[1200px] px-5 md:px-10">
+      <PinnedBanner />
       <main className="min-h-[60vh] pb-16">{children}</main>
       <Folio center={center} />
     </div>

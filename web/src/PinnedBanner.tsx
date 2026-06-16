@@ -22,9 +22,9 @@ function bannerText(items: PublicAnnouncementDto[]): string {
   return items
     .map((a) => {
       const body = a.body ? stripMarkdown(a.body) : ''
-      return body ? `${a.title} — ${body}` : a.title
+      return body ? `${a.title} — ${body}` : a.title
     })
-    .join(' ◆ ')
+    .join(' ◆ ')
 }
 
 export default function PinnedBanner() {
@@ -47,21 +47,18 @@ export default function PinnedBanner() {
   if (!items.length) return null
 
   const text = bannerText(items)
+  const span = 'inline-block min-w-full whitespace-nowrap px-8 py-[5px] font-mono text-[11px] tracking-[.06em] text-dim'
 
   return (
-    <div className="group/banner overflow-hidden border-b border-line bg-wine-dim/10">
+    <a href="#/announcements" className="group/banner block overflow-hidden">
       <div
         ref={trackRef}
         className="flex animate-marquee whitespace-nowrap group-hover/banner:[animation-play-state:paused]"
         style={{ '--marquee-duration': `${dur}s` } as React.CSSProperties}
       >
-        <span className="inline-block whitespace-nowrap px-8 py-[5px] font-mono text-[11px] tracking-[.06em] text-dim">
-          {text}
-        </span>
-        <span className="inline-block whitespace-nowrap px-8 py-[5px] font-mono text-[11px] tracking-[.06em] text-dim">
-          {text}
-        </span>
+        <span className={span}>{text}</span>
+        <span className={span}>{text}</span>
       </div>
-    </div>
+    </a>
   )
 }
