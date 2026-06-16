@@ -97,10 +97,10 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
           >
             映
           </span>
-          <span className="absolute bottom-9 right-7 top-9 hidden items-stretch gap-3 text-[15px] tracking-[.42em] text-ink lg:flex">
+          <span className="absolute bottom-9 right-7 top-9 hidden gap-3 text-[15px] tracking-[.42em] text-ink lg:flex">
             <span className="w-px shrink-0 bg-line" />
-            <span className="shrink-0 [writing-mode:vertical-rl]">文作入纸，时光刻上。</span>
-            <span className="shrink-0 [writing-mode:vertical-rl]">枫林叶下，光影映成。</span>
+            <span className="shrink-0 self-start [writing-mode:vertical-rl]">文作入纸，时光刻上。</span>
+            <span className="shrink-0 self-start [writing-mode:vertical-rl]">枫林叶下，光影映成。</span>
           </span>
           <div className="max-w-[560px] py-10 md:absolute md:bottom-11 md:left-0 md:py-0">
             <h1 className="text-[38px] font-medium leading-[1.15] tracking-[.18em] md:text-[56px]">
