@@ -945,7 +945,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
             // file_pending / file_approved 由系统自动流转，不可手动指定
             status: {
               type: 'string',
-              enum: ['confirmed', 'in_production', 'ready', 'delivered', 'cancelled'],
+              enum: ['confirmed', 'in_production', 'printed', 'ready', 'delivered', 'cancelled'],
             },
           },
         },
@@ -977,7 +977,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
         if (!adminCanTransition(order.status, status)) {
           return reply.status(409).send({ error: `invalid_transition_${order.status}_to_${status}` })
         }
-        if (status === 'ready' || status === 'delivered') {
+        if (status === 'printed' || status === 'ready' || status === 'delivered') {
           const jobCounts = db
             .prepare(
               `SELECT

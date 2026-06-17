@@ -473,7 +473,7 @@ describe('R1 状态机（§2.5 + 审稿定点）', () => {
     expect((production.json() as OrderDto).status).toBe('in_production')
   })
 
-  it('推进链 confirmed→in_production→ready→delivered（completed_at 落档）；跳级 → 409', async () => {
+  it('推进链 confirmed→in_production→printed→ready→delivered（completed_at 落档）；跳级 → 409', async () => {
     const adminCookie = await login('staff@folioria.jp')
     const cookie = await login('a@cust.example')
     const order = await placeOrder(cookie, [A4_ITEM])
@@ -497,6 +497,9 @@ describe('R1 状态机（§2.5 + 审稿定点）', () => {
        WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
     ).run(order.id)
     await advance('in_production')
+    // 跳级：in_production → ready 拒绝（须经 printed）
+    expect((await advance('ready')).statusCode).toBe(409)
+    await advance('printed')
     await advance('ready')
     const delivered = await advance('delivered')
     expect(delivered.statusCode).toBe(200)
@@ -510,7 +513,7 @@ describe('R1 状态机（§2.5 + 审稿定点）', () => {
     expect((await advance('cancelled')).statusCode).toBe(409)
   })
 
-  it('全部作业已取消时，ready/delivered 被拒绝（no_completed_jobs）', async () => {
+  it('全部作业已取消时，printed/ready/delivered 被拒绝（no_completed_jobs）', async () => {
     const adminCookie = await login('staff@folioria.jp')
     const cookie = await login('a@cust.example')
     const order = await placeOrder(cookie, [A4_ITEM])
@@ -531,9 +534,9 @@ describe('R1 状态机（§2.5 + 审稿定点）', () => {
        WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
     ).run(order.id)
     await advance('in_production')
-    const ready = await advance('ready')
-    expect(ready.statusCode).toBe(409)
-    expect((ready.json() as { error: string }).error).toBe('no_completed_jobs')
+    const printed = await advance('printed')
+    expect(printed.statusCode).toBe(409)
+    expect((printed.json() as { error: string }).error).toBe('no_completed_jobs')
   })
 
   it('取消权限：customer 仅 confirm 前自己的单；confirmed 起仅 admin，连带取消未完成 Job', async () => {

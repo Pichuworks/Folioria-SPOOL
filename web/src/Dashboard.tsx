@@ -110,7 +110,7 @@ function AdminDashboardBody() {
 /* ── Customer Dashboard ── */
 
 const ACTIONABLE = new Set<OrderDto['status']>(['file_pending'])
-const IN_PROGRESS = new Set<OrderDto['status']>(['confirmed', 'in_production', 'file_approved'])
+const IN_PROGRESS = new Set<OrderDto['status']>(['confirmed', 'in_production', 'printed', 'file_approved'])
 const PICKUP = new Set<OrderDto['status']>(['ready'])
 
 function hasRejectedFile(o: OrderDto) {

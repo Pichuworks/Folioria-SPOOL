@@ -18,12 +18,13 @@ import {
 import { FILE_STATUS_LABEL, PrecheckNotes } from './OrderView'
 import { Btn, Drawer, Field, Leader, MagSec, Skeleton, SpecRow, specInput } from './spec'
 
-/** §3.2 看板六列：报价中→审稿→已确认→生产中→待取→已完成（cancelled 折叠在下方） */
+/** 看板七列：报价中→审稿→已确认→生产中→已印完→待取→已完成（cancelled 折叠在下方） */
 const COLUMNS: Array<{ label: string; statuses: Array<OrderDto['status']> }> = [
   { label: '报价中', statuses: ['quoted'] },
   { label: '审稿', statuses: ['file_pending', 'file_approved'] },
   { label: '已确认', statuses: ['confirmed'] },
   { label: '生产中', statuses: ['in_production'] },
+  { label: '已印完', statuses: ['printed'] },
   { label: '待取', statuses: ['ready'] },
   { label: '已完成', statuses: ['delivered'] },
 ]
@@ -32,7 +33,7 @@ const COLUMNS: Array<{ label: string; statuses: Array<OrderDto['status']> }> = [
 const ACTIONS: Partial<Record<OrderDto['status'], Array<{ to: string; label: string }>>> = {
   file_approved: [{ to: 'confirmed', label: '确认下单 · 建作业' }],
   confirmed: [{ to: 'in_production', label: '开始生产' }],
-  in_production: [{ to: 'ready', label: '完成 · 通知取件' }],
+  printed: [{ to: 'ready', label: '确认 · 通知取件' }],
   ready: [{ to: 'delivered', label: '交付' }],
 }
 

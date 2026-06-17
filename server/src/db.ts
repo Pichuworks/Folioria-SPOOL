@@ -25,6 +25,8 @@ export function migrate(db: DB, dir: string = MIGRATIONS_DIR): number {
     const version = Number(file.slice(0, 4))
     if (version <= current) continue
     const sql = readFileSync(path.join(dir, file), 'utf8')
+    const needsFkOff = /PRAGMA\s+foreign_keys\s*=\s*OFF/i.test(sql)
+    if (needsFkOff) db.pragma('foreign_keys = OFF')
     try {
       db.transaction(() => {
         db.exec(sql)
@@ -33,6 +35,8 @@ export function migrate(db: DB, dir: string = MIGRATIONS_DIR): number {
     } catch (err) {
       console.error(`migration ${file} failed:`, err)
       throw err
+    } finally {
+      if (needsFkOff) db.pragma('foreign_keys = ON')
     }
     applied += 1
   }

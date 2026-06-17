@@ -717,6 +717,7 @@ export interface OrderDto {
     | 'file_approved'
     | 'confirmed'
     | 'in_production'
+    | 'printed'
     | 'ready'
     | 'delivered'
     | 'cancelled'
@@ -757,6 +758,7 @@ export const ORDER_STATUS_LABEL: Record<OrderDto['status'], string> = {
   file_approved: '审稿通过',
   confirmed: '已确认',
   in_production: '生产中',
+  printed: '已印完',
   ready: '待取件',
   delivered: '已交付',
   cancelled: '已取消',

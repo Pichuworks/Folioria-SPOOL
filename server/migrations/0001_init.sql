@@ -248,7 +248,7 @@ CREATE TABLE orders (
   paid_at           TEXT,
   status            TEXT NOT NULL DEFAULT 'quoted'
                     CHECK (status IN ('quoted','file_pending','file_approved','confirmed',
-                                      'in_production','ready','delivered','cancelled')),
+                                      'in_production','printed','ready','delivered','cancelled')),
   quote_valid_until TEXT NOT NULL,
   created_at        TEXT NOT NULL,
   confirmed_at      TEXT,

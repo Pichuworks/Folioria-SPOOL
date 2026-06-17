@@ -218,6 +218,12 @@ describe('业务事件接入（D6 事件枚举）', () => {
       headers: { cookie: adminCookie },
       payload: { status: 'in_production' },
     })
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/orders/${order.id}/status`,
+      headers: { cookie: adminCookie },
+      payload: { status: 'printed' },
+    })
     const ready = await app.inject({
       method: 'PATCH',
       url: `/api/orders/${order.id}/status`,

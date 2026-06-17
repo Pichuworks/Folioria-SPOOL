@@ -4,6 +4,7 @@ import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
 import { availability, canTransition, completeJob, JobError, recommendMachines, scheduleBoard } from './jobs.js'
+import { tryAdvanceToPrinted } from './orders.js'
 import { formatMoney, formatMoneyC, lineTotal, money, moneyC, type Currency } from './money.js'
 import { deriveUnitCost, overheadC } from './pricing.js'
 
@@ -360,6 +361,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
         }
         throw err
       }
+      tryAdvanceToPrinted(db, id)
       return db.prepare('SELECT * FROM jobs WHERE id = ?').get(id)
     },
   )

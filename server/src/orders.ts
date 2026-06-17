@@ -22,6 +22,7 @@ export type OrderStatus =
   | 'file_approved'
   | 'confirmed'
   | 'in_production'
+  | 'printed'
   | 'ready'
   | 'delivered'
   | 'cancelled'
@@ -32,7 +33,8 @@ const ADMIN_NEXT: Record<string, readonly string[]> = {
   file_pending: ['cancelled'],
   file_approved: ['confirmed', 'cancelled'],
   confirmed: ['in_production', 'cancelled'],
-  in_production: ['ready', 'cancelled'],
+  in_production: ['printed', 'cancelled'],
+  printed: ['ready', 'cancelled'],
   ready: ['delivered', 'cancelled'],
   delivered: [],
   cancelled: [],
@@ -631,6 +633,46 @@ export function confirmOrder(db: DB, orderId: string): void {
     }
     db.prepare("UPDATE orders SET status = 'confirmed', confirmed_at = ? WHERE id = ?").run(nowIso, orderId)
   })()
+}
+
+/** 作业完成后检查：该订单全部作业已 done/cancelled（至少一个 done）→ 自动 in_production → printed */
+export function tryAdvanceToPrinted(db: DB, jobId: string): string | null {
+  const orderId = (
+    db
+      .prepare(
+        `SELECT oi.order_id FROM order_items oi JOIN jobs j ON j.order_item_id = oi.id WHERE j.id = ?
+         UNION
+         SELECT ob.order_id FROM order_books ob
+         JOIN order_book_components obc ON obc.order_book_id = ob.id
+         WHERE obc.job_id = ?`,
+      )
+      .get(jobId, jobId) as { order_id: string } | undefined
+  )?.order_id
+  if (!orderId) return null
+
+  const order = db.prepare('SELECT status FROM orders WHERE id = ?').get(orderId) as { status: string } | undefined
+  if (!order || order.status !== 'in_production') return null
+
+  const counts = db
+    .prepare(
+      `SELECT
+         COUNT(*) FILTER (WHERE status NOT IN ('done','cancelled')) AS pending,
+         COUNT(*) FILTER (WHERE status = 'done') AS done
+       FROM jobs
+       WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)
+          OR id IN (
+            SELECT obc.job_id FROM order_book_components obc
+            JOIN order_books ob ON ob.id = obc.order_book_id
+            WHERE ob.order_id = ? AND obc.job_id IS NOT NULL
+          )`,
+    )
+    .get(orderId, orderId) as { pending: number; done: number }
+
+  if (counts.pending === 0 && counts.done > 0) {
+    db.prepare("UPDATE orders SET status = 'printed' WHERE id = ?").run(orderId)
+    return orderId
+  }
+  return null
 }
 
 /** 取消（admin 任意非终态；customer 限 CUSTOMER_CANCELLABLE）。已确认订单连带取消未完成作业（D14） */
