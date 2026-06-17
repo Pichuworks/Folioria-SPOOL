@@ -316,6 +316,10 @@ function MembersTab() {
   if (!members || !tiers) return <Skeleton />
 
   const activeTiers = tiers.filter((t) => !t.archived)
+  const selectedTrack = selTier !== '' ? activeTiers.find((t) => t.id === selTier)?.track : undefined
+  const alreadyAssigned = new Set(
+    selTier !== '' ? members.filter((m) => m.tier_id === selTier && m.track === selectedTrack).map((m) => m.user_id) : [],
+  )
   const filterLc = userFilter.toLowerCase()
   const filteredUsers = users?.filter(
     (u) => !filterLc || u.name.toLowerCase().includes(filterLc) || u.email.toLowerCase().includes(filterLc),
@@ -332,7 +336,7 @@ function MembersTab() {
         <form onSubmit={assign} className="space-y-3 border border-ink p-4">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="等级">
-              <select className={specInput} value={selTier} onChange={(e) => setSelTier(Number(e.target.value))} required>
+              <select className={specInput} value={selTier} onChange={(e) => { setSelTier(Number(e.target.value)); setSelUsers(new Set()) }} required>
                 <option value="">选择等级…</option>
                 {activeTiers.map((t) => (
                   <option key={t.id} value={t.id}>[{t.track}] {t.code} · {t.name}</option>
@@ -353,20 +357,25 @@ function MembersTab() {
             />
           </Field>
           <div className="max-h-48 overflow-y-auto border border-line">
-            {filteredUsers?.map((u) => (
-              <label
-                key={u.id}
-                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-line/30"
-              >
-                <input
-                  type="checkbox"
-                  checked={selUsers.has(u.id)}
-                  onChange={() => toggleUser(u.id)}
-                />
-                <span>{u.name}</span>
-                <span className="text-dim">{u.email}</span>
-              </label>
-            ))}
+            {filteredUsers?.map((u) => {
+              const already = alreadyAssigned.has(u.id)
+              return (
+                <label
+                  key={u.id}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm ${already ? 'opacity-50' : 'cursor-pointer hover:bg-line/30'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={already || selUsers.has(u.id)}
+                    disabled={already}
+                    onChange={() => toggleUser(u.id)}
+                  />
+                  <span>{u.name}</span>
+                  <span className="text-dim">{u.email}</span>
+                  {already && <span className="ml-auto text-xs text-dim">已在此等级</span>}
+                </label>
+              )
+            })}
             {filteredUsers?.length === 0 && (
               <p className="py-2 text-center text-xs text-dim">无匹配用户</p>
             )}
