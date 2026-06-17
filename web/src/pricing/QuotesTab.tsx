@@ -1,6 +1,6 @@
 import { useRef, useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Leader, Modal, Paginator, PillBtn, specInput, usePagination } from '../spec'
+import { Field, Leader, Modal, Paginator, PillBtn, specInput, toast, usePagination } from '../spec'
 import {
   actionBtn,
   FILTER_OPTIONS,
@@ -175,7 +175,7 @@ function PriceEditModal({
       internal_sell_c: i,
       tiers,
     })
-    if (res.ok) onDone()
+    if (res.ok) { toast('报价已保存', 'ok'); onDone() }
     else setError('保存失败')
   }
 

@@ -24,10 +24,12 @@ function AdminDashboardBody() {
   const [trend, setTrend] = useState<TrendPoint[] | null>(null)
 
   useEffect(() => {
-    fetchDashboard().then(setData).catch(() => {
-      if (!getDashboardCache()) setData(null)
+    let cancelled = false
+    fetchDashboard().then((d) => { if (!cancelled) setData(d) }).catch(() => {
+      if (!cancelled && !getDashboardCache()) setData(null)
     })
-    void send<TrendPoint[]>('GET', '/api/reports/trend').then((r) => r.ok && setTrend(r.data))
+    void send<TrendPoint[]>('GET', '/api/reports/trend').then((r) => { if (r.ok && !cancelled) setTrend(r.data) })
+    return () => { cancelled = true }
   }, [])
 
   if (!data) return <Skeleton />
@@ -142,10 +144,13 @@ function CustomerDashboardBody() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     void fetchOrders().then((res) => {
+      if (cancelled) return
       if (res.ok) setOrders(res.data)
       else setError(`加载失败（${res.status}）`)
     })
+    return () => { cancelled = true }
   }, [])
 
   if (error) return <p className="pt-13 text-[14px] text-wine-ink">{error}</p>

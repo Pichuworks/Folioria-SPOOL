@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, Leader, MagSec, Paginator, PillBtn, Skeleton, TabBar, specInput, usePagination } from './spec'
+import { Field, Leader, MagSec, Paginator, PillBtn, Skeleton, TabBar, specInput, toast, usePagination } from './spec'
 
 interface StockDto {
   id: string
@@ -198,7 +198,7 @@ function MovementPanel({ stock, onDone }: { stock: StockDto; onDone: () => void 
       Object.assign(payload, buildPurchasePayload(currency, amount, costC, rateNote))
     }
     const res = await send('POST', `/api/inventory/stocks/${stock.id}/movements`, payload)
-    if (res.ok) onDone()
+    if (res.ok) { toast(`${ACTION_LABEL[action]}已记账`, 'ok'); onDone() }
     else setError(res.status === 409 ? '账面不足，无法出库' : '录入失败，请检查输入')
   }
 
@@ -254,7 +254,7 @@ function ConvertPanel({ stock, stocks, onDone }: { stock: StockDto; stocks: Stoc
       from: { stock_id: stock.id, quantity_delta: -f },
       to: { stock_id: toId, quantity_delta: t },
     })
-    if (res.ok) onDone()
+    if (res.ok) { toast('裁切已记账', 'ok'); onDone() }
     else setError(res.status === 409 ? '账面不足，无法裁切' : '裁切录入失败（仅允许同纸不同尺寸）')
   }
 
@@ -368,6 +368,7 @@ function NewStockForm({ refs, onCreated }: { refs: RefDto; onCreated: () => void
     } else {
       setNotice('档案已建（数量从 0 起，用「采购入库」记账）')
     }
+    toast('库存档案已创建', 'ok')
     onCreated()
   }
 
@@ -473,13 +474,13 @@ function ConsumableEditPanel({ item, onDone }: { item: ConsumableDto; onDone: ()
       supplier: supplier.trim() === '' ? null : supplier.trim(),
       alert_threshold_bp: Math.trunc(Number(threshold)),
     })
-    if (res.ok) onDone()
+    if (res.ok) { toast('耗材已更新', 'ok'); onDone() }
     else setError('保存失败')
   }
 
   const archive = async () => {
     const res = await send('PATCH', `/api/inventory/consumables/${item.id}`, { archived: true })
-    if (res.ok) onDone()
+    if (res.ok) { toast('耗材已归档', 'ok'); onDone() }
     else setError('归档失败')
   }
 
@@ -538,6 +539,7 @@ function ConsumablesTab({ consumables, refs, onChanged }: { consumables: Consuma
     if (res.ok) {
       setNotice('耗材已登记')
       setName(''); setQty('0'); setCostC('0'); setSupplier('')
+      toast('耗材已登记', 'ok')
       onChanged()
     } else {
       setNotice(res.status === 409 ? '设备不存在' : '创建失败')
@@ -633,14 +635,16 @@ function InventoryBody() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     reload()
     void Promise.all([
       send<RefDto['papers']>('GET', '/api/pricing/papers'),
       send<RefDto['sizes']>('GET', '/api/pricing/sizes'),
       send<Array<{ id: number; code: string; name: string }>>('GET', '/api/equipment'),
     ]).then(([p, s, pr]) => {
-      if (p.ok && s.ok && pr.ok) setRefs({ papers: p.data, sizes: s.data, printers: pr.data })
+      if (p.ok && s.ok && pr.ok && !cancelled) setRefs({ papers: p.data, sizes: s.data, printers: pr.data })
     })
+    return () => { cancelled = true }
   }, [reload])
 
   const targetLabel = useMemo(() => {

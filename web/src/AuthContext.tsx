@@ -7,10 +7,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
 
   useEffect(() => {
-    fetchMe().then(setMe).catch(() => setMe(null))
-    const onAuth = () => setMe(getMeCache() ?? null)
+    let cancelled = false
+    fetchMe().then((m) => { if (!cancelled) setMe(m) }).catch(() => { if (!cancelled) setMe(null) })
+    const onAuth = () => { if (!cancelled) setMe(getMeCache() ?? null) }
     window.addEventListener(AUTH_EVENT, onAuth)
-    return () => window.removeEventListener(AUTH_EVENT, onAuth)
+    return () => { cancelled = true; window.removeEventListener(AUTH_EVENT, onAuth) }
   }, [])
 
   return <AuthCtx.Provider value={me}>{children}</AuthCtx.Provider>

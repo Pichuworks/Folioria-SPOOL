@@ -52,7 +52,9 @@ export default function QuoteSelector({ data, onAdd }: Props) {
   const [selectedFinishings, setSelectedFinishings] = useState<Set<number>>(new Set())
 
   useEffect(() => {
-    fetchFinishingCatalog().then((c) => c && setFinishingCatalog(c.finishings)).catch(() => {})
+    let cancelled = false
+    fetchFinishingCatalog().then((c) => { if (c && !cancelled) setFinishingCatalog(c.finishings) }).catch(() => {})
+    return () => { cancelled = true }
   }, [])
 
   const products = useMemo(() => data.products, [data])

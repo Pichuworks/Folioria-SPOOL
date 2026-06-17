@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, MagSec, PillBtn, Skeleton, SpecRow, TabBar, specInput } from './spec'
+import { Field, MagSec, PillBtn, Skeleton, SpecRow, TabBar, specInput, toast } from './spec'
 import { useFetch } from './useFetch'
 
 interface SettingsDto {
@@ -79,6 +79,7 @@ function SettingsBody() {
     if (res.ok) {
       setForm(res.data)
       setNotice('已保存——全部报价即时按新参数推导')
+      toast('系统参数已保存', 'ok')
     } else setNotice('保存失败，检查取值范围')
   }
 

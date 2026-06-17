@@ -46,7 +46,9 @@ function ReportsBody() {
   const [snapshots, setSnapshots] = useState<SnapshotDto[] | null>(null)
 
   useEffect(() => {
-    void send<SnapshotDto[]>('GET', '/api/reports/snapshots').then((r) => r.ok && setSnapshots(r.data))
+    let cancelled = false
+    void send<SnapshotDto[]>('GET', '/api/reports/snapshots').then((r) => { if (r.ok && !cancelled) setSnapshots(r.data) })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {

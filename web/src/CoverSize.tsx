@@ -181,9 +181,11 @@ export default function CoverSize() {
   const [binding, setBinding] = useState<BindingType>('perfect')
 
   useEffect(() => {
+    let cancelled = false
     fetchBookConfig()
-      .then(setCfg)
-      .catch(() => { if (!getBookConfigCache()) setError('数据加载失败') })
+      .then((c) => { if (!cancelled) setCfg(c) })
+      .catch(() => { if (!cancelled && !getBookConfigCache()) setError('数据加载失败') })
+    return () => { cancelled = true }
   }, [])
 
   const sizes = cfg?.sizes.filter((s) => s.width_mm && s.height_mm) ?? []

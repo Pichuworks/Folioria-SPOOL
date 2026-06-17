@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Modal, Paginator, PillBtn, specInput, usePagination } from '../spec'
+import { Field, Modal, Paginator, PillBtn, specInput, toast, usePagination } from '../spec'
 import { actionBtn, type PaperDto, type SizeDto } from './types'
 
 function PaperEditModal({
@@ -35,7 +35,7 @@ function PaperEditModal({
       category: category.trim() === '' ? null : category.trim(),
       supplier: supplier.trim() === '' ? null : supplier.trim(),
     })
-    if (res.ok) { setAttrError(null); setAttrOk(true); onChanged(); setTimeout(() => setAttrOk(false), 1500) }
+    if (res.ok) { setAttrError(null); setAttrOk(true); toast('纸张属性已保存', 'ok'); onChanged(); setTimeout(() => setAttrOk(false), 1500) }
     else setAttrError('保存失败')
   }
 
@@ -58,6 +58,7 @@ function PaperEditModal({
       setPackPrice('')
       setPackCount('')
       setCostError(null)
+      toast('口径价格已保存', 'ok')
       onChanged()
     } else setCostError('保存失败')
   }
@@ -194,6 +195,7 @@ export default function PapersTab({
       setCategory('')
       setNotice('纸张已建——补好尺寸口径才可参与报价')
       setShowAdd(false)
+      toast('纸张已创建', 'ok')
       onChanged()
     } else setNotice('创建失败')
   }

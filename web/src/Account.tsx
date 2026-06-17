@@ -9,7 +9,7 @@ import {
   type NotifyPrefsDto,
 } from './api'
 import { useAuth } from './AuthContext'
-import { Field, MagSec, PillBtn, SpecRow, TabBar, specInput } from './spec'
+import { Field, MagSec, PillBtn, SpecRow, TabBar, specInput, toast } from './spec'
 
 /** C3 通知偏好（目前仅 email channel） */
 function NotifyPrefsSection() {
@@ -19,13 +19,15 @@ function NotifyPrefsSection() {
   const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     void fetchNotifyPrefs().then((r) => {
-      if (r.ok) {
+      if (r.ok && !cancelled) {
         setPrefs(r.data)
         setEmailOn(r.data.channels.includes('email'))
         setAltEmail(r.data.addresses.email ?? '')
       }
     })
+    return () => { cancelled = true }
   }, [])
 
   const save = async (e: FormEvent) => {
@@ -38,6 +40,7 @@ function NotifyPrefsSection() {
     if (r.ok) {
       setPrefs(r.data)
       setMsg('通知偏好已保存')
+      toast('通知偏好已保存', 'ok')
     } else setMsg((r.data as { error?: string })?.error === 'invalid_email' ? '通知邮箱格式不正确' : '保存失败')
   }
 

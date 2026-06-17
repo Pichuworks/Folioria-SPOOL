@@ -9,11 +9,14 @@ function AnnouncementsBody() {
   const [detail, setDetail] = useState<UserAnnouncementDto | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     void fetchUserAnnouncements().then((data) => {
+      if (cancelled) return
       const unread = data.filter((a) => !a.read)
       for (const a of unread) void markAnnouncementRead(a.id)
       setList(data.map((a) => ({ ...a, read: true })))
     })
+    return () => { cancelled = true }
   }, [])
 
   const { page, totalPages, paged, setPage } = usePagination(list ?? [], 10)

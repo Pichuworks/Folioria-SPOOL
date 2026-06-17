@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Modal, PillBtn, specInput } from '../spec'
+import { Field, Modal, PillBtn, specInput, toast } from '../spec'
 import { actionBtn, type ModeDto, type PrinterDto, type SizeDto } from './types'
 
 function ModeEditModal({
@@ -43,7 +43,7 @@ function ModeEditModal({
       body.ml_per_batch = Math.trunc(Number(mlPerBatch))
     }
     const res = await send('PATCH', `/api/pricing/modes/${mode.id}`, body)
-    if (res.ok) onDone()
+    if (res.ok) { toast('模式已保存', 'ok'); onDone() }
     else setError('保存失败')
   }
 
@@ -174,6 +174,7 @@ export default function ModesTab({
     if (res.ok) {
       setAdding(false)
       setNotice('模式已建——配组合后才可报价')
+      toast('模式已创建', 'ok')
       onChanged()
     } else setNotice(res.status === 422 ? 'ml 计价必须填每批毫升数' : '创建失败，检查输入')
   }

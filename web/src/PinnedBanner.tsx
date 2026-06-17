@@ -35,9 +35,11 @@ export default function PinnedBanner() {
   const trackRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    let cancelled = false
     void fetchPublicAnnouncements().then((all) => {
-      setItems(all.filter((a) => a.pinned).sort((a, b) => a.pin_sort - b.pin_sort))
+      if (!cancelled) setItems(all.filter((a) => a.pinned).sort((a, b) => a.pin_sort - b.pin_sort))
     })
+    return () => { cancelled = true }
   }, [])
 
   useLayoutEffect(() => {

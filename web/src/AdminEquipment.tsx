@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Field, Leader, MagSec, PillBtn, Skeleton, SpecRow, specInput } from './spec'
+import { Field, Leader, MagSec, PillBtn, Skeleton, SpecRow, specInput, toast } from './spec'
 
 interface PrinterDto {
   id: number
@@ -102,7 +102,7 @@ function MaintForm({
       body['final_usage'] = fu
     }
     const res = await send('POST', `/api/equipment/${printer.id}/maintenance`, body)
-    if (res.ok) onDone()
+    if (res.ok) { toast('维护记录已添加', 'ok'); onDone() }
     else {
       setError(
         res.status === 409
@@ -187,7 +187,7 @@ function ProfileEditPanel({ printer, onDone }: { printer: PrinterDto; onDone: ()
       calibration_interval_pages: ip,
       calibration_interval_days: idays,
     })
-    if (res.ok) onDone()
+    if (res.ok) { toast('设备参数已保存', 'ok'); onDone() }
     else setError('保存失败')
   }
 
@@ -243,7 +243,7 @@ const PrinterCard = memo(function PrinterCard({
 
   const setStatus = async (status: string) => {
     const res = await send('PATCH', `/api/equipment/${printer.id}`, { status })
-    if (res.ok) onChanged()
+    if (res.ok) { toast(`设备状态已切换为 ${status}`, 'ok'); onChanged() }
   }
 
   return (
@@ -342,7 +342,12 @@ function EquipmentBody() {
     void send<PrinterDto[]>('GET', '/api/equipment').then((r) => r.ok && setPrinters(r.data))
     void send<ConsumableDto[]>('GET', '/api/inventory/consumables').then((r) => r.ok && setConsumables(r.data))
   }, [])
-  useEffect(reload, [reload])
+  useEffect(() => {
+    let cancelled = false
+    void send<PrinterDto[]>('GET', '/api/equipment').then((r) => { if (r.ok && !cancelled) setPrinters(r.data) })
+    void send<ConsumableDto[]>('GET', '/api/inventory/consumables').then((r) => { if (r.ok && !cancelled) setConsumables(r.data) })
+    return () => { cancelled = true }
+  }, [])
 
   if (!printers || !consumables) return <Skeleton />
 

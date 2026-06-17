@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { ORDER_STATUS_LABEL, send, type OrderDto } from './api'
-import { Btn, Field, Leader, MagSec, Modal, Paginator, PillBtn, Skeleton, SpecRow, specInput, usePagination } from './spec'
+import { Btn, Field, Leader, MagSec, Modal, Paginator, PillBtn, Skeleton, SpecRow, specInput, toast, usePagination } from './spec'
 import { useFetch } from './useFetch'
 
 interface UserDto {
@@ -54,10 +54,13 @@ function UserDetail({ userId }: { userId: string }) {
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     void send<CustomerSummary>('GET', `/api/admin/users/${userId}/summary`).then((r) => {
+      if (cancelled) return
       if (r.ok) setData(r.data)
       else setErr('加载失败')
     })
+    return () => { cancelled = true }
   }, [userId])
 
   if (err) return <p className="mt-2 text-[12px] text-wine-ink">{err}</p>
@@ -96,7 +99,7 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
 
   const patch = async (body: { role?: string; archived?: boolean }) => {
     const res = await send<{ error?: string }>('PATCH', `/api/admin/users/${user.id}`, body)
-    if (res.ok) onChanged()
+    if (res.ok) { toast('用户已更新', 'ok'); onChanged() }
     else setError(res.data.error === 'last_admin' ? '最后一个活跃管理员，禁止降格/停用' : '操作失败')
   }
 
@@ -155,6 +158,7 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
     if (res.ok) {
       setForm({ email: '', name: '', password: '', role: 'member' })
       setNotice(null)
+      toast('用户已创建', 'ok')
       onCreated()
       onClose()
     } else {

@@ -67,10 +67,12 @@ export default function Home({ me, nav }: { me: MeDto | null; nav?: ReactNode })
   const [detail, setDetail] = useState<PublicAnnouncementDto | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     fetchOptions()
-      .then((o: OptionsDto) => setRows(minRows(o)))
-      .catch(() => setRows((prev) => prev ?? []))
-    void fetchPublicAnnouncements().then(setAnnouncements)
+      .then((o: OptionsDto) => { if (!cancelled) setRows(minRows(o)) })
+      .catch(() => { if (!cancelled) setRows((prev) => prev ?? []) })
+    void fetchPublicAnnouncements().then((a) => { if (!cancelled) setAnnouncements(a) })
+    return () => { cancelled = true }
   }, [])
 
   const nonPinned = announcements.filter((a) => !a.pinned)

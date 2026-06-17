@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, PillBtn, specInput } from '../spec'
+import { Field, PillBtn, specInput, toast } from '../spec'
 import { actionBtn, type SizeDto } from './types'
 
 function SizeEditCell({
@@ -88,7 +88,7 @@ export default function SizesTab({
     const val = raw.trim() === '' ? null : Number(raw)
     if (val !== null && isNaN(val)) return false
     const res = await send('PATCH', `/api/pricing/sizes/${key}`, { [field]: val })
-    if (res.ok) { onChanged(); return true }
+    if (res.ok) { toast('尺寸已更新', 'ok'); onChanged(); return true }
     return false
   }
 
@@ -112,6 +112,7 @@ export default function SizesTab({
       setForm({ key: '', label: '', area: '', sort: '', width_mm: '', height_mm: '' })
       setNotice(null)
       setShowAdd(false)
+      toast('尺寸已创建', 'ok')
       onChanged()
     } else setNotice(res.status === 409 ? '该 key 已存在' : '创建失败')
   }
@@ -188,7 +189,7 @@ export default function SizesTab({
                     onClick={() => {
                       if (!window.confirm(`删除尺寸 ${s.key}？被引用时会被拒绝。`)) return
                       void send('DELETE', `/api/pricing/sizes/${s.key}`).then((r) => {
-                        if (r.ok) onChanged()
+                        if (r.ok) { toast('尺寸已删除', 'ok'); onChanged() }
                         else setNotice(r.status === 409 ? `${s.key} 被引用，禁止删除` : '删除失败')
                       })
                     }}

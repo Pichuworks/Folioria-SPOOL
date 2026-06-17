@@ -16,7 +16,7 @@ import {
   type OrderItemDto,
 } from './api'
 import { FILE_STATUS_LABEL, PrecheckNotes } from './OrderView'
-import { Btn, Drawer, Field, Leader, MagSec, Skeleton, SpecRow, specInput } from './spec'
+import { Btn, Drawer, Field, Leader, MagSec, Skeleton, SpecRow, specInput, toast } from './spec'
 
 /** 看板七列：报价中→审稿→已确认→生产中→已印完→待取→已完成（cancelled 折叠在下方） */
 const COLUMNS: Array<{ label: string; statuses: Array<OrderDto['status']> }> = [
@@ -244,6 +244,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
     if (res.ok) {
       onUpdated(res.data)
       onRefresh()
+      toast(`订单已推进至 ${to}`, 'ok')
     } else {
       const code = (res.data as { error?: string })?.error ?? String(res.status)
       setErr(
@@ -280,6 +281,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
       setPayMethod('')
       onUpdated(res.data)
       onRefresh()
+      toast(payKind === 'refund' ? '退款已记录' : '收款已记录', 'ok')
     } else {
       const code = (res.data as { error?: string })?.error ?? String(res.status)
       setErr(
@@ -306,6 +308,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
     if (res.ok) {
       onUpdated(res.data)
       onRefresh()
+      toast('折扣已保存', 'ok')
     } else {
       const code = (res.data as { error?: string })?.error ?? String(res.status)
       setErr(code === 'discount_exceeds_subtotal' ? '折扣不能超过小计。' : `折扣保存失败（${code}）`)
@@ -461,8 +464,10 @@ function KanbanBody() {
   }, [])
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    let cancelled = false
+    void fetchOrders().then((res) => { if (res.ok && !cancelled) setOrders(res.data) })
+    return () => { cancelled = true }
+  }, [])
 
   if (!orders) return <Skeleton />
 

@@ -138,19 +138,21 @@ export default function App() {
   meRef.current = me
 
   useEffect(() => {
+    let cancelled = false
     const onHash = () => {
       setHash(window.location.hash || '#/')
-      if (meRef.current) void fetchUnreadCount().then(setUnread)
+      if (meRef.current) void fetchUnreadCount().then((n) => { if (!cancelled) setUnread(n) })
     }
     const onAuth = () => {
-      if (meRef.current) void fetchUnreadCount().then(setUnread)
+      if (meRef.current) void fetchUnreadCount().then((n) => { if (!cancelled) setUnread(n) })
       else setUnread(0)
     }
     window.addEventListener('hashchange', onHash)
     window.addEventListener(AUTH_EVENT, onAuth)
-    if (me) void fetchUnreadCount().then(setUnread)
-    fetchPublicConfig().then(setConfig).catch(() => {})
+    if (me) void fetchUnreadCount().then((n) => { if (!cancelled) setUnread(n) })
+    fetchPublicConfig().then((c) => { if (!cancelled) setConfig(c) }).catch(() => {})
     return () => {
+      cancelled = true
       window.removeEventListener('hashchange', onHash)
       window.removeEventListener(AUTH_EVENT, onAuth)
     }

@@ -10,6 +10,7 @@ export const Leader = () => <span className="mx-2.5 flex-1 -translate-y-1 border
 export const Shell = ({ nav, center, children }: { nav: ReactNode; center: string; children: ReactNode }) => (
   <div className="min-h-screen bg-paper text-ink">
     <LoadingBar />
+    <Toaster />
     <div className="mx-auto max-w-[1200px] px-5 md:px-10">
       <Masthead nav={nav} />
       <PinnedBanner />
@@ -466,6 +467,46 @@ export function Skeleton({ lines = 4 }: { lines?: number }) {
       {Array.from({ length: lines }, (_, i) => (
         <div key={i} className="h-4 rounded bg-deep" style={{ width: `${70 + (i % 3) * 10}%` }} />
       ))}
+    </div>
+  )
+}
+
+/* ── Toast ── */
+
+interface ToastItem { id: number; message: string; kind: 'ok' | 'error' | 'info' }
+let _toastId = 0
+let _toasts: ToastItem[] = []
+const _toastListeners = new Set<() => void>()
+const notifyToast = () => _toastListeners.forEach((fn) => fn())
+
+export function toast(message: string, kind: ToastItem['kind'] = 'info') {
+  const id = ++_toastId
+  _toasts = [..._toasts, { id, message, kind }]
+  notifyToast()
+  setTimeout(() => { _toasts = _toasts.filter((t) => t.id !== id); notifyToast() }, 3000)
+}
+
+function Toaster() {
+  const items = useSyncExternalStore(
+    useCallback((cb: () => void) => { _toastListeners.add(cb); return () => _toastListeners.delete(cb) }, []),
+    () => _toasts,
+  )
+  if (items.length === 0) return null
+  return (
+    <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-2">
+      {items.map((t) => (
+        <div
+          key={t.id}
+          className={`animate-[fadeIn_.15s_ease-out] border px-4 py-2.5 text-[13px] shadow-e1 ${
+            t.kind === 'error' ? 'border-wine bg-wine-dim/90 text-wine-ink' :
+            t.kind === 'ok' ? 'border-ink bg-card text-ink' :
+            'border-line bg-card text-dim'
+          }`}
+        >
+          {t.message}
+        </div>
+      ))}
+      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   )
 }

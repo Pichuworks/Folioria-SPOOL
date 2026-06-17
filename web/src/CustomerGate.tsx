@@ -10,9 +10,11 @@ export function VerifyBanner({ me }: { me: MeDto }) {
     () => getPublicConfigCache()?.require_email_verification ?? null,
   )
   useEffect(() => {
+    let cancelled = false
     fetchPublicConfig()
-      .then((c) => setRequired(c.require_email_verification))
+      .then((c) => { if (!cancelled) setRequired(c.require_email_verification) })
       .catch(() => {})
+    return () => { cancelled = true }
   }, [])
   if (me.email_verified || required !== true) return null
   return (

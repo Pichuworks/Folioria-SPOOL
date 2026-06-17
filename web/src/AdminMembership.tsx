@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
-import { Btn, Field, MagSec, PillBtn, Skeleton, specInput, TabBar } from './spec'
+import { Btn, Field, MagSec, PillBtn, Skeleton, specInput, toast, TabBar } from './spec'
 
 interface Criterion {
   id?: number
@@ -108,6 +108,7 @@ function TierForm({
     } else {
       await send('PUT', `/api/admin/membership/tiers/${res.data.id}/criteria`, { criteria })
     }
+    toast(initial ? '等级已更新' : '等级已创建', 'ok')
     onSave()
   }
 
@@ -206,7 +207,11 @@ function TiersTab() {
 
   const load = () =>
     void send<Tier[]>('GET', '/api/admin/membership/tiers').then((r) => r.ok && setTiers(r.data))
-  useEffect(load, [])
+  useEffect(() => {
+    let cancelled = false
+    void send<Tier[]>('GET', '/api/admin/membership/tiers').then((r) => { if (r.ok && !cancelled) setTiers(r.data) })
+    return () => { cancelled = true }
+  }, [])
 
   if (!tiers) return <Skeleton />
 
@@ -279,8 +284,10 @@ function MembersTab() {
     void send<Tier[]>('GET', '/api/admin/membership/tiers').then((r) => r.ok && setTiers(r.data))
   }
   useEffect(() => {
+    let cancelled = false
     load()
-    void send<UserOption[]>('GET', '/api/admin/users').then((r) => r.ok && setUsers(r.data))
+    void send<UserOption[]>('GET', '/api/admin/users').then((r) => { if (r.ok && !cancelled) setUsers(r.data) })
+    return () => { cancelled = true }
   }, [])
 
   const toggleUser = (id: string) => {
@@ -301,6 +308,7 @@ function MembersTab() {
       setAssignErr((res.data as { error?: string }).error ?? '指派失败')
       return
     }
+    toast('会员等级已指派', 'ok')
     setAssignForm(false)
     setSelUsers(new Set())
     setSelTier('')

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Leader, Modal, PillBtn, specInput } from '../spec'
+import { Field, Leader, Modal, PillBtn, specInput, toast } from '../spec'
 import { actionBtn, type FinishingDto } from './types'
 
 const PRICING_OPTIONS = [
@@ -36,7 +36,7 @@ function FinishingEditModal({
       pricing,
       price_c: price,
     })
-    if (res.ok) onDone()
+    if (res.ok) { toast('工艺已保存', 'ok'); onDone() }
     else setError('保存失败')
   }
 
@@ -90,6 +90,7 @@ export default function FinishingsTab({
       setPriceC('')
       setNotice(null)
       setShowAdd(false)
+      toast('工艺已创建', 'ok')
       onChanged()
     } else setNotice('创建失败')
   }

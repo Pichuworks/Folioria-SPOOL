@@ -47,12 +47,12 @@ export default function Quote() {
   const [guestName, setGuestName] = useState('')
 
   useEffect(() => {
+    let cancelled = false
     fetchProducts()
-      .then(setData)
-      .catch(() => {
-        if (!getProductsCache()) setError('价目数据加载失败')
-      })
-    fetchPublicConfig().then((c) => setGuestOpen(c.guest_orders_open)).catch(() => {})
+      .then((d) => { if (!cancelled) setData(d) })
+      .catch(() => { if (!cancelled && !getProductsCache()) setError('价目数据加载失败') })
+    fetchPublicConfig().then((c) => { if (!cancelled) setGuestOpen(c.guest_orders_open) }).catch(() => {})
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {

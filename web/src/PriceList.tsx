@@ -24,11 +24,11 @@ export default function PriceList() {
   const [catFilter, setCatFilter] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     fetchProducts()
-      .then(setData)
-      .catch(() => {
-        if (!getProductsCache()) setError('价目数据加载失败')
-      })
+      .then((d) => { if (!cancelled) setData(d) })
+      .catch(() => { if (!cancelled && !getProductsCache()) setError('价目数据加载失败') })
+    return () => { cancelled = true }
   }, [])
 
   const sizes = useMemo(() => (data?.sizes ?? []).slice().sort((a, b) => a.sort - b.sort), [data])

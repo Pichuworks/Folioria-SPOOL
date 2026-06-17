@@ -55,9 +55,11 @@ export default function BookConfigurator({ onAdd }: { onAdd: (line: BookCartLine
   const [qstate, setQstate] = useState<QState>('idle')
 
   useEffect(() => {
+    let cancelled = false
     fetchBookConfig()
-      .then(setCfg)
-      .catch(() => { if (!getBookConfigCache()) setError('书册配置加载失败') })
+      .then((c) => { if (!cancelled) setCfg(c) })
+      .catch(() => { if (!cancelled && !getBookConfigCache()) setError('书册配置加载失败') })
+    return () => { cancelled = true }
   }, [])
 
   const papers = cfg?.papers ?? []

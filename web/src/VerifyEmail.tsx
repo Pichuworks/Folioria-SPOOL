@@ -12,10 +12,13 @@ export default function VerifyEmail({ token }: { token: string }) {
   useEffect(() => {
     if (fired.current === token) return
     fired.current = token
+    let cancelled = false
     void verifyEmailToken(token).then((ok) => {
+      if (cancelled) return
       if (ok) return setState('ok')
       setState(me?.email_verified ? 'ok' : 'fail')
     })
+    return () => { cancelled = true }
   }, [token, me])
 
   return (

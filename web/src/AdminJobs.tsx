@@ -17,7 +17,7 @@ import {
   type MachineRecDto,
   type OptionsDto,
 } from './api'
-import { Field, Leader, MagSec, Paginator, PillBtn, Skeleton, SpecRow, TabBar, specInput, usePagination } from './spec'
+import { Field, Leader, MagSec, Paginator, PillBtn, Skeleton, SpecRow, TabBar, specInput, toast, usePagination } from './spec'
 
 const STATUS_ORDER = ['draft', 'queued', 'printing', 'done', 'cancelled'] as const
 const STATUS_LABEL: Record<JobDto['status'], string> = {
@@ -41,7 +41,7 @@ function DonePanel({ job, onDone }: { job: JobDto; onDone: () => void }) {
     const p = Number(pages)
     if (pages.trim() !== '' && Number.isSafeInteger(p) && p >= 1) body.pages_consumed = p
     const res = await completeJob(job.id, body)
-    if (res.ok) return onDone()
+    if (res.ok) { toast('作业已完成，库存已落账', 'ok'); return onDone() }
     const msgs: Record<string, string> = {
       no_stock_record: '落账失败：该纸×尺寸不存在库存档案，请先录入库存',
       unit_cost_underivable: '落账失败：成本推导失败，请检查机台/纸张/尺寸配置',
@@ -135,7 +135,7 @@ const JobRow = memo(function JobRow({ job, onChanged, highlight }: { job: JobDto
 
   const transition = async (status: 'queued' | 'printing' | 'cancelled') => {
     if (status === 'cancelled' && !window.confirm(`确认取消「${job.title}」？`)) return
-    if (await patchJobStatus(job.id, status)) onChanged()
+    if (await patchJobStatus(job.id, status)) { toast(`作业已变更为 ${STATUS_LABEL[status] ?? status}`, 'ok'); onChanged() }
     else setError('状态变更失败，请刷新后重试')
   }
 
@@ -496,11 +496,11 @@ function JobsBody() {
   const highlightApplied = useRef(false)
 
   useEffect(() => {
+    let cancelled = false
     fetchOptions()
-      .then(setOptions)
-      .catch(() => {
-        if (!getOptionsCache()) setOptionsError('配置数据加载失败')
-      })
+      .then((o) => { if (!cancelled) setOptions(o) })
+      .catch(() => { if (!cancelled && !getOptionsCache()) setOptionsError('配置数据加载失败') })
+    return () => { cancelled = true }
   }, [])
 
   const reloadJobs = useCallback(() => {
@@ -508,7 +508,13 @@ function JobsBody() {
       if (!getJobsCache()) setJobs(null)
     })
   }, [])
-  useEffect(reloadJobs, [reloadJobs])
+  useEffect(() => {
+    let cancelled = false
+    fetchJobs()
+      .then((j) => { if (!cancelled) setJobs(j) })
+      .catch(() => { if (!cancelled && !getJobsCache()) setJobs(null) })
+    return () => { cancelled = true }
+  }, [])
 
   const onMutated = useCallback(() => {
     reloadJobs()
