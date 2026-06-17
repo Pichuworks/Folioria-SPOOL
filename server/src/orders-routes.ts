@@ -1,5 +1,6 @@
 import { type FastifyInstance } from 'fastify'
 import { audit } from './audit.js'
+import { getLog } from './logger.js'
 import { type BookLineInput, type BookSpecInput } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
@@ -1003,7 +1004,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
               new Date().toISOString(),
               id,
             )
-            try { checkAutoUpgrade(db, order.customer_id) } catch { /* best-effort; delivery must not fail */ }
+            try { checkAutoUpgrade(db, order.customer_id) } catch (e) { getLog().warn({ err: e, orderId: id }, 'checkAutoUpgrade failed (non-blocking)') }
           } else {
             db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id)
           }

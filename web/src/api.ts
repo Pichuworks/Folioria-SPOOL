@@ -15,10 +15,12 @@ export async function send<T>(
   startLoading()
   try {
     const init: RequestInit = { method }
+    const headers: Record<string, string> = { 'x-spool-request': '1' }
     if (body !== undefined) {
-      init.headers = { 'content-type': 'application/json' }
+      headers['content-type'] = 'application/json'
       init.body = JSON.stringify(body)
     }
+    init.headers = headers
     const res = await fetch(url, init)
     let data: unknown = null
     try {
@@ -355,7 +357,7 @@ export async function fetchMe(): Promise<MeDto | null> {
 export async function login(identifier: string, password: string): Promise<MeDto | null> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify({ identifier, password }),
   })
   if (res.status === 401) return null
@@ -399,7 +401,7 @@ export async function setupInstance(body: {
 export async function verifyEmailToken(token: string): Promise<boolean> {
   const res = await fetch('/api/auth/verify-email', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify({ token }),
   })
   if (res.ok && meCache) meCache = { ...meCache, email_verified: true }
@@ -407,7 +409,7 @@ export async function verifyEmailToken(token: string): Promise<boolean> {
 }
 
 export async function logout(): Promise<void> {
-  await fetch('/api/auth/logout', { method: 'POST' })
+  await fetch('/api/auth/logout', { method: 'POST', headers: { 'x-spool-request': '1' } })
   meCache = null
   dashboardEntry = null
   fireAuthChanged()
@@ -417,7 +419,7 @@ export async function logout(): Promise<void> {
 export async function forgotPassword(identifier: string): Promise<void> {
   await fetch('/api/auth/forgot-password', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify({ identifier }),
   })
 }
@@ -426,7 +428,7 @@ export async function forgotPassword(identifier: string): Promise<void> {
 export async function resetPassword(token: string, newPassword: string): Promise<boolean> {
   const res = await fetch('/api/auth/reset-password', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify({ token, new_password: newPassword }),
   })
   return res.ok
@@ -435,7 +437,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
 export async function changePassword(oldPassword: string, newPassword: string): Promise<boolean> {
   const res = await fetch('/api/auth/change-password', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   })
   // 改密成功即清首登标志，广播让导航三态/门即时解锁（D11）
@@ -563,7 +565,7 @@ export async function createJob(body: {
 }): Promise<(JobDto & { availability_warning: boolean }) | null> {
   const res = await fetch('/api/jobs', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify(body),
   })
   if (!res.ok) return null
@@ -576,7 +578,7 @@ export async function patchJobStatus(
 ): Promise<boolean> {
   const res = await fetch(`/api/jobs/${id}`, {
     method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify({ status }),
   })
   return res.ok
@@ -612,7 +614,7 @@ export async function completeJob(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const res = await fetch(`/api/jobs/${id}/done`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify(body),
   })
   if (res.ok) return { ok: true }
@@ -856,7 +858,7 @@ export async function uploadOrderItemFile(
 ): Promise<{ ok: boolean; status: number; data: OrderDto | { error?: string } }> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch(`/api/orders/${orderId}/items/${itemId}/file`, { method: 'POST', body: form })
+  const res = await fetch(`/api/orders/${orderId}/items/${itemId}/file`, { method: 'POST', headers: { 'x-spool-request': '1' }, body: form })
   let data: unknown = null
   try {
     data = await res.json()
@@ -876,7 +878,7 @@ export async function uploadOrderBookComponentFile(
 ): Promise<{ ok: boolean; status: number; data: OrderDto | { error?: string } }> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch(`/api/orders/${orderId}/book-components/${compId}/file`, { method: 'POST', body: form })
+  const res = await fetch(`/api/orders/${orderId}/book-components/${compId}/file`, { method: 'POST', headers: { 'x-spool-request': '1' }, body: form })
   let data: unknown = null
   try {
     data = await res.json()
@@ -939,7 +941,7 @@ export async function fetchQuote(req: {
 }): Promise<QuoteDto | null> {
   const res = await fetch('/api/calculator/quote', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-spool-request': '1' },
     body: JSON.stringify(req),
   })
   if (res.status === 404) return null

@@ -145,6 +145,16 @@ export async function resetPassword(db: DB, token: string, newPassword: string):
   return true
 }
 
+/** H-SEC-4: purge expired/revoked sessions and consumed tokens */
+export function cleanupExpiredTokens(db: DB): number {
+  const now = new Date().toISOString()
+  let deleted = 0
+  deleted += db.prepare('DELETE FROM sessions WHERE expires_at < ? OR revoked_at IS NOT NULL').run(now).changes
+  deleted += db.prepare('DELETE FROM email_verification_tokens WHERE expires_at < ? OR consumed_at IS NOT NULL').run(now).changes
+  deleted += db.prepare('DELETE FROM password_reset_tokens WHERE expires_at < ? OR consumed_at IS NOT NULL').run(now).changes
+  return deleted
+}
+
 /** 改密成功清 must_change_password（D11）并吊销该用户其他 session */
 export async function changePassword(
   db: DB,

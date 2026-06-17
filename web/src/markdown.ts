@@ -2,6 +2,11 @@ import { Marked, Renderer } from 'marked'
 
 const renderer = new Renderer()
 renderer.html = () => ''
+const origLink = renderer.link
+renderer.link = function (token) {
+  if (/^\s*javascript:/i.test(token.href)) return token.text
+  return origLink.call(this, token)
+}
 
 const marked = new Marked({ renderer })
 

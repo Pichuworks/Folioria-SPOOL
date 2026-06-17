@@ -302,11 +302,23 @@ export function completeJob(db: DB, jobId: string, input: CompleteJobInput): voi
 
   const log = getLog()
   log.info({ jobId, quantity: job.quantity, waste, pages, consumed, totalCost, profit }, 'job.complete begin')
+  const updateStock = db.prepare('UPDATE paper_stocks SET quantity = quantity - ? WHERE id = ?')
+  const selectConsumables = db.prepare(
+    `SELECT id FROM consumables WHERE printer_id = ? AND cost_model = 'per_page' AND archived = 0`,
+  )
+  const updateConsumable = db.prepare('UPDATE consumables SET current_usage_pages = current_usage_pages + ? WHERE id = ?')
+  const updatePrinter = db.prepare('UPDATE printers SET total_pages = total_pages + ? WHERE id = ?')
+  const updateJob = db.prepare(
+    `UPDATE jobs SET status = 'done', waste_quantity = ?, pages_consumed = ?,
+       paper_cost_c = ?, consumable_cost_c = ?, overhead_cost_c = ?,
+       total_cost = ?, profit = ?, completed_at = ?, operator_id = ?
+     WHERE id = ?`,
+  )
   try {
     db.transaction(() => {
       for (const d of draws) {
         const drawn = d.consume + d.scrap
-        db.prepare('UPDATE paper_stocks SET quantity = quantity - ? WHERE id = ?').run(drawn, d.id)
+        updateStock.run(drawn, d.id)
         if (d.consume > 0) {
           insertLog.run(randomUUID(), d.id, 'consume', -d.consume, null, input.operatorId ?? null, jobId, now)
         }
@@ -325,26 +337,16 @@ export function completeJob(db: DB, jobId: string, input: CompleteJobInput): voi
         }
       }
 
-      const consumables = db
-        .prepare(
-          `SELECT id FROM consumables
-           WHERE printer_id = ? AND cost_model = 'per_page' AND archived = 0`,
-        )
-        .all(job.printer_id) as Array<{ id: string }>
+      const consumables = selectConsumables.all(job.printer_id) as Array<{ id: string }>
       for (const c of consumables) {
-        db.prepare('UPDATE consumables SET current_usage_pages = current_usage_pages + ? WHERE id = ?').run(pages, c.id)
+        updateConsumable.run(pages, c.id)
         checkConsumableThreshold(db, c.id)
       }
 
-      db.prepare('UPDATE printers SET total_pages = total_pages + ? WHERE id = ?').run(pages, job.printer_id)
+      updatePrinter.run(pages, job.printer_id)
       checkCalibration(db, job.printer_id)
 
-      db.prepare(
-        `UPDATE jobs SET status = 'done', waste_quantity = ?, pages_consumed = ?,
-           paper_cost_c = ?, consumable_cost_c = ?, overhead_cost_c = ?,
-           total_cost = ?, profit = ?, completed_at = ?, operator_id = ?
-         WHERE id = ?`,
-      ).run(
+      updateJob.run(
         waste,
         pages,
         cost.paper_c,

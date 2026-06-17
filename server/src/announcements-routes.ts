@@ -144,7 +144,8 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
         `SELECT a.*, u.name AS author_name
          FROM announcements a
          LEFT JOIN users u ON u.id = a.author_id
-         ORDER BY a.pinned DESC, a.pin_sort ASC, a.created_at DESC`,
+         ORDER BY a.pinned DESC, a.pin_sort ASC, a.created_at DESC
+         LIMIT 500`,
       )
       .all() as Array<AnnouncementRow & { author_name: string | null }>
     return rows.map((r) => ({ ...toBool(r), author_name: r.author_name }))

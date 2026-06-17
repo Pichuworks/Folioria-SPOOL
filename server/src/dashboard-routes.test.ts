@@ -98,7 +98,7 @@ describe('Dashboard 四宫格', () => {
     expect(body.monthly.revenue_display).toBe('¥14')
     expect(body.monthly.profit_display).toBe('-¥57')
 
-    expect(body.equipment.length).toBe(6)
+    expect(body.equipment.length).toBe(5)
     expect(body.equipment[0]?.code).toBe('C850')
   })
 

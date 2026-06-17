@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ComponentType, type ErrorInfo, type ReactNode } from 'react'
 import Account, { AccountMenu, DashboardPill } from './Account'
 import {
   AUTH_EVENT,
@@ -10,18 +10,19 @@ import {
   type MeDto,
   type PublicConfigDto,
 } from './api'
-import Announcements from './Announcements'
 import Home from './Home'
 import Login from './Login'
-import MyOrders from './MyOrders'
-import OrderView from './OrderView'
-import PriceList from './PriceList'
-import CoverSize from './CoverSize'
-import Quote from './Quote'
-import ResetPassword from './ResetPassword'
 import Setup from './Setup'
 import { Shell, Skeleton } from './spec'
-import VerifyEmail from './VerifyEmail'
+
+const Announcements = lazy(() => import('./Announcements'))
+const CoverSize = lazy(() => import('./CoverSize'))
+const MyOrders = lazy(() => import('./MyOrders'))
+const OrderView = lazy(() => import('./OrderView'))
+const PriceList = lazy(() => import('./PriceList'))
+const Quote = lazy(() => import('./Quote'))
+const ResetPassword = lazy(() => import('./ResetPassword'))
+const VerifyEmail = lazy(() => import('./VerifyEmail'))
 
 const Dashboard = lazy(() => import('./Dashboard'))
 const AdminAlerts = lazy(() => import('./AdminAlerts'))
@@ -110,6 +111,24 @@ function resolve(hash: string): Resolved | null {
     return { title: '登录', folio: 'SIGN IN', node: <Login />, navKey: null }
   }
   return null // → Home
+}
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  override state: { error: Error | null } = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  override componentDidCatch(error: Error, info: ErrorInfo) { console.error('ErrorBoundary caught:', error, info) }
+  override render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: '2rem', textAlign: 'center' }}>
+          <h2 style={{ marginBottom: '1rem' }}>页面出错了</h2>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>{this.state.error.message}</p>
+          <button onClick={() => { this.setState({ error: null }); window.location.hash = '#/' }}>返回首页</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 export default function App() {
@@ -207,9 +226,11 @@ export default function App() {
   return (
     <Shell center={resolved.folio} nav={buildNav(resolved.navKey)}>
       <h1 className="sr-only">{resolved.title}</h1>
-      <Suspense fallback={<Skeleton />}>
-        {resolved.node}
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={<Skeleton />}>
+          {resolved.node}
+        </Suspense>
+      </ErrorBoundary>
     </Shell>
   )
 }

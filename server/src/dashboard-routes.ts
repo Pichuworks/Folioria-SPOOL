@@ -19,7 +19,9 @@ interface PrinterRow {
 
 export function registerDashboardRoutes(app: FastifyInstance, db: DB): void {
   app.get('/api/dashboard', { preHandler: requireAdmin }, async () => {
-    const month = new Date().toISOString().slice(0, 7)
+    const now = new Date()
+    const monthStart = now.toISOString().slice(0, 7) + '-01T00:00:00Z'
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().slice(0, 19) + 'Z'
 
     const counts = db
       .prepare(
@@ -50,9 +52,9 @@ export function registerDashboardRoutes(app: FastifyInstance, db: DB): void {
          FROM jobs j
          LEFT JOIN order_items oi ON oi.id = j.order_item_id
          LEFT JOIN orders o ON o.id = oi.order_id
-         WHERE j.status = 'done' AND substr(j.completed_at, 1, 7) = ?`,
+         WHERE j.status = 'done' AND j.completed_at >= ? AND j.completed_at < ?`,
       )
-      .get(month) as {
+      .get(monthStart, nextMonth) as {
       jobs_done: number
       revenue: number
       external_cost: number
@@ -69,7 +71,6 @@ export function registerDashboardRoutes(app: FastifyInstance, db: DB): void {
       profit_display: formatMoney(money(m.profit), currency),
     }
 
-    const now = new Date()
     const equipment = (
       db
         .prepare(

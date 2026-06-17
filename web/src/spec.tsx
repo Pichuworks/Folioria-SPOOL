@@ -25,7 +25,7 @@ export const Masthead = ({ nav }: { nav: ReactNode }) => (
       <span className="ink-press text-[44px] font-bold leading-none tracking-[.28em]">枫光映刻</span>
       <span className="flex flex-col justify-between">
         <span className="ink-press font-script text-[19px] leading-none text-dim">Maplescape Folioria</span>
-        <span className="-mb-[3px] font-script text-[11px] italic text-dim/70">Folia Impressa Animae</span>
+        <span className="-mb-[5px] font-script text-[13px] italic text-dim/70">Folia Impressa Animae</span>
       </span>
     </a>
     <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-1 text-[13px]">{nav}</nav>
@@ -258,20 +258,26 @@ export function Btn({
 /* ── Modal ── */
 
 export function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', handler)
+    const el = dialogRef.current
+    if (el) {
+      const first = el.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      first?.focus()
+    }
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" onClick={onClose}>
-      <div className={`mx-4 w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} border border-ink bg-paper p-6 shadow-e1`} onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={dialogRef} className={`mx-4 w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} border border-ink bg-paper p-6 shadow-e1`} onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-baseline justify-between border-b border-ink pb-3">
           <h3 className="text-[20px] font-semibold text-ink">{title}</h3>
-          <button type="button" onClick={onClose} className="text-[18px] text-dim hover:text-ink">×</button>
+          <button type="button" onClick={onClose} aria-label="关闭" className="text-[18px] text-dim hover:text-ink">×</button>
         </div>
         {children}
       </div>
@@ -282,10 +288,16 @@ export function Modal({ open, onClose, title, wide, children }: { open: boolean;
 /* ── Drawer ── */
 
 export function Drawer({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+  const panelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', handler)
+    const el = panelRef.current
+    if (el) {
+      const first = el.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      first?.focus()
+    }
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
@@ -293,15 +305,19 @@ export function Drawer({ open, onClose, title, children }: { open: boolean; onCl
     <div
       className={`fixed inset-0 z-50 transition-colors duration-300 ${open ? 'bg-ink/40' : 'pointer-events-none bg-transparent'}`}
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
     >
       <div
+        ref={panelRef}
         className={`absolute inset-y-0 right-0 w-full max-w-3xl border-l border-ink bg-paper shadow-e3 transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex h-full flex-col overflow-hidden">
           <div className="flex items-baseline justify-between border-b border-ink px-6 py-4">
             <h3 className="text-[20px] font-semibold text-ink">{title}</h3>
-            <button type="button" onClick={onClose} className="text-[18px] text-dim hover:text-ink">×</button>
+            <button type="button" onClick={onClose} aria-label="关闭" className="text-[18px] text-dim hover:text-ink">×</button>
           </div>
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {children}

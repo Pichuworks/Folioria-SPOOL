@@ -286,6 +286,9 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
     | undefined
   if (!cfg) throw new Error('orders: system_config missing (run spool init)')
 
+  const getModeForFin = db.prepare('SELECT duplex FROM print_modes WHERE id = ?')
+  const getSizeForFin = db.prepare('SELECT area FROM sizes WHERE key = ?')
+
   const priced = input.items.map((item, idx) => {
     const q = quote(db, item.mode_id, item.paper_id, item.size_key, { internal: input.internal })
     if (!q) throw new OrderError(422, `item_${idx}_not_quotable`)
@@ -294,8 +297,8 @@ export function createOrder(db: DB, input: CreateOrderInput): string {
     const itemFins: Array<{ finishing_id: number; name: string; pricing: FinishingPricing; price_c: number; contribution_c: number }> = []
 
     if (item.finishing_ids && item.finishing_ids.length > 0) {
-      const mode = db.prepare('SELECT duplex FROM print_modes WHERE id = ?').get(item.mode_id) as { duplex: number } | undefined
-      const size = db.prepare('SELECT area FROM sizes WHERE key = ?').get(item.size_key) as { area: number } | undefined
+      const mode = getModeForFin.get(item.mode_id) as { duplex: number } | undefined
+      const size = getSizeForFin.get(item.size_key) as { area: number } | undefined
       if (mode && size) {
         const ctx = { pages: mode.duplex ? 2 : 1, area: size.area }
         const fins = db
@@ -571,11 +574,12 @@ export function confirmOrder(db: DB, orderId: string): void {
   if (nowIso > order.quote_valid_until) throw new OrderError(409, 'quote_expired')
 
   const lineTotals = [...items.map((it) => it.line_total), ...books.map((b) => b.book.line_total)]
-  const shares = distributeDiscount(order.discount, order.subtotal, lineTotals)
+  const totalDiscount = order.discount + order.membership_discount
+  const shares = distributeDiscount(totalDiscount, order.subtotal, lineTotals)
   const itemShares = shares.slice(0, items.length)
   const bookShares = shares.slice(items.length)
-  if (order.discount > 0) {
-    getLog().info({ orderId, discount: order.discount, subtotal: order.subtotal, lines: lineTotals.length }, 'confirm: discount distributed')
+  if (totalDiscount > 0) {
+    getLog().info({ orderId, discount: order.discount, membershipDiscount: order.membership_discount, subtotal: order.subtotal, lines: lineTotals.length }, 'confirm: discount distributed')
   }
 
   db.transaction(() => {

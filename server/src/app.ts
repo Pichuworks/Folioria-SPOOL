@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie'
+import helmet from '@fastify/helmet'
 import multipart from '@fastify/multipart'
 import rateLimit from '@fastify/rate-limit'
 import bcrypt from 'bcryptjs'
@@ -15,6 +16,7 @@ import {
   userByToken,
   verifyEmail,
   verifyLogin,
+  SESSION_TTL_DAYS,
   type SessionUser,
 } from './auth.js'
 import { audit, listAudit } from './audit.js'
@@ -111,7 +113,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   const uploadMaxBytes = opts.uploadMaxBytes ?? UPLOAD_MAX_BYTES
   const logLevel = (process.env['SPOOL_LOG_LEVEL'] ?? (process.env['VITEST'] ? 'silent' : 'info')) as 'silent' | 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace'
   // coerceTypes 必须关死：金额字段传 "100"/1.5 须 422，不允许静默转换（acceptance §7）
-  const app = Fastify({ logger: { level: logLevel }, ajv: { customOptions: { coerceTypes: false } } })
+  const app = Fastify({ logger: { level: logLevel }, trustProxy: true, ajv: { customOptions: { coerceTypes: false } } })
   initLogger(app.log)
 
   // acceptance §7: schema 校验失败一律 422
@@ -129,11 +131,24 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   })
 
   void app.register(cookie)
+  void app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+      },
+    },
+    hsts: { maxAge: 63072000, includeSubDomains: true },
+  })
   // R5: 单文件单次（订单 item 级上传）；超限由 adapter 抛 413
   void app.register(multipart, { limits: { fileSize: uploadMaxBytes, files: 1 } })
   // PRD §6 限流：实例躲在 Cloudflare Tunnel 后，真实客户端 IP 在 CF-Connecting-IP
   void app.register(rateLimit, {
-    global: false,
+    global: true,
+    max: 120,
+    timeWindow: '1 minute',
     keyGenerator: (req) => {
       const cf = req.headers['cf-connecting-ip']
       return (Array.isArray(cf) ? cf[0] : cf) ?? req.ip
@@ -143,6 +158,16 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
     },
   })
   app.decorateRequest('user', null)
+  // CSRF: state-changing requests must include X-SPOOL-Request header (SPA sets it; cross-origin forms cannot)
+  if (!process.env['VITEST']) {
+    app.addHook('onRequest', (req, reply, done) => {
+      if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) && !req.headers['x-spool-request']) {
+        void reply.status(403).send({ error: 'csrf_rejected' })
+        return
+      }
+      done()
+    })
+  }
   app.addHook('preHandler', (req, _reply, done) => {
     const token = req.cookies[SESSION_COOKIE]
     if (token) {
@@ -227,6 +252,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         sameSite: 'lax',
         secure: cookieSecure,
         path: '/',
+        maxAge: SESSION_TTL_DAYS * 86_400,
       })
       return reply.status(201).send(userDto(userByToken(db, session) as SessionUser))
     },
@@ -272,6 +298,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         sameSite: 'lax',
         secure: cookieSecure,
         path: '/',
+        maxAge: SESSION_TTL_DAYS * 86_400,
       })
       return userDto(user)
     },
@@ -343,6 +370,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         sameSite: 'lax',
         secure: cookieSecure,
         path: '/',
+        maxAge: SESSION_TTL_DAYS * 86_400,
       })
       const user = userByToken(db, session) as SessionUser
       return reply.status(201).send(userDto(user))
@@ -428,7 +456,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   app.post('/api/auth/logout', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const token = req.cookies[SESSION_COOKIE]
     if (token) revokeSession(db, token)
-    void reply.clearCookie(SESSION_COOKIE, { path: '/' })
+    void reply.clearCookie(SESSION_COOKIE, { path: '/', httpOnly: true, sameSite: 'lax', secure: cookieSecure })
     return reply.status(204).send()
   })
 

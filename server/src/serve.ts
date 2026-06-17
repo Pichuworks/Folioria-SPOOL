@@ -1,3 +1,4 @@
+import { cleanupExpiredTokens } from './auth.js'
 import { buildApp } from './app.js'
 import { migrate, openDb } from './db.js'
 
@@ -14,6 +15,11 @@ const applied = migrate(db)
 const app = buildApp(db, { cookieSecure })
 
 if (applied > 0) app.log.info({ applied }, 'migrations applied')
+
+// H-SEC-4: purge expired sessions/tokens on startup and every hour
+cleanupExpiredTokens(db)
+const cleanupTimer = setInterval(() => { try { cleanupExpiredTokens(db) } catch (e) { app.log.error(e, 'token cleanup failed') } }, 3_600_000)
+cleanupTimer.unref()
 
 app
   .listen({ port, host: '127.0.0.1' })

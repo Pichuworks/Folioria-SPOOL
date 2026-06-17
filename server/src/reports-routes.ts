@@ -13,6 +13,13 @@ const MONTH_QUERY = {
 const monthOf = (q: unknown): string =>
   (q as { month?: string }).month ?? new Date().toISOString().slice(0, 7)
 
+function monthRange(month: string): [string, string] {
+  const [y, m] = month.split('-').map(Number) as [number, number]
+  const start = `${month}-01T00:00:00Z`
+  const next = m === 12 ? `${y + 1}-01-01T00:00:00Z` : `${y}-${String(m + 1).padStart(2, '0')}-01T00:00:00Z`
+  return [start, next]
+}
+
 // ---------- 数据层（JSON 路由与 CSV 导出共用，避免 SQL 重复） ----------
 
 interface MonthlyRow {
@@ -46,9 +53,9 @@ export function monthlyReport(db: DB, month: string) {
        FROM jobs j
        LEFT JOIN order_items oi ON oi.id = j.order_item_id
        LEFT JOIN orders o ON o.id = oi.order_id
-       WHERE j.status = 'done' AND substr(j.completed_at, 1, 7) = ?`,
+       WHERE j.status = 'done' AND j.completed_at >= ? AND j.completed_at < ?`,
     )
-    .get(month) as MonthlyRow
+    .get(...monthRange(month)) as MonthlyRow
   const currency = baseCurrency(db)
   return {
     month,
@@ -96,11 +103,11 @@ export function equipmentUsage(db: DB, month: string): { month: string; printers
        FROM printers p
        LEFT JOIN print_modes pm ON pm.printer_id = p.id
        LEFT JOIN jobs j ON j.mode_id = pm.id AND j.status = 'done'
-                        AND substr(j.completed_at, 1, 7) = ?
+                        AND j.completed_at >= ? AND j.completed_at < ?
        WHERE p.archived = 0
        GROUP BY p.id ORDER BY p.id`,
     )
-    .all(month) as PrinterUsageRow[]
+    .all(...monthRange(month)) as PrinterUsageRow[]
   return { month, printers }
 }
 
@@ -124,11 +131,11 @@ export function paperConsumption(db: DB, month: string): { month: string; rows: 
        JOIN paper_stocks ps ON ps.id = il.target_id
        JOIN papers pa ON pa.id = ps.paper_id
        WHERE il.target_type = 'paper_stock' AND il.action IN ('consume', 'scrap')
-         AND substr(il.created_at, 1, 7) = ?
+         AND il.created_at >= ? AND il.created_at < ?
        GROUP BY ps.paper_id, ps.size_key
        ORDER BY total DESC`,
     )
-    .all(month) as PaperConsumptionRow[]
+    .all(...monthRange(month)) as PaperConsumptionRow[]
   return { month, rows }
 }
 
@@ -277,6 +284,7 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
       months.push(new Date(now.getFullYear(), now.getMonth() - i, 1).toISOString().slice(0, 7))
     }
 
+    const [rangeStart] = monthRange(startMonth)
     const rows = db
       .prepare(
         `SELECT substr(j.completed_at, 1, 7) AS month,
@@ -287,11 +295,11 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
          FROM jobs j
          LEFT JOIN order_items oi ON oi.id = j.order_item_id
          LEFT JOIN orders o ON o.id = oi.order_id
-         WHERE j.status = 'done' AND substr(j.completed_at, 1, 7) >= ?
+         WHERE j.status = 'done' AND j.completed_at >= ?
          GROUP BY substr(j.completed_at, 1, 7)
          ORDER BY month`,
       )
-      .all(startMonth) as Array<{
+      .all(rangeStart) as Array<{
       month: string; revenue: number; cost: number; profit: number; internal_cost: number
     }>
 
