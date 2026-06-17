@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Leader, Modal, PillBtn, specInput } from '../spec'
+import { Field, Modal, PillBtn, specInput } from '../spec'
 import { actionBtn, type ModeDto, type PrinterDto, type SizeDto } from './types'
 
 function ModeEditModal({

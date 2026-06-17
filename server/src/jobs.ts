@@ -7,7 +7,7 @@ import { deriveUnitCost, divRoundHalfUp, overheadC } from './pricing.js'
 
 export class JobError extends Error {
   constructor(
-    public status: number,
+    public statusCode: number,
     message: string,
   ) {
     super(message)

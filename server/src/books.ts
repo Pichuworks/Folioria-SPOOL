@@ -202,7 +202,6 @@ export function priceBookSpec(db: DB, input: BookSpecInput, opts?: QuoteOptions)
     const resolved = priceComponentSpec(db, { paper_id: c.paper_id, size_key: input.size_key, color_class: c.color_class, duplex: c.duplex }, opts, products)
     if (!resolved) throw new BookError(422, `component_not_quotable_${i}`)
 
-    const paper = db.prepare('SELECT name FROM papers WHERE id = ?').get(c.paper_id) as { name: string } | undefined
     if (c.role !== 'cover') labels.push(`${c.color_class === 'bw' ? '黑白' : '彩色'}${sheets}张`)
 
     priced.push({

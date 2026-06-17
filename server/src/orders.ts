@@ -4,7 +4,7 @@ import { type DB } from './db.js'
 import { finishingContribution, type FinishingPricing } from './finishing.js'
 import { getLog } from './logger.js'
 import { getEffectiveTier, membershipDiscountAmount } from './membership.js'
-import { lineTotal, money, moneyC, sumMoney, type Money } from './money.js'
+import { lineTotal, money, moneyC, sumMoney } from './money.js'
 import { quote } from './pricing.js'
 
 /** 带 statusCode 抛出，由 app 全局 errorHandler 映射为 { error: message }（<500 不落日志） */

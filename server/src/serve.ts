@@ -16,6 +16,10 @@ const app = buildApp(db, { cookieSecure })
 
 if (applied > 0) app.log.info({ applied }, 'migrations applied')
 
+if (process.env['SPOOL_RESEND_API_KEY'] && !process.env['SPOOL_PUBLIC_ORIGIN']) {
+  app.log.warn('SPOOL_PUBLIC_ORIGIN not set — email links will contain localhost URLs')
+}
+
 // H-SEC-4: purge expired sessions/tokens on startup and every hour
 cleanupExpiredTokens(db)
 const cleanupTimer = setInterval(() => { try { cleanupExpiredTokens(db) } catch (e) { app.log.error(e, 'token cleanup failed') } }, 3_600_000)

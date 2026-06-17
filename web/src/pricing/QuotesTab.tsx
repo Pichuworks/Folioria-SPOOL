@@ -369,7 +369,7 @@ export default function QuotesTab({
     try {
       const form = new FormData()
       form.append('file', file)
-      const res = await fetch('/api/admin/pricing/import', { method: 'POST', body: form })
+      const res = await fetch('/api/admin/pricing/import', { method: 'POST', body: form, headers: { 'x-spool-request': '1' } })
       const data = await res.json() as { updated: number; skipped: { row: number; reason: string }[] }
       setImportResult(data)
       if (res.ok && data.updated > 0) onChanged()

@@ -7,7 +7,7 @@ import {
   type BookConfigPaper,
   type BookSpecQuoteDto,
 } from './api'
-import { Field, Leader, specInput } from './spec'
+import { Field, specInput } from './spec'
 
 export interface BookCartLine {
   kind: 'book'

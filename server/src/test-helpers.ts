@@ -1,8 +1,13 @@
 import bcrypt from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
+import { invalidateCurrencyCache } from './currency.js'
 import { migrate, openDb, type DB } from './db.js'
+import { invalidateConfigCache, invalidateQuotableCache } from './pricing.js'
 
 export function makeTestDb(): DB {
+  invalidateConfigCache()
+  invalidateQuotableCache()
+  invalidateCurrencyCache()
   const db = openDb(':memory:')
   migrate(db)
   return db

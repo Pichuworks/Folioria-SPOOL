@@ -20,15 +20,16 @@ function SizeEditCell({
 
   if (!editing) {
     return (
-      <span
+      <button
+        type="button"
         className="cursor-pointer rounded px-1 py-0.5 hover:bg-deep"
         onClick={() => {
           setDraft(value)
           setEditing(true)
         }}
       >
-        {value || <span className="text-dim/50">{placeholder ?? '—'}</span>}
-      </span>
+        {value || <span className="text-dim/60">{placeholder ?? '—'}</span>}
+      </button>
     )
   }
 

@@ -3,7 +3,8 @@ import { type FastifyInstance } from 'fastify'
 import { audit } from './audit.js'
 import { type DB } from './db.js'
 import { requireAdmin } from './guards.js'
-import { invalidateConfigCache } from './pricing.js'
+import { invalidateCurrencyCache } from './currency.js'
+import { invalidateConfigCache, invalidateQuotableCache } from './pricing.js'
 
 interface ConfigRow {
   base_currency: string
@@ -150,6 +151,8 @@ export function registerSettingsRoutes(app: FastifyInstance, db: DB): void {
         b.quote_valid_days ?? existing.quote_valid_days,
       )
       invalidateConfigCache()
+      invalidateQuotableCache()
+      invalidateCurrencyCache()
       audit(db, {
         actorId: req.user?.id ?? null,
         action: 'settings.update',

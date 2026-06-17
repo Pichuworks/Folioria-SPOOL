@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
-import { Field, Leader, Modal, Paginator, PillBtn, specInput, usePagination } from '../spec'
+import { Field, Modal, Paginator, PillBtn, specInput, usePagination } from '../spec'
 import { actionBtn, type PaperDto, type SizeDto } from './types'
 
 function PaperEditModal({

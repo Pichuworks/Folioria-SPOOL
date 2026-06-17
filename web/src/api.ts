@@ -29,6 +29,8 @@ export async function send<T>(
       // 204 等无 body 响应
     }
     return { ok: res.ok, status: res.status, data: data as T }
+  } catch {
+    return { ok: false, status: 0, data: { error: 'network_error' } as T }
   } finally {
     stopLoading()
   }

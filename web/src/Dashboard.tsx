@@ -7,7 +7,6 @@ import {
   fetchOrders,
   getDashboardCache,
   getMeCache,
-  ORDER_STATUS_LABEL,
   send,
   type DashboardDto,
   type MeDto,

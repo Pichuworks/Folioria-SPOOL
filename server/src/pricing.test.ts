@@ -6,7 +6,6 @@ import { makeTestDb, withSystemConfig } from './test-helpers.js'
 
 let db: DB
 beforeEach(() => {
-  invalidateConfigCache()
   db = makeTestDb()
   withSystemConfig(db)
   importSeed(db)

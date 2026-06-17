@@ -64,6 +64,14 @@ export function invalidateConfigCache(): void {
   configCache = null
 }
 
+let quotableCache: { normal: Quote[] | null; internal: Quote[] | null } | null = null
+let productsCache: { normal: Product[] | null; internal: Product[] | null } | null = null
+
+export function invalidateQuotableCache(): void {
+  quotableCache = null
+  productsCache = null
+}
+
 interface CostRow {
   pricing_mode: string
   ink_price_c: number
@@ -254,9 +262,14 @@ const QUOTABLE_SQL = `
 
 /** 全部可选组合（三条件 SQL 同 quote 语义）按 combo id × size sort 序——单条 SQL + JS 侧定价 */
 export function listQuotable(db: DB, opts?: QuoteOptions): Quote[] {
+  const key = opts?.internal ? 'internal' : 'normal'
+  if (quotableCache?.[key] != null) return quotableCache[key]
   const rows = db.prepare(QUOTABLE_SQL).all() as QuotableRow[]
   const cfg = getConfig(db)
-  return rows.map((r) => deriveQuoteFromRow(r, cfg, opts?.internal))
+  const result = rows.map((r) => deriveQuoteFromRow(r, cfg, opts?.internal))
+  if (!quotableCache) quotableCache = { normal: null, internal: null }
+  quotableCache[key] = result
+  return result
 }
 
 export interface Product {
@@ -275,6 +288,9 @@ export interface Product {
  * combos/价不变 → §2.5 stored 基线(187/43)不动，这是叠加的展示层。
  */
 export function listProducts(db: DB, opts?: QuoteOptions): Product[] {
+  const key = opts?.internal ? 'internal' : 'normal'
+  if (productsCache?.[key] != null) return productsCache[key]
+
   const rows = db
     .prepare(
       `SELECT c.mode_id, c.paper_id, s.key AS size_key, m.duplex,
@@ -316,7 +332,10 @@ export function listProducts(db: DB, opts?: QuoteOptions): Product[] {
       }
     }
   }
-  return [...map.values()]
+  const result = [...map.values()]
+  if (!productsCache) productsCache = { normal: null, internal: null }
+  productsCache[key] = result
+  return result
 }
 
 /**
