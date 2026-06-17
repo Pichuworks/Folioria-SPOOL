@@ -22,6 +22,15 @@ function monthRange(month: string): [string, string] {
 
 // ---------- 数据层（JSON 路由与 CSV 导出共用，避免 SQL 重复） ----------
 
+// SQL CASE 条件片段（external / internal / writeoff）：LEFT JOIN orders 可能为 NULL，COALESCE 收敛
+const IS_EXT = `j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled'`
+const IS_INT = `j.quoted_price IS NULL`
+const IS_WRITEOFF = `j.quoted_price IS NOT NULL AND o.status = 'cancelled'`
+
+const JOBS_FROM_CLAUSE = `FROM jobs j
+       LEFT JOIN order_items oi ON oi.id = j.order_item_id
+       LEFT JOIN orders o ON o.id = oi.order_id`
+
 interface MonthlyRow {
   jobs_done: number
   pages: number
@@ -41,18 +50,16 @@ export function monthlyReport(db: DB, month: string) {
     .prepare(
       `SELECT COUNT(*) AS jobs_done,
               COALESCE(SUM(j.pages_consumed), 0) AS pages,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN 1 ELSE 0 END), 0) AS ext_jobs,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.quoted_price END), 0) AS ext_revenue,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.total_cost END), 0) AS ext_cost,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.profit END), 0) AS ext_profit,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN 1 ELSE 0 END), 0) AS int_jobs,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN j.total_cost END), 0) AS int_cost,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN j.pages_consumed END), 0) AS int_pages,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND o.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS writeoff_jobs,
-              COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND o.status = 'cancelled' THEN j.total_cost END), 0) AS writeoff_cost
-       FROM jobs j
-       LEFT JOIN order_items oi ON oi.id = j.order_item_id
-       LEFT JOIN orders o ON o.id = oi.order_id
+              COALESCE(SUM(CASE WHEN ${IS_EXT} THEN 1 ELSE 0 END), 0) AS ext_jobs,
+              COALESCE(SUM(CASE WHEN ${IS_EXT} THEN j.quoted_price END), 0) AS ext_revenue,
+              COALESCE(SUM(CASE WHEN ${IS_EXT} THEN j.total_cost END), 0) AS ext_cost,
+              COALESCE(SUM(CASE WHEN ${IS_EXT} THEN j.profit END), 0) AS ext_profit,
+              COALESCE(SUM(CASE WHEN ${IS_INT} THEN 1 ELSE 0 END), 0) AS int_jobs,
+              COALESCE(SUM(CASE WHEN ${IS_INT} THEN j.total_cost END), 0) AS int_cost,
+              COALESCE(SUM(CASE WHEN ${IS_INT} THEN j.pages_consumed END), 0) AS int_pages,
+              COALESCE(SUM(CASE WHEN ${IS_WRITEOFF} THEN 1 ELSE 0 END), 0) AS writeoff_jobs,
+              COALESCE(SUM(CASE WHEN ${IS_WRITEOFF} THEN j.total_cost END), 0) AS writeoff_cost
+       ${JOBS_FROM_CLAUSE}
        WHERE j.status = 'done' AND j.completed_at >= ? AND j.completed_at < ?`,
     )
     .get(...monthRange(month)) as MonthlyRow
@@ -288,13 +295,11 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
     const rows = db
       .prepare(
         `SELECT substr(j.completed_at, 1, 7) AS month,
-                COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.quoted_price END), 0) AS revenue,
-                COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.total_cost END), 0) AS cost,
-                COALESCE(SUM(CASE WHEN j.quoted_price IS NOT NULL AND COALESCE(o.status,'') != 'cancelled' THEN j.profit END), 0) AS profit,
-                COALESCE(SUM(CASE WHEN j.quoted_price IS NULL THEN j.total_cost END), 0) AS internal_cost
-         FROM jobs j
-         LEFT JOIN order_items oi ON oi.id = j.order_item_id
-         LEFT JOIN orders o ON o.id = oi.order_id
+                COALESCE(SUM(CASE WHEN ${IS_EXT} THEN j.quoted_price END), 0) AS revenue,
+                COALESCE(SUM(CASE WHEN ${IS_EXT} THEN j.total_cost END), 0) AS cost,
+                COALESCE(SUM(CASE WHEN ${IS_EXT} THEN j.profit END), 0) AS profit,
+                COALESCE(SUM(CASE WHEN ${IS_INT} THEN j.total_cost END), 0) AS internal_cost
+         ${JOBS_FROM_CLAUSE}
          WHERE j.status = 'done' AND j.completed_at >= ?
          GROUP BY substr(j.completed_at, 1, 7)
          ORDER BY month`,

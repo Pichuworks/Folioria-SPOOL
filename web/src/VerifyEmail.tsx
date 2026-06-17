@@ -1,23 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchMe, verifyEmailToken } from './api'
+import { verifyEmailToken } from './api'
+import { useAuth } from './AuthContext'
 import { MagSec, PillLink } from './spec'
 
 /** R4 #/verify/:token：消费邮箱验证 token（一次性；无效/过期/复用 → 404） */
 export default function VerifyEmail({ token }: { token: string }) {
+  const me = useAuth()
   const [state, setState] = useState<'pending' | 'ok' | 'fail'>('pending')
-  // token 一次性：StrictMode 双跑 effect 会让第二次消费 404 覆盖成功态，ref 防重
   const fired = useRef<string | null>(null)
 
   useEffect(() => {
     if (fired.current === token) return
     fired.current = token
-    void verifyEmailToken(token).then(async (ok) => {
+    void verifyEmailToken(token).then((ok) => {
       if (ok) return setState('ok')
-      // 已登录且已验证（重复点击链接/token 已被本人消费）→ 视为成功
-      const me = await fetchMe().catch(() => null)
       setState(me?.email_verified ? 'ok' : 'fail')
     })
-  }, [token])
+  }, [token, me])
 
   return (
     <MagSec title="邮箱验证">

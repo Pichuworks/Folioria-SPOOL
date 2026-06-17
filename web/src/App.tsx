@@ -2,14 +2,12 @@ import { Component, lazy, Suspense, useEffect, useRef, useState, type ComponentT
 import Account, { AccountMenu, DashboardPill } from './Account'
 import {
   AUTH_EVENT,
-  fetchMe,
   fetchPublicConfig,
   fetchUnreadCount,
-  getMeCache,
   getPublicConfigCache,
-  type MeDto,
   type PublicConfigDto,
 } from './api'
+import { useAuth } from './AuthContext'
 import Home from './Home'
 import Login from './Login'
 import Setup from './Setup'
@@ -133,7 +131,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 
 export default function App() {
   const [hash, setHash] = useState(() => window.location.hash || '#/')
-  const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
+  const me = useAuth()
   const [config, setConfig] = useState<PublicConfigDto | undefined>(getPublicConfigCache)
   const [unread, setUnread] = useState(0)
   const meRef = useRef(me)
@@ -145,31 +143,25 @@ export default function App() {
       if (meRef.current) void fetchUnreadCount().then(setUnread)
     }
     const onAuth = () => {
-      const m = getMeCache()
-      setMe(m)
-      if (m) void fetchUnreadCount().then(setUnread)
+      if (meRef.current) void fetchUnreadCount().then(setUnread)
       else setUnread(0)
     }
     window.addEventListener('hashchange', onHash)
     window.addEventListener(AUTH_EVENT, onAuth)
-    fetchMe().then((m) => {
-      setMe(m)
-      if (m) void fetchUnreadCount().then(setUnread)
-    }).catch(() => setMe(null))
+    if (me) void fetchUnreadCount().then(setUnread)
     fetchPublicConfig().then(setConfig).catch(() => {})
     return () => {
       window.removeEventListener('hashchange', onHash)
       window.removeEventListener(AUTH_EVENT, onAuth)
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 首次运行（无 system_config）→ 强制初始化向导，盖过一切路由
   if (config && !config.initialized) {
     return (
       <Shell center="FIRST RUN" nav={<span className="font-mono text-[10.5px] tracking-[.14em] text-dim">SETUP</span>}>
         <Setup
-          onDone={(m) => {
-            setMe(m)
+          onDone={(_m) => {
             setConfig({ ...config, initialized: true })
             window.location.hash = '#/dashboard'
           }}

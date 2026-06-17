@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
 import FinishingsTab from './pricing/FinishingsTab'
@@ -16,6 +16,7 @@ import type {
   SizeDto,
 } from './pricing/types'
 import { MagSec, Skeleton, TabBar } from './spec'
+import { useFetch } from './useFetch'
 
 const TABS = [
   { key: 'quotes', label: '报价' },
@@ -27,34 +28,37 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key']
 
+interface PricingData {
+  quotes: QuoteDto[]
+  combos: ComboDto[]
+  modes: ModeDto[]
+  papers: PaperDto[]
+  sizes: SizeDto[]
+  printers: PrinterDto[]
+  finishings: FinishingDto[]
+}
+
+async function fetchPricingData(): Promise<PricingData> {
+  const [quotes, combos, modes, papers, sizes, printers, finishings] = await Promise.all([
+    send<QuoteDto[]>('GET', '/api/admin/pricing/quotes').then((r) => { if (!r.ok) throw r; return r.data }),
+    send<ComboDto[]>('GET', '/api/pricing/combos').then((r) => { if (!r.ok) throw r; return r.data }),
+    send<ModeDto[]>('GET', '/api/pricing/modes').then((r) => { if (!r.ok) throw r; return r.data }),
+    send<PaperDto[]>('GET', '/api/pricing/papers').then((r) => { if (!r.ok) throw r; return r.data }),
+    send<SizeDto[]>('GET', '/api/pricing/sizes').then((r) => { if (!r.ok) throw r; return r.data }),
+    send<PrinterDto[]>('GET', '/api/equipment').then((r) => { if (!r.ok) throw r; return r.data }),
+    send<FinishingDto[]>('GET', '/api/pricing/finishings').then((r) => { if (!r.ok) throw r; return r.data }),
+  ])
+  return { quotes, combos, modes, papers, sizes, printers, finishings }
+}
+
 function PricingBody() {
   const [tab, setTab] = useState<TabKey>('quotes')
-  const [quotes, setQuotes] = useState<QuoteDto[] | null>(null)
-  const [combos, setCombos] = useState<ComboDto[] | null>(null)
-  const [modes, setModes] = useState<ModeDto[] | null>(null)
-  const [papers, setPapers] = useState<PaperDto[] | null>(null)
-  const [sizes, setSizes] = useState<SizeDto[] | null>(null)
-  const [printers, setPrinters] = useState<PrinterDto[] | null>(null)
-  const [finishings, setFinishings] = useState<FinishingDto[] | null>(null)
+  const { data, error, reload } = useFetch(fetchPricingData)
 
-  const [fetchError, setFetchError] = useState(false)
-  const reload = useCallback(() => {
-    void Promise.all([
-      send<QuoteDto[]>('GET', '/api/admin/pricing/quotes').then((r) => r.ok ? setQuotes(r.data) : setFetchError(true)),
-      send<ComboDto[]>('GET', '/api/pricing/combos').then((r) => r.ok ? setCombos(r.data) : setFetchError(true)),
-      send<ModeDto[]>('GET', '/api/pricing/modes').then((r) => r.ok ? setModes(r.data) : setFetchError(true)),
-      send<PaperDto[]>('GET', '/api/pricing/papers').then((r) => r.ok ? setPapers(r.data) : setFetchError(true)),
-      send<SizeDto[]>('GET', '/api/pricing/sizes').then((r) => r.ok ? setSizes(r.data) : setFetchError(true)),
-      send<PrinterDto[]>('GET', '/api/equipment').then((r) => r.ok ? setPrinters(r.data) : setFetchError(true)),
-      send<FinishingDto[]>('GET', '/api/pricing/finishings').then((r) => r.ok ? setFinishings(r.data) : setFetchError(true)),
-    ])
-  }, [])
-  useEffect(reload, [reload])
+  if (error) return <p className="p-8 text-[13px] text-wine-ink">定价数据加载失败，请刷新重试。</p>
+  if (!data) return <Skeleton />
 
-  if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">定价数据加载失败，请刷新重试。</p>
-  if (!quotes || !combos || !modes || !papers || !sizes || !printers || !finishings) {
-    return <Skeleton />
-  }
+  const { quotes, combos, modes, papers, sizes, printers, finishings } = data
 
   const counts: Record<TabKey, number> = {
     quotes: quotes.length,

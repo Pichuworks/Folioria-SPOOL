@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import {
   acknowledgeAlert,
@@ -11,6 +11,7 @@ import {
   type ScanResult,
 } from './api'
 import { Btn, Leader, MagSec, TabBar } from './spec'
+import { useFetch } from './useFetch'
 
 const sevClass = (s: string) =>
   s === 'critical' ? 'text-wine-ink' : s === 'warning' ? 'text-warn' : 'text-dim'
@@ -27,24 +28,19 @@ type TabKey = (typeof TABS)[number]['key']
 
 function AlertsBody() {
   const [tab, setTab] = useState<TabKey>('alerts')
-  const [alerts, setAlerts] = useState<AlertDto[] | null>(null)
   const [showAll, setShowAll] = useState(false)
-  const [notes, setNotes] = useState<NotificationLogDto[] | null>(null)
+  const { data: alerts, reload: reloadAlerts } = useFetch(() => fetchAlerts(showAll))
+  const { data: notes, reload: reloadNotes } = useFetch(() => fetchNotifications())
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const reload = useCallback((all: boolean) => {
-    void fetchAlerts(all).then(setAlerts)
-    void fetchNotifications().then(setNotes)
-  }, [])
-
-  useEffect(() => reload(showAll), [showAll, reload])
+  useEffect(() => { reloadAlerts() }, [showAll]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const runScan = async () => {
     setBusy(true)
     setScan(await scanAlerts())
     setBusy(false)
-    reload(showAll)
+    reloadAlerts()
   }
 
   const tabsWithCounts = TABS.map((t) => {
@@ -96,7 +92,7 @@ function AlertsBody() {
                       <button
                         type="button"
                         className="font-mono text-[10.5px] tracking-[.1em] text-dim hover:text-ink"
-                        onClick={() => void acknowledgeAlert(a.id).then(() => reload(showAll))}
+                        onClick={() => void acknowledgeAlert(a.id).then(() => reloadAlerts())}
                       >
                         确认
                       </button>
@@ -104,7 +100,7 @@ function AlertsBody() {
                     <button
                       type="button"
                       className="font-mono text-[10.5px] tracking-[.1em] text-wine-ink hover:opacity-70"
-                      onClick={() => void resolveAlertReq(a.id).then(() => reload(showAll))}
+                      onClick={() => void resolveAlertReq(a.id).then(() => reloadAlerts())}
                     >
                       解决
                     </button>

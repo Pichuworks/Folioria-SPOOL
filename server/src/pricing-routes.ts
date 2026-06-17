@@ -420,13 +420,13 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   )
 
   app.delete(
-    '/api/pricing/paper-size-costs/:paperId/:sizeKey',
+    '/api/pricing/paper-size-costs/:paper_id/:size_key',
     { preHandler: requireAdmin },
     async (req, reply) => {
-      const { paperId, sizeKey } = req.params as { paperId: string; sizeKey: string }
+      const { paper_id, size_key } = req.params as { paper_id: string; size_key: string }
       const { changes } = db
         .prepare('DELETE FROM paper_size_costs WHERE paper_id = ? AND size_key = ?')
-        .run(Number(paperId), sizeKey)
+        .run(Number(paper_id), size_key)
       if (changes === 0) return reply.status(404).send({ error: 'not_found' })
       return reply.status(204).send()
     },
@@ -543,7 +543,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   }
 
   app.put(
-    '/api/pricing/combos/:id/prices/:sizeKey',
+    '/api/pricing/combos/:id/prices/:size_key',
     {
       preHandler: requireAdmin,
       schema: {
@@ -560,7 +560,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       },
     },
     async (req, reply) => {
-      const { id, sizeKey } = req.params as { id: string; sizeKey: string }
+      const { id, size_key } = req.params as { id: string; size_key: string }
       const comboId = Number(id)
       if (!db.prepare('SELECT 1 FROM combos WHERE id = ?').get(comboId)) {
         return reply.status(404).send({ error: 'not_found' })
@@ -572,7 +572,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       }
       const existing = db
         .prepare('SELECT sell_c, internal_sell_c FROM combo_prices WHERE combo_id = ? AND size_key = ?')
-        .get(comboId, sizeKey) as { sell_c: number | null; internal_sell_c: number | null } | undefined
+        .get(comboId, size_key) as { sell_c: number | null; internal_sell_c: number | null } | undefined
       const sell = 'sell_c' in b ? (b.sell_c ?? null) : (existing?.sell_c ?? null)
       const internal =
         'internal_sell_c' in b ? (b.internal_sell_c ?? null) : (existing?.internal_sell_c ?? null)
@@ -583,14 +583,14 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
              VALUES (?, ?, ?, ?)
              ON CONFLICT(combo_id, size_key) DO UPDATE SET
                sell_c = excluded.sell_c, internal_sell_c = excluded.internal_sell_c`,
-          ).run(comboId, sizeKey, sell, internal)
+          ).run(comboId, size_key, sell, internal)
           if (b.tiers !== undefined) {
-            db.prepare('DELETE FROM combo_price_tiers WHERE combo_id = ? AND size_key = ?').run(comboId, sizeKey)
+            db.prepare('DELETE FROM combo_price_tiers WHERE combo_id = ? AND size_key = ?').run(comboId, size_key)
             const ins = db.prepare(
               'INSERT INTO combo_price_tiers (combo_id, size_key, min_qty, sell_c, internal_sell_c) VALUES (?, ?, ?, ?, ?)',
             )
             for (const t of b.tiers) {
-              ins.run(comboId, sizeKey, t.min_qty, t.sell_c, t.internal_sell_c ?? null)
+              ins.run(comboId, size_key, t.min_qty, t.sell_c, t.internal_sell_c ?? null)
             }
           }
         })()
@@ -605,11 +605,11 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         action: 'pricing.combo_price',
         targetType: 'combo',
         targetId: String(comboId),
-        summary: `combo ${comboId} ${sizeKey}: sell_c=${sell ?? 'auto'} internal=${internal ?? 'auto'}${b.tiers ? ` tiers=${b.tiers.length}` : ''}`,
+        summary: `combo ${comboId} ${size_key}: sell_c=${sell ?? 'auto'} internal=${internal ?? 'auto'}${b.tiers ? ` tiers=${b.tiers.length}` : ''}`,
       })
       return db
         .prepare('SELECT * FROM combo_prices WHERE combo_id = ? AND size_key = ?')
-        .get(comboId, sizeKey)
+        .get(comboId, size_key)
     },
   )
 

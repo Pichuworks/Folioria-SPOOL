@@ -225,6 +225,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
   const [payMethod, setPayMethod] = useState('')
   const [discount, setDiscount] = useState(String(order.discount))
   const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setPayKind('deposit')
@@ -232,9 +233,12 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
     setPayMethod('')
     setDiscount(String(order.discount))
     setErr(null)
+    setBusy(false)
   }, [order.id, order.discount])
 
   const advance = async (to: string) => {
+    if (busy) return
+    setBusy(true)
     setErr(null)
     const res = await patchOrderStatus(order.id, to)
     if (res.ok) {
@@ -252,9 +256,12 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
               : `操作失败（${code}）`,
       )
     }
+    setBusy(false)
   }
 
   const savePayment = async () => {
+    if (busy) return
+    setBusy(true)
     setErr(null)
     const mag = Number(payAmount)
     if (!Number.isSafeInteger(mag) || mag <= 0) {
@@ -283,9 +290,12 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
             : `记账失败（${code}）`,
       )
     }
+    setBusy(false)
   }
 
   const saveDiscount = async () => {
+    if (busy) return
+    setBusy(true)
     setErr(null)
     const value = Number(discount)
     if (!Number.isSafeInteger(value) || value < 0) {
@@ -300,6 +310,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
       const code = (res.data as { error?: string })?.error ?? String(res.status)
       setErr(code === 'discount_exceeds_subtotal' ? '折扣不能超过小计。' : `折扣保存失败（${code}）`)
     }
+    setBusy(false)
   }
 
   const cancellable = !['delivered', 'cancelled'].includes(order.status)
@@ -359,7 +370,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
           <div className="mt-4 space-y-3">
             <div className="flex flex-wrap gap-2">
               {(ACTIONS[order.status] ?? []).map((a) => (
-                <Btn key={a.to} onClick={() => void advance(a.to)}>{a.label} →</Btn>
+                <Btn key={a.to} disabled={busy} onClick={() => void advance(a.to)}>{a.label} →</Btn>
               ))}
               {cancellable && (
                 <Btn
@@ -411,7 +422,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
                 <Field label="方式 / 备注">
                   <input className={specInput} value={payMethod} onChange={(e) => setPayMethod(e.target.value)} />
                 </Field>
-                <Btn variant="outline" onClick={() => void savePayment()}>记一笔</Btn>
+                <Btn variant="outline" disabled={busy} onClick={() => void savePayment()}>记一笔</Btn>
               </div>
             </div>
 
@@ -425,7 +436,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
                     value={discount}
                     onChange={(e) => setDiscount(e.target.value)}
                   />
-                  <Btn variant="outline" onClick={() => void saveDiscount()}>保存</Btn>
+                  <Btn variant="outline" disabled={busy} onClick={() => void saveDiscount()}>保存</Btn>
                 </div>
               </div>
             )}

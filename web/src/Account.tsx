@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   changePassword,
-  fetchMe,
   fetchNotifyPrefs,
-  getMeCache,
   logout,
   updateNotifyPrefs,
   updateProfile,
   type MeDto,
   type NotifyPrefsDto,
 } from './api'
+import { useAuth } from './AuthContext'
 import { Field, MagSec, PillBtn, SpecRow, TabBar, specInput } from './spec'
 
 /** C3 通知偏好（目前仅 email channel） */
@@ -201,10 +200,7 @@ function AccountBody({ me, onUpdate }: { me: MeDto; onUpdate: (m: MeDto) => void
 }
 
 export default function Account() {
-  const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
-  useEffect(() => {
-    fetchMe().then(setMe).catch(() => setMe(null))
-  }, [])
+  const me = useAuth()
 
   if (me === undefined) return <p className="pt-13 text-[14px] text-dim">加载中…</p>
   if (me === null) {
@@ -220,5 +216,5 @@ export default function Account() {
       </MagSec>
     )
   }
-  return <AccountBody me={me} onUpdate={setMe} />
+  return <AccountBody me={me} onUpdate={() => {}} />
 }

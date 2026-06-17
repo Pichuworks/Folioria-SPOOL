@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type DB } from './db.js'
+import { assertPaymentRow } from './db-guards.js'
 import { getLog } from './logger.js'
 import { getOrder } from './orders.js'
 
@@ -35,9 +36,11 @@ export function projectStatus(paid: number, total: number): PaymentStatus {
 }
 
 export function getPayments(db: DB, orderId: string): PaymentRow[] {
-  return db
+  const rows = db
     .prepare('SELECT * FROM payments WHERE order_id = ? ORDER BY created_at, rowid')
     .all(orderId) as PaymentRow[]
+  for (const r of rows) assertPaymentRow(r as unknown as Record<string, unknown>)
+  return rows
 }
 
 export interface RecordPaymentInput {
@@ -105,5 +108,7 @@ export function recordPayment(db: DB, orderId: string, input: RecordPaymentInput
     { orderId, kind: input.kind, amount: input.amount, paid: `${oldPaid}→${updated.paid_amount}`, status: `${oldStatus}→${updated.payment_status}` },
     'payment recorded',
   )
-  return db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as PaymentRow
+  const row = db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as PaymentRow
+  assertPaymentRow(row as unknown as Record<string, unknown>)
+  return row
 }

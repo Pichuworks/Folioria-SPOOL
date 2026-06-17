@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
 import { Field, MagSec, PillBtn, Skeleton, SpecRow, TabBar, specInput } from './spec'
+import { useFetch } from './useFetch'
 
 interface SettingsDto {
   base_currency: string
@@ -45,21 +46,16 @@ type TabKey = (typeof TABS)[number]['key']
 
 function SettingsBody() {
   const [tab, setTab] = useState<TabKey>('instance')
-  const [settings, setSettings] = useState<SettingsDto | null>(null)
+  const { data: settings, error: fetchError } = useFetch(() =>
+    send<SettingsDto>('GET', '/api/settings').then((r) => { if (!r.ok) throw r; return r.data }),
+  )
+  const { data: sysInfo } = useFetch(() =>
+    send<SystemInfoDto>('GET', '/api/settings/system-info').then((r) => { if (!r.ok) throw r; return r.data }),
+  )
   const [form, setForm] = useState<SettingsDto | null>(null)
-  const [sysInfo, setSysInfo] = useState<SystemInfoDto | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [fetchError, setFetchError] = useState(false)
 
-  useEffect(() => {
-    void send<SettingsDto>('GET', '/api/settings').then((r) => {
-      if (r.ok) {
-        setSettings(r.data)
-        setForm(r.data)
-      } else setFetchError(true)
-    })
-    void send<SystemInfoDto>('GET', '/api/settings/system-info').then((r) => r.ok && setSysInfo(r.data))
-  }, [])
+  useEffect(() => { if (settings && !form) setForm(settings) }, [settings, form])
 
   if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">设置加载失败，请刷新重试。</p>
   if (!settings || !form) return <Skeleton />
@@ -81,7 +77,6 @@ function SettingsBody() {
       quote_valid_days: form.quote_valid_days,
     })
     if (res.ok) {
-      setSettings(res.data)
       setForm(res.data)
       setNotice('已保存——全部报价即时按新参数推导')
     } else setNotice('保存失败，检查取值范围')

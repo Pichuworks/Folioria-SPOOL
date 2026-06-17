@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminGate from './AdminGate'
 import { ORDER_STATUS_LABEL, send, type OrderDto } from './api'
 import { Btn, Field, Leader, MagSec, Modal, Paginator, PillBtn, Skeleton, SpecRow, specInput, usePagination } from './spec'
+import { useFetch } from './useFetch'
 
 interface UserDto {
   id: string
@@ -214,20 +215,13 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
 const filterInput = 'border border-line bg-card px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-wine'
 
 function UsersBody() {
-  const [users, setUsers] = useState<UserDto[] | null>(null)
+  const { data: users, error: fetchError, reload } = useFetch(() =>
+    send<UserDto[]>('GET', '/api/admin/users').then((r) => { if (!r.ok) throw r; return r.data }),
+  )
   const [showCreate, setShowCreate] = useState(false)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('active')
-
-  const [fetchError, setFetchError] = useState(false)
-  const reload = useCallback(() => {
-    void send<UserDto[]>('GET', '/api/admin/users').then((r) => {
-      if (r.ok) setUsers(r.data)
-      else setFetchError(true)
-    })
-  }, [])
-  useEffect(reload, [reload])
 
   const filtered = useMemo(() => {
     if (!users) return []

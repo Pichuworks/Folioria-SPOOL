@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { priceBook, priceBookSpec, type BookLineInput, type BookSpecInput } from './books.js'
 import { type DB } from './db.js'
+import { assertOrderItemRow, assertOrderRow } from './db-guards.js'
 import { finishingContribution, type FinishingPricing } from './finishing.js'
 import { getLog } from './logger.js'
 import { getEffectiveTier, membershipDiscountAmount } from './membership.js'
@@ -107,11 +108,13 @@ export interface OrderItemRow {
 }
 
 export function getOrder(db: DB, id: string): OrderRow | undefined {
-  return db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as OrderRow | undefined
+  const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as OrderRow | undefined
+  if (row) assertOrderRow(row as unknown as Record<string, unknown>)
+  return row
 }
 
 export function getOrderItems(db: DB, orderId: string): OrderItemRow[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT oi.*, m.name AS mode_name, p.name AS paper_name, s.label AS size_label,
               COALESCE(m.color_class, 'color') AS color_class, pr.type AS tech, m.duplex
@@ -124,6 +127,8 @@ export function getOrderItems(db: DB, orderId: string): OrderItemRow[] {
        ORDER BY oi.rowid`,
     )
     .all(orderId) as OrderItemRow[]
+  for (const r of rows) assertOrderItemRow(r as unknown as Record<string, unknown>)
+  return rows
 }
 
 // ---------- D27 书行读取 ----------

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { assertStockQuantity } from './db-guards.js'
 import { isConstraint } from './errors.js'
 import { requireAdmin } from './guards.js'
 import { getLog } from './logger.js'
@@ -258,6 +259,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
         | { quantity: number }
         | undefined
       if (!stock) return reply.status(404).send({ error: 'not_found' })
+      assertStockQuantity(stock as unknown as Record<string, unknown>)
       if (stock.quantity + b.quantity_delta < 0) {
         return reply.status(409).send({ error: 'insufficient_stock' })
       }
@@ -342,6 +344,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
         | { paper_id: number }
         | undefined
       if (!fromStock || !toStock) return reply.status(404).send({ error: 'not_found' })
+      assertStockQuantity(fromStock as unknown as Record<string, unknown>)
       // S4/D1: 裁切只允许同纸不同尺寸折算，跨纸种拒绝
       if (fromStock.paper_id !== toStock.paper_id) {
         return reply.status(422).send({ error: 'cross_paper' })

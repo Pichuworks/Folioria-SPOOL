@@ -25,7 +25,7 @@ export default defineConfig({
     },
   },
   server: {
-    proxy: { '/api': 'http://127.0.0.1:3000' },
+    proxy: { '/api': `http://127.0.0.1:${process.env['SPOOL_API_PORT'] ?? '3000'}` },
   },
   preview: {
     allowedHosts: ['spool.pichu.moe', 'folioria.com', 'www.folioria.com'],

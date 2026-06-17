@@ -1,9 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   claimOrder,
-  fetchMe,
   fetchOrderByToken,
-  getMeCache,
   orderBookComponentFileUrl,
   ORDER_STATUS_LABEL,
   orderItemFileUrl,
@@ -12,10 +10,10 @@ import {
   setReorder,
   uploadOrderBookComponentFile,
   uploadOrderItemFile,
-  type MeDto,
   type OrderDto,
   type OrderItemDto,
 } from './api'
+import { useAuth } from './AuthContext'
 import { Btn, Leader, MagSec, SpecRow } from './spec'
 
 const CAT_LABEL: Record<string, string> = {
@@ -338,9 +336,10 @@ const ItemRow = memo(function ItemRow({
 /** R8 #/order/:token：公开订单查询（防枚举随机 token）；登录的下单账号可上传/取消 */
 export default function OrderView({ token }: { token: string }) {
   const [order, setOrder] = useState<OrderDto | null | undefined>(undefined)
-  const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
+  const me = useAuth()
   const [isOwner, setIsOwner] = useState(false)
   const [actionErr, setActionErr] = useState<string | null>(null)
+  const [actionBusy, setActionBusy] = useState(false)
 
   const refresh = useCallback(async () => {
     const res = await fetchOrderByToken(token)
@@ -349,8 +348,9 @@ export default function OrderView({ token }: { token: string }) {
   }, [token])
 
   useEffect(() => {
-    void refresh()
-    fetchMe().then(setMe).catch(() => setMe(null))
+    let cancelled = false
+    void refresh().then((o) => { if (cancelled || !o) return })
+    return () => { cancelled = true }
   }, [refresh])
 
   const handleOrderChanged = useCallback((o: OrderDto) => {
@@ -358,12 +358,13 @@ export default function OrderView({ token }: { token: string }) {
   }, [])
 
   useEffect(() => {
-    // 归属判定：owner/admin 的 /api/orders/:id 200，其余 404（不泄露存在性）
     if (!order || !me) {
       setIsOwner(false)
       return
     }
-    void send<OrderDto>('GET', `/api/orders/${order.id}`).then((r) => setIsOwner(r.ok))
+    let cancelled = false
+    void send<OrderDto>('GET', `/api/orders/${order.id}`).then((r) => { if (!cancelled) setIsOwner(r.ok) })
+    return () => { cancelled = true }
   }, [order?.id, me?.id])
 
   if (order === undefined) return <p className="pt-13 text-[14px] text-dim">订单加载中…</p>
@@ -382,10 +383,13 @@ export default function OrderView({ token }: { token: string }) {
   const canCancel = isOwner && ['quoted', 'file_pending', 'file_approved'].includes(order.status)
 
   const cancel = async () => {
+    if (actionBusy) return
     if (!window.confirm('确认取消该订单？')) return
+    setActionBusy(true)
     const res = await patchOrderStatus(order.id, 'cancelled')
     if (res.ok) setOrder({ ...res.data, access_token: order.access_token })
     else setActionErr(`取消失败（${(res.data as { error?: string })?.error ?? res.status}）`)
+    setActionBusy(false)
   }
 
   const reorder = () => {
@@ -415,6 +419,8 @@ export default function OrderView({ token }: { token: string }) {
   }
 
   const claim = async () => {
+    if (actionBusy) return
+    setActionBusy(true)
     const res = await claimOrder(token)
     if (res.ok) {
       await refresh()
@@ -429,6 +435,7 @@ export default function OrderView({ token }: { token: string }) {
             : `认领失败（${e ?? res.status}）`,
       )
     }
+    setActionBusy(false)
   }
 
   return (
@@ -514,13 +521,13 @@ export default function OrderView({ token }: { token: string }) {
           <Timeline order={order} />
           {order.is_guest && me && (
             <div className="mt-5">
-              <Btn variant="ghost" onClick={() => void claim()}>认领此订单到我的账号</Btn>
+              <Btn variant="ghost" disabled={actionBusy} onClick={() => void claim()}>认领此订单到我的账号</Btn>
               <p className="mt-1.5 text-[11px] leading-[1.7] text-dim">需当前账号邮箱与下单邮箱一致且已验证。</p>
             </div>
           )}
           {canCancel && (
             <div className="mt-5">
-              <Btn variant="subtle" onClick={() => void cancel()}>取消订单</Btn>
+              <Btn variant="subtle" disabled={actionBusy} onClick={() => void cancel()}>取消订单</Btn>
             </div>
           )}
           {(order.items.length > 0 || (order.books?.length ?? 0) > 0) && (

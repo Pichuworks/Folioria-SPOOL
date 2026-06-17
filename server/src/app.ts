@@ -131,7 +131,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:'],
       },
@@ -143,7 +143,7 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   // PRD §6 限流：实例躲在 Cloudflare Tunnel 后，真实客户端 IP 在 CF-Connecting-IP
   void app.register(rateLimit, {
     global: true,
-    max: 120,
+    max: parseInt(process.env['SPOOL_RATE_LIMIT'] ?? '120', 10),
     timeWindow: '1 minute',
     keyGenerator: (req) => {
       const cf = req.headers['cf-connecting-ip']

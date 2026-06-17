@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import AdminGate from './AdminGate'
 import { send, setHighlightJobId } from './api'
 import { MagSec, Skeleton } from './spec'
+import { useFetch } from './useFetch'
 
 interface BoardJob {
   id: string
@@ -31,22 +32,46 @@ const PRINTER_STATUS_LABEL: Record<string, string> = {
 const JOB_STATUS_LABEL: Record<string, string> = { queued: '排队', printing: '打印中' }
 
 function BoardBody() {
-  const [lanes, setLanes] = useState<BoardLane[] | null>(null)
-  const [fetchError, setFetchError] = useState(false)
-  useEffect(() => {
-    void send<BoardLane[]>('GET', '/api/jobs/board').then((r) => {
-      if (r.ok) setLanes(r.data)
-      else setFetchError(true)
-    })
-  }, [])
+  const { data: lanes, loading, error: fetchError } = useFetch(() =>
+    send<BoardLane[]>('GET', '/api/jobs/board').then((r) => { if (!r.ok) throw r; return r.data }),
+  )
+  const [hideEmpty, setHideEmpty] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<string | null>(null)
+
   if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">排程数据加载失败，请刷新重试。</p>
-  if (!lanes) return <Skeleton />
+  if (loading || !lanes) return <Skeleton />
+
+  const filtered = lanes.filter((l) => {
+    if (hideEmpty && l.jobs.length === 0) return false
+    if (statusFilter && l.status !== statusFilter) return false
+    return true
+  })
 
   const totalActive = lanes.reduce((n, l) => n + l.jobs.length, 0)
+  const statuses = [...new Set(lanes.map((l) => l.status))]
+
   return (
     <MagSec title="生产排程" note={`${totalActive} 个活跃作业`}>
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-[12.5px]">
+        <label className="flex items-center gap-1.5 text-dim">
+          <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
+          隐藏空闲机台
+        </label>
+        <select
+          className="rounded border border-line bg-card px-2 py-1 text-[12px] text-ink"
+          value={statusFilter ?? ''}
+          onChange={(e) => setStatusFilter(e.target.value || null)}
+        >
+          <option value="">全部状态</option>
+          {statuses.map((s) => (
+            <option key={s} value={s}>{PRINTER_STATUS_LABEL[s] ?? s}</option>
+          ))}
+        </select>
+        <span className="text-[11px] text-dim">显示 {filtered.length}/{lanes.length} 机台</span>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {lanes.map((l) => {
+        {filtered.map((l) => {
           const offline = l.status === 'offline' || l.status === 'maintenance'
           return (
             <div key={l.printer_id} className={`border ${l.offline_with_jobs ? 'border-warn' : 'border-ink'} bg-card`}>
@@ -79,7 +104,7 @@ function BoardBody() {
                         <div className="flex items-baseline gap-2">
                           <span className="text-[13px] text-ink">{j.title}</span>
                           <span
-                            className={`ml-auto font-mono text-[9.5px] tracking-[.1em] ${
+                            className={`ml-auto font-mono text-[10px] tracking-[.1em] ${
                               j.status === 'printing' ? 'text-wine-ink' : 'text-dim'
                             }`}
                           >

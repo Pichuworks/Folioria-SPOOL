@@ -1,15 +1,13 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
+import { useAuth } from './AuthContext'
 import CustomerGate from './CustomerGate'
 import {
   fetchDashboard,
-  fetchMe,
   fetchOrders,
   getDashboardCache,
-  getMeCache,
   send,
   type DashboardDto,
-  type MeDto,
   type OrderDto,
 } from './api'
 import type { TrendPoint } from './DashboardCharts'
@@ -208,10 +206,7 @@ function CustomerDashboardBody() {
 /* ── Role dispatch ── */
 
 export default function Dashboard() {
-  const [me, setMe] = useState<MeDto | null | undefined>(getMeCache)
-  useEffect(() => {
-    fetchMe().then(setMe).catch(() => setMe(null))
-  }, [])
+  const me = useAuth()
 
   if (me === undefined) return <Skeleton />
   if (me?.role === 'admin') return <AdminGate>{() => <AdminDashboardBody />}</AdminGate>

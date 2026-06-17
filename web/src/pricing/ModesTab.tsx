@@ -49,7 +49,7 @@ function ModeEditModal({
 
   return (
     <Modal open title={`编辑模式 · ${mode.name}`} onClose={onClose}>
-      <form onSubmit={(e) => void submit(e)} className="grid grid-cols-2 items-end gap-4">
+      <form onSubmit={(e) => void submit(e)} className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
         <Field label="名称">
           <input type="text" required className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
@@ -314,7 +314,7 @@ export default function ModesTab({
                     <tr key={m.id} className="border-b border-line last:border-b-0">
                       <td className="px-4 py-[8px]">
                         <span className="font-medium text-ink">{m.name}</span>
-                        {m.duplex !== 0 && <span className="ml-1.5 font-mono text-[9px] tracking-[.1em] text-dim">双</span>}
+                        {m.duplex !== 0 && <span className="ml-1.5 font-mono text-[10px] tracking-[.1em] text-dim">双</span>}
                       </td>
                       <td className="px-3 py-[8px] text-[12px] text-dim">
                         {m.ink_type}/{m.pricing_mode}

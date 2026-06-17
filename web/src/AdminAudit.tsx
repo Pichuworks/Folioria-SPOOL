@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
 import { Leader, MagSec, Paginator, Skeleton, usePagination } from './spec'
+import { useFetch } from './useFetch'
 
 interface AuditEntry {
   id: string
@@ -22,17 +22,12 @@ const ACTION_LABEL: Record<string, string> = {
 }
 
 function AuditBody() {
-  const [rows, setRows] = useState<AuditEntry[] | null>(null)
-  const [fetchError, setFetchError] = useState(false)
+  const { data: rows, loading, error: fetchError } = useFetch(() =>
+    send<AuditEntry[]>('GET', '/api/admin/audit').then((r) => { if (!r.ok) throw r; return r.data }),
+  )
   const { page, totalPages, paged, setPage } = usePagination(rows ?? [], 50)
-  useEffect(() => {
-    void send<AuditEntry[]>('GET', '/api/admin/audit').then((r) => {
-      if (r.ok) setRows(r.data)
-      else setFetchError(true)
-    })
-  }, [])
   if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">审计记录加载失败，请刷新重试。</p>
-  if (!rows) return <Skeleton />
+  if (loading || !rows) return <Skeleton />
 
   return (
     <MagSec title="操作审计" note={`${rows.length} 条`}>

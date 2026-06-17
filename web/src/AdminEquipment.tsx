@@ -233,7 +233,13 @@ const PrinterCard = memo(function PrinterCard({
     )
   }, [printer.id])
 
-  useEffect(loadEvents, [loadEvents])
+  useEffect(() => {
+    let cancelled = false
+    void send<MaintDto[]>('GET', `/api/equipment/${printer.id}/maintenance`).then(
+      (r) => { if (r.ok && !cancelled) setEvents(r.data) },
+    )
+    return () => { cancelled = true }
+  }, [printer.id])
 
   const setStatus = async (status: string) => {
     const res = await send('PATCH', `/api/equipment/${printer.id}`, { status })

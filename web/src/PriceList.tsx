@@ -13,14 +13,15 @@ const TECH_LABEL: Record<string, string> = { laser: '激光', inkjet: '喷墨' }
 
 interface Row {
   key: string
+  category: string
   label: string
   prices: Record<string, string>
 }
 
-/** ③⑤ #/price-list：公开价目表——按客户产品（类别×技术×纸×单双面），机器不可见 */
 export default function PriceList() {
   const [data, setData] = useState<ProductsDto | null>(getProductsCache)
   const [error, setError] = useState<string | null>(null)
+  const [catFilter, setCatFilter] = useState<string | null>(null)
 
   useEffect(() => {
     fetchProducts()
@@ -42,7 +43,12 @@ export default function PriceList() {
         const photo = p.category.startsWith('photo-')
         const tech = photo ? '' : ` · ${TECH_LABEL[p.tech] ?? p.tech}`
         const side = photo ? '' : p.duplex ? ' · 双面' : ' · 单面'
-        row = { key, label: `${CAT_LABEL[p.category] ?? p.category}${tech} · ${paperName(p.paper_id)}${side}`, prices: {} }
+        row = {
+          key,
+          category: p.category,
+          label: `${CAT_LABEL[p.category] ?? p.category}${tech} · ${paperName(p.paper_id)}${side}`,
+          prices: {},
+        }
         map.set(key, row)
       }
       row.prices[p.size_key] = p.display
@@ -50,14 +56,38 @@ export default function PriceList() {
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh'))
   }, [data])
 
+  const categories = useMemo(() => {
+    const seen = new Set<string>()
+    for (const r of rows) if (!seen.has(r.category)) seen.add(r.category)
+    return [...seen]
+  }, [rows])
+
+  const filtered = catFilter ? rows.filter((r) => r.category === catFilter) : rows
+
   if (error) return <p className="pt-13 text-[14px] text-wine-ink">{error}</p>
   if (!data) return <p className="pt-13 text-[14px] text-dim">价目加载中…</p>
 
+  const catBtn = (active: boolean) =>
+    `rounded-full border px-3 py-1.5 text-[12px] transition-opacity ${
+      active ? 'border-wine bg-wine text-cream' : 'border-line text-dim hover:text-ink'
+    }`
+
   return (
-    <MagSec title="价目表" note={`${rows.length} 种`}>
+    <MagSec title="价目表" note={`${filtered.length} / ${rows.length} 种`}>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button type="button" className={catBtn(catFilter === null)} onClick={() => setCatFilter(null)}>
+          全部
+        </button>
+        {categories.map((c) => (
+          <button key={c} type="button" className={catBtn(catFilter === c)} onClick={() => setCatFilter(c)}>
+            {CAT_LABEL[c] ?? c}
+          </button>
+        ))}
+      </div>
+
       {/* Mobile: compact card list */}
       <div className="border border-ink md:hidden">
-        {rows.map((r) => (
+        {filtered.map((r) => (
           <div key={r.key} className="border-b border-line px-4 py-3 last:border-b-0">
             <div className="text-[13px] font-medium leading-snug text-ink">{r.label}</div>
             <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5">
@@ -87,7 +117,7 @@ export default function PriceList() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {filtered.map((r) => (
               <tr key={r.key} className="border-b border-line last:border-b-0">
                 <td className="px-4 py-[10px]">
                   <span className="font-medium text-ink">{r.label}</span>

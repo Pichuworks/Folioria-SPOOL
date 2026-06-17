@@ -70,7 +70,7 @@ function PaperEditModal({
   return (
     <Modal open wide title={`编辑纸张 · ${paper.name}`} onClose={onClose}>
       {/* Attributes */}
-      <form onSubmit={(e) => void saveAttr(e)} className="grid grid-cols-2 items-end gap-3">
+      <form onSubmit={(e) => void saveAttr(e)} className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2">
         <Field label="名称">
           <input type="text" required className={specInput} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>

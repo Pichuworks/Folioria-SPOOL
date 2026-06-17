@@ -82,7 +82,9 @@ function DonePanel({ job, onDone }: { job: JobDto; onDone: () => void }) {
 function ReassignPanel({ job, onChanged }: { job: JobDto; onChanged: () => void }) {
   const [recs, setRecs] = useState<MachineRecDto[] | null>(null)
   useEffect(() => {
-    void fetchJobRecommend(job.paper_id, job.size_key).then(setRecs)
+    let cancelled = false
+    void fetchJobRecommend(job.paper_id, job.size_key).then((r) => { if (!cancelled) setRecs(r) })
+    return () => { cancelled = true }
   }, [job.paper_id, job.size_key])
   const pick = async (modeId: number) => {
     if (await reassignJobMode(job.id, modeId)) onChanged()

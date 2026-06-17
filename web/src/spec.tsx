@@ -19,18 +19,38 @@ export const Shell = ({ nav, center, children }: { nav: ReactNode; center: strin
   </div>
 )
 
-export const Masthead = ({ nav }: { nav: ReactNode }) => (
-  <header className="flex flex-wrap items-end justify-between gap-x-[18px] gap-y-5 border-b border-ink pb-4 pt-[30px]">
-    <a href="#/" className="flex items-stretch gap-5 text-ink">
-      <span className="ink-press text-[44px] font-bold leading-none tracking-[.28em]">枫光映刻</span>
-      <span className="flex flex-col justify-between">
-        <span className="ink-press font-script text-[19px] leading-none text-dim">Maplescape Folioria</span>
-        <span className="-mb-[5px] font-script text-[13px] italic text-dim/70">Folia Impressa Animae</span>
-      </span>
-    </a>
-    <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-1 text-[13px]">{nav}</nav>
-  </header>
-)
+export function Masthead({ nav }: { nav: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    window.addEventListener('hashchange', close)
+    return () => window.removeEventListener('hashchange', close)
+  }, [open])
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-x-[18px] gap-y-5 border-b border-ink pb-4 pt-[30px]">
+      <a href="#/" className="flex items-stretch gap-5 text-ink">
+        <span className="ink-press text-[44px] font-bold leading-none tracking-[.28em]">枫光映刻</span>
+        <span className="flex flex-col justify-between">
+          <span className="ink-press font-script text-[19px] leading-none text-dim">Maplescape Folioria</span>
+          <span className="-mb-[5px] font-script text-[13px] italic text-dim/70">Folia Impressa Animae</span>
+        </span>
+      </a>
+      <button
+        type="button"
+        aria-label={open ? '关闭导航' : '打开导航'}
+        className="pb-1 text-[22px] leading-none text-ink md:hidden"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? '✕' : '☰'}
+      </button>
+      <nav className="hidden flex-wrap items-center gap-x-6 gap-y-2 pb-1 text-[13px] md:flex">{nav}</nav>
+      {open && (
+        <nav className="flex w-full flex-col gap-3 border-t border-line pb-2 pt-3 text-[14px] md:hidden">{nav}</nav>
+      )}
+    </header>
+  )
+}
 
 export function Folio({ center }: { center: string }) {
   const [aboutOpen, setAboutOpen] = useState(false)

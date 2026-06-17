@@ -208,7 +208,7 @@ function PriceEditModal({
 
       {/* Edit form */}
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="手动售价 _c（留空 = 自动地板价）">
             <input type="number" min={0} className={specInput} value={sell} onChange={(e) => setSell(e.target.value)} />
           </Field>
@@ -528,12 +528,12 @@ export default function QuotesTab({
                           {q.sell_display}
                         </span>
                         {(q.flag === 'below_margin' || q.flag === 'LOSS') && (
-                          <span className={`ml-0.5 text-[9px] ${f.cls}`}>
+                          <span className={`ml-0.5 text-[10px] ${f.cls}`}>
                             {q.flag === 'LOSS' ? '!' : '~'}
                           </span>
                         )}
                         {q.has_tiers && (
-                          <span className="ml-0.5 text-[9px] text-dim">{'▾'}</span>
+                          <span className="ml-0.5 text-[10px] text-dim">{'▾'}</span>
                         )}
                       </td>
                     )

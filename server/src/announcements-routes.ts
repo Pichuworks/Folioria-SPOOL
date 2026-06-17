@@ -267,7 +267,17 @@ export function registerAnnouncementsRoutes(app: FastifyInstance, db: DB): void 
 
   app.patch(
     '/api/admin/announcements/:id/archive',
-    { preHandler: requireAdmin },
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: {
+          204: { type: 'null' },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+          409: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
     async (req, reply) => {
       const { id } = req.params as { id: string }
       const existing = db.prepare('SELECT * FROM announcements WHERE id = ?').get(id) as AnnouncementRow | undefined

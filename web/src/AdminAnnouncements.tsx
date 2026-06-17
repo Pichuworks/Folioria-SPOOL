@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import AdminGate from './AdminGate'
 import {
   archiveAnnouncement,
@@ -8,6 +8,7 @@ import {
   type AnnouncementDto,
 } from './api'
 import { Btn, Field, Leader, MagSec, Modal, specInput, TabBar } from './spec'
+import { useFetch } from './useFetch'
 
 type Tab = 'all' | 'draft' | 'published' | 'expired' | 'archived'
 
@@ -34,20 +35,12 @@ function filterTab(list: AnnouncementDto[], tab: Tab): AnnouncementDto[] {
 }
 
 function AnnouncementsBody() {
-  const [list, setList] = useState<AnnouncementDto[] | null>(null)
+  const { data: list, error: fetchError, reload } = useFetch(() =>
+    fetchAdminAnnouncements().then((r) => { if (!r.ok) throw r; return r.data }),
+  )
   const [tab, setTab] = useState<Tab>('all')
   const [editing, setEditing] = useState<AnnouncementDto | null>(null)
   const [creating, setCreating] = useState(false)
-
-  const [fetchError, setFetchError] = useState(false)
-  const reload = useCallback(() => {
-    void fetchAdminAnnouncements().then((r) => {
-      if (r.ok) setList(r.data)
-      else setFetchError(true)
-    })
-  }, [])
-
-  useEffect(reload, [reload])
 
   const tabs = list
     ? [
@@ -166,7 +159,7 @@ function EditModal({ item, onClose, onSaved }: { item: AnnouncementDto | null; o
         <Field label="内容">
           <textarea className={`${specInput} min-h-32`} value={body} onChange={(e) => setBody(e.target.value)} maxLength={10000} />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="受众">
             <select className={specInput} value={audience} onChange={(e) => setAudience(e.target.value as typeof audience)}>
               <option value="public">公开（含访客）</option>

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
 import type { MonthlyDto, UsageDto, ConsumptionDto } from './ReportsCharts'
@@ -49,16 +49,15 @@ function ReportsBody() {
     void send<SnapshotDto[]>('GET', '/api/reports/snapshots').then((r) => r.ok && setSnapshots(r.data))
   }, [])
 
-  const reload = useCallback((m: string) => {
-    const qs = `?month=${m}`
-    void send<MonthlyDto>('GET', `/api/reports/monthly${qs}`).then((r) => r.ok && setMonthly(r.data))
-    void send<UsageDto>('GET', `/api/reports/equipment-usage${qs}`).then((r) => r.ok && setUsage(r.data))
-    void send<ConsumptionDto>('GET', `/api/reports/paper-consumption${qs}`).then((r) => r.ok && setConsumption(r.data))
-  }, [])
-
   useEffect(() => {
-    if (/^\d{4}-\d{2}$/.test(month)) reload(month)
-  }, [month, reload])
+    if (!/^\d{4}-\d{2}$/.test(month)) return
+    let cancelled = false
+    const qs = `?month=${month}`
+    void send<MonthlyDto>('GET', `/api/reports/monthly${qs}`).then((r) => { if (r.ok && !cancelled) setMonthly(r.data) })
+    void send<UsageDto>('GET', `/api/reports/equipment-usage${qs}`).then((r) => { if (r.ok && !cancelled) setUsage(r.data) })
+    void send<ConsumptionDto>('GET', `/api/reports/paper-consumption${qs}`).then((r) => { if (r.ok && !cancelled) setConsumption(r.data) })
+    return () => { cancelled = true }
+  }, [month])
 
   return (
     <MagSec title="月报">

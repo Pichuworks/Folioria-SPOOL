@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { assertJobCostFields } from './db-guards.js'
 import { isConstraint } from './errors.js'
 import { requireAdmin } from './guards.js'
 import { availability, canTransition, completeJob, JobError, recommendMachines, scheduleBoard } from './jobs.js'
@@ -47,6 +48,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
                    ${statusClause}
                    ORDER BY j.created_at DESC LIMIT ? OFFSET ?`
       const rows = db.prepare(sql).all(...statusParams, limit, offset) as Array<Record<string, unknown>>
+      for (const r of rows) assertJobCostFields(r)
       const currency = baseCurrency(db)
       return {
         data: rows.map((r) => ({
