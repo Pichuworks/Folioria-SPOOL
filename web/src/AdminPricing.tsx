@@ -37,19 +37,21 @@ function PricingBody() {
   const [printers, setPrinters] = useState<PrinterDto[] | null>(null)
   const [finishings, setFinishings] = useState<FinishingDto[] | null>(null)
 
+  const [fetchError, setFetchError] = useState(false)
   const reload = useCallback(() => {
     void Promise.all([
-      send<QuoteDto[]>('GET', '/api/admin/pricing/quotes').then((r) => r.ok && setQuotes(r.data)),
-      send<ComboDto[]>('GET', '/api/pricing/combos').then((r) => r.ok && setCombos(r.data)),
-      send<ModeDto[]>('GET', '/api/pricing/modes').then((r) => r.ok && setModes(r.data)),
-      send<PaperDto[]>('GET', '/api/pricing/papers').then((r) => r.ok && setPapers(r.data)),
-      send<SizeDto[]>('GET', '/api/pricing/sizes').then((r) => r.ok && setSizes(r.data)),
-      send<PrinterDto[]>('GET', '/api/equipment').then((r) => r.ok && setPrinters(r.data)),
-      send<FinishingDto[]>('GET', '/api/pricing/finishings').then((r) => r.ok && setFinishings(r.data)),
+      send<QuoteDto[]>('GET', '/api/admin/pricing/quotes').then((r) => r.ok ? setQuotes(r.data) : setFetchError(true)),
+      send<ComboDto[]>('GET', '/api/pricing/combos').then((r) => r.ok ? setCombos(r.data) : setFetchError(true)),
+      send<ModeDto[]>('GET', '/api/pricing/modes').then((r) => r.ok ? setModes(r.data) : setFetchError(true)),
+      send<PaperDto[]>('GET', '/api/pricing/papers').then((r) => r.ok ? setPapers(r.data) : setFetchError(true)),
+      send<SizeDto[]>('GET', '/api/pricing/sizes').then((r) => r.ok ? setSizes(r.data) : setFetchError(true)),
+      send<PrinterDto[]>('GET', '/api/equipment').then((r) => r.ok ? setPrinters(r.data) : setFetchError(true)),
+      send<FinishingDto[]>('GET', '/api/pricing/finishings').then((r) => r.ok ? setFinishings(r.data) : setFetchError(true)),
     ])
   }, [])
   useEffect(reload, [reload])
 
+  if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">定价数据加载失败，请刷新重试。</p>
   if (!quotes || !combos || !modes || !papers || !sizes || !printers || !finishings) {
     return <Skeleton />
   }

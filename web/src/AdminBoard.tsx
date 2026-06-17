@@ -32,9 +32,14 @@ const JOB_STATUS_LABEL: Record<string, string> = { queued: '排队', printing: '
 
 function BoardBody() {
   const [lanes, setLanes] = useState<BoardLane[] | null>(null)
+  const [fetchError, setFetchError] = useState(false)
   useEffect(() => {
-    void send<BoardLane[]>('GET', '/api/jobs/board').then((r) => r.ok && setLanes(r.data))
+    void send<BoardLane[]>('GET', '/api/jobs/board').then((r) => {
+      if (r.ok) setLanes(r.data)
+      else setFetchError(true)
+    })
   }, [])
+  if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">排程数据加载失败，请刷新重试。</p>
   if (!lanes) return <Skeleton />
 
   const totalActive = lanes.reduce((n, l) => n + l.jobs.length, 0)

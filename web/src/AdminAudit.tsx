@@ -23,10 +23,15 @@ const ACTION_LABEL: Record<string, string> = {
 
 function AuditBody() {
   const [rows, setRows] = useState<AuditEntry[] | null>(null)
+  const [fetchError, setFetchError] = useState(false)
   const { page, totalPages, paged, setPage } = usePagination(rows ?? [], 50)
   useEffect(() => {
-    void send<AuditEntry[]>('GET', '/api/admin/audit').then((r) => r.ok && setRows(r.data))
+    void send<AuditEntry[]>('GET', '/api/admin/audit').then((r) => {
+      if (r.ok) setRows(r.data)
+      else setFetchError(true)
+    })
   }, [])
+  if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">审计记录加载失败，请刷新重试。</p>
   if (!rows) return <Skeleton />
 
   return (

@@ -49,7 +49,7 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
 
   app.get('/api/equipment/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const id = Number((req.params as { id: string }).id)
-    const p = db.prepare('SELECT * FROM printers WHERE id = ?').get(id) as PrinterRow | undefined
+    const p = db.prepare('SELECT * FROM printers WHERE id = ? AND archived = 0').get(id) as PrinterRow | undefined
     if (!p) return reply.status(404).send({ error: 'not_found' })
     return printerDto(p, new Date(), baseCurrency(db))
   })
@@ -99,7 +99,7 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
 
   app.get('/api/equipment/:id/maintenance', { preHandler: requireAdmin }, async (req, reply) => {
     const id = Number((req.params as { id: string }).id)
-    if (!db.prepare('SELECT 1 FROM printers WHERE id = ?').get(id)) {
+    if (!db.prepare('SELECT 1 FROM printers WHERE id = ? AND archived = 0').get(id)) {
       return reply.status(404).send({ error: 'not_found' })
     }
     const currency = baseCurrency(db)
@@ -135,7 +135,7 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
     },
     async (req, reply) => {
       const printerId = Number((req.params as { id: string }).id)
-      if (!db.prepare('SELECT 1 FROM printers WHERE id = ?').get(printerId)) {
+      if (!db.prepare('SELECT 1 FROM printers WHERE id = ? AND archived = 0').get(printerId)) {
         return reply.status(404).send({ error: 'not_found' })
       }
       const b = req.body as {

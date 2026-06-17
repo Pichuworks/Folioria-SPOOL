@@ -39,8 +39,12 @@ function AnnouncementsBody() {
   const [editing, setEditing] = useState<AnnouncementDto | null>(null)
   const [creating, setCreating] = useState(false)
 
+  const [fetchError, setFetchError] = useState(false)
   const reload = useCallback(() => {
-    void fetchAdminAnnouncements().then((r) => { if (r.ok) setList(r.data) })
+    void fetchAdminAnnouncements().then((r) => {
+      if (r.ok) setList(r.data)
+      else setFetchError(true)
+    })
   }, [])
 
   useEffect(reload, [reload])
@@ -66,7 +70,9 @@ function AnnouncementsBody() {
 
         <TabBar tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-        {!visible ? (
+        {fetchError ? (
+          <p className="py-2 text-[13px] text-wine-ink">公告列表加载失败，请刷新重试。</p>
+        ) : !visible ? (
           <p className="py-2 text-[13px] text-dim">加载中…</p>
         ) : visible.length === 0 ? (
           <p className="py-2 text-[13px] text-dim">暂无公告</p>

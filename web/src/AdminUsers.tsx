@@ -220,8 +220,12 @@ function UsersBody() {
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('active')
 
+  const [fetchError, setFetchError] = useState(false)
   const reload = useCallback(() => {
-    void send<UserDto[]>('GET', '/api/admin/users').then((r) => r.ok && setUsers(r.data))
+    void send<UserDto[]>('GET', '/api/admin/users').then((r) => {
+      if (r.ok) setUsers(r.data)
+      else setFetchError(true)
+    })
   }, [])
   useEffect(reload, [reload])
 
@@ -238,6 +242,7 @@ function UsersBody() {
 
   const { page, totalPages, paged, setPage } = usePagination(filtered, PAGE_SIZE)
 
+  if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">用户列表加载失败，请刷新重试。</p>
   if (!users) return <Skeleton />
 
   return (

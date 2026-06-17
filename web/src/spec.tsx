@@ -82,7 +82,7 @@ function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
           <EggOverlay decryptionKey={eggKey} onClose={() => setEggActive(false)} />
         </Suspense>
       )}
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" onClick={onClose}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40" role="dialog" aria-modal="true" aria-label="关于枫光映刻" onClick={onClose}>
         <div className="mx-4 w-full max-w-md border border-ink bg-paper p-8 shadow-e1" onClick={(e) => e.stopPropagation()}>
           {/* 刊头 */}
           <div className="mb-6 border-b border-ink pb-5 text-center">
@@ -196,8 +196,8 @@ export const PillLink = ({ href, kind, children }: { href: string; kind: 'primar
   </a>
 )
 
-export const PillBtn = ({ children, full, type, onClick }: { children: ReactNode; full?: boolean; type?: 'submit' | 'button'; onClick?: () => void }) => (
-  <button type={type ?? 'submit'} onClick={onClick} className={`${pillClass('primary')} ${full ? 'w-full' : ''}`}>
+export const PillBtn = ({ children, full, type, onClick, disabled }: { children: ReactNode; full?: boolean; type?: 'submit' | 'button'; onClick?: () => void; disabled?: boolean }) => (
+  <button type={type ?? 'submit'} onClick={onClick} disabled={disabled} className={`${pillClass('primary')} ${full ? 'w-full' : ''} ${disabled ? 'pointer-events-none opacity-50' : ''}`}>
     {children}
   </button>
 )
@@ -257,19 +257,35 @@ export function Btn({
 
 /* ── Modal ── */
 
-export function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: ReactNode }) {
-  const dialogRef = useRef<HTMLDivElement>(null)
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+function useFocusTrap(ref: React.RefObject<HTMLElement | null>, open: boolean, onClose: () => void) {
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key !== 'Tab') return
+      const el = ref.current
+      if (!el) return
+      const focusable = el.querySelectorAll<HTMLElement>(FOCUSABLE)
+      if (focusable.length === 0) { e.preventDefault(); return }
+      const first = focusable[0]!
+      const last = focusable[focusable.length - 1]!
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
     window.addEventListener('keydown', handler)
-    const el = dialogRef.current
+    const el = ref.current
     if (el) {
-      const first = el.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      const first = el.querySelector<HTMLElement>(FOCUSABLE)
       first?.focus()
     }
     return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
+  }, [ref, open, onClose])
+}
+
+export function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(dialogRef, open, onClose)
 
   if (!open) return null
   return (
@@ -289,17 +305,7 @@ export function Modal({ open, onClose, title, wide, children }: { open: boolean;
 
 export function Drawer({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   const panelRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', handler)
-    const el = panelRef.current
-    if (el) {
-      const first = el.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
-      first?.focus()
-    }
-    return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
+  useFocusTrap(panelRef, open, onClose)
 
   return (
     <div
@@ -369,13 +375,30 @@ export function TabBar({
   active: string
   onChange: (key: string) => void
 }) {
+  const handleKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    let next = -1
+    if (e.key === 'ArrowRight') next = (idx + 1) % tabs.length
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = tabs.length - 1
+    if (next >= 0) {
+      e.preventDefault()
+      onChange(tabs[next]!.key)
+      const el = (e.currentTarget.parentElement as HTMLElement).children[next] as HTMLElement
+      el?.focus()
+    }
+  }
   return (
-    <div className="flex gap-0 border-b border-line">
-      {tabs.map((t) => (
+    <div role="tablist" className="flex gap-0 border-b border-line">
+      {tabs.map((t, i) => (
         <button
           key={t.key}
           type="button"
+          role="tab"
+          aria-selected={active === t.key}
+          tabIndex={active === t.key ? 0 : -1}
           onClick={() => onChange(t.key)}
+          onKeyDown={(e) => handleKeyDown(e, i)}
           className={
             active === t.key
               ? 'border-b-2 border-wine px-4 py-2.5 text-[13px] font-medium text-wine-ink'

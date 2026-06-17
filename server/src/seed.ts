@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { type DB } from './db.js'
 
-export const SEED_PATH = fileURLToPath(new URL('../../data/seed.json', import.meta.url))
+const SEED_PATH = fileURLToPath(new URL('../../data/seed.json', import.meta.url))
 
 /**
  * ③⑤/D25: 客户色彩档由模式名派生（K 君定调）。文档=黑白彩色皆可；照片分三品质档(按机器)。
  * 不改冻结的 seed.json——在导入器里赋值。同逻辑见 migration 0009（既有实例回填）。
  */
-export function classifyColorClass(name: string): string {
+function classifyColorClass(name: string): string {
   if (name.includes('文档')) return 'bw,color'
   if (name.includes('黑白')) return 'bw'
   if (name.includes('照片')) return 'photo-value' // 性价比

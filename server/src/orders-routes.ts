@@ -4,6 +4,7 @@ import { getLog } from './logger.js'
 import { type BookLineInput, type BookSpecInput } from './books.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { ERROR_SCHEMA } from './errors.js'
 import { requireAdmin, requireUser } from './guards.js'
 import { formatMoney, formatMoneyC, money, moneyC, type Currency } from './money.js'
 import { notifyAddress, notifyUser, templates } from './notify.js'
@@ -221,13 +222,6 @@ export const ORDER_SCHEMA = {
   },
 }
 
-const ORDER_LIST_SCHEMA = { type: 'array', items: ORDER_SCHEMA }
-
-export const ERROR_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: { error: { type: 'string' }, message: { type: 'string' } },
-}
 
 // ---------- 下单请求行（单页 item + D27 书行），两个下单端点共用 ----------
 
@@ -571,6 +565,14 @@ function batchOrderDtos(db: DB, orders: OrderRow[], currency: Currency, opts: Dt
     }
   }
 
+  const tierIds = [...new Set(orders.map((o) => o.membership_tier_id).filter((id): id is number => id != null))]
+  const tierMap = new Map<number, string>()
+  if (tierIds.length > 0) {
+    const tph = tierIds.map(() => '?').join(',')
+    const tiers = db.prepare(`SELECT id, name FROM membership_tiers WHERE id IN (${tph})`).all(...tierIds) as Array<{ id: number; name: string }>
+    for (const t of tiers) tierMap.set(t.id, t.name)
+  }
+
   let userMap: Map<string, { id: string; name: string; email: string; role: string }> | undefined
   let paymentsByOrder: Map<string, PaymentRow[]> | undefined
   if (opts.admin) {
@@ -612,6 +614,9 @@ function batchOrderDtos(db: DB, orders: OrderRow[], currency: Currency, opts: Dt
       subtotal_display: formatMoney(money(order.subtotal), currency),
       discount: order.discount,
       discount_display: formatMoney(money(order.discount), currency),
+      membership_discount: order.membership_discount,
+      membership_discount_display: formatMoney(money(order.membership_discount), currency),
+      membership_tier_name: order.membership_tier_id ? (tierMap.get(order.membership_tier_id) ?? null) : null,
       total: order.total,
       total_display: formatMoney(money(order.total), currency),
       payment_status: order.payment_status,
@@ -841,6 +846,7 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
                 'file_approved',
                 'confirmed',
                 'in_production',
+                'printed',
                 'ready',
                 'delivered',
                 'cancelled',

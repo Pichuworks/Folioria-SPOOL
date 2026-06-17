@@ -12,7 +12,8 @@ import { requireUser } from './guards.js'
 import { getLog } from './logger.js'
 import { notifyAdmins, templates } from './notify.js'
 import { getOrder, OrderError, syncFileState, type OrderRow } from './orders.js'
-import { ERROR_SCHEMA, ORDER_SCHEMA, orderDto } from './orders-routes.js'
+import { ERROR_SCHEMA } from './errors.js'
+import { ORDER_SCHEMA, orderDto } from './orders-routes.js'
 import { precheckFile, type PrecheckResult, type PrecheckTarget } from './precheck.js'
 
 /** R5: 类型白名单——扩展名与 magic bytes 双查，二者一致才收（PDF/TIFF/PNG，PRD §2.5） */

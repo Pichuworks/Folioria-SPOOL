@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { isConstraint } from './errors.js'
 import { requireAdmin } from './guards.js'
 import { availability, canTransition, completeJob, JobError, recommendMachines, scheduleBoard } from './jobs.js'
 import { tryAdvanceToPrinted } from './orders.js'
@@ -173,7 +174,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
           new Date().toISOString(),
         )
       } catch (err) {
-        if (err instanceof Error && err.message.includes('FOREIGN KEY')) {
+        if (isConstraint(err, 'FOREIGN KEY')) {
           return reply.status(409).send({ error: 'unknown_mode_paper_or_size' })
         }
         throw err
@@ -357,7 +358,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
         })
       } catch (err) {
         if (err instanceof JobError) {
-          return reply.status(err.status).send({ error: err.message })
+          return reply.status(err.statusCode).send({ error: err.message })
         }
         throw err
       }

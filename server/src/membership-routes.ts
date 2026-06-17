@@ -1,6 +1,7 @@
 import { type FastifyInstance } from 'fastify'
 import { audit } from './audit.js'
 import { type DB } from './db.js'
+import { ERROR_SCHEMA, isConstraint } from './errors.js'
 import { requireAdmin, requireUser } from './guards.js'
 import {
   checkAutoUpgrade,
@@ -11,11 +12,6 @@ import {
   type TierRow,
 } from './membership.js'
 
-const ERROR_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: { error: { type: 'string' } },
-}
 
 const TIER_SCHEMA = {
   type: 'object',
@@ -143,7 +139,7 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
         })
         return reply.status(201).send(tierDto(tier, []))
       } catch (err) {
-        if (err instanceof Error && err.message.includes('UNIQUE')) {
+        if (isConstraint(err, 'UNIQUE')) {
           return reply.status(409).send({ error: 'code_exists' })
         }
         throw err
@@ -201,7 +197,7 @@ export function registerMembershipRoutes(app: FastifyInstance, db: DB): void {
           id,
         )
       } catch (err) {
-        if (err instanceof Error && err.message.includes('UNIQUE')) {
+        if (isConstraint(err, 'UNIQUE')) {
           return reply.status(409).send({ error: 'code_exists' })
         }
         throw err

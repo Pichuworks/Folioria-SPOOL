@@ -353,6 +353,10 @@ export default function OrderView({ token }: { token: string }) {
     fetchMe().then(setMe).catch(() => setMe(null))
   }, [refresh])
 
+  const handleOrderChanged = useCallback((o: OrderDto) => {
+    setOrder((prev) => prev ? { ...o, access_token: prev.access_token } : o)
+  }, [])
+
   useEffect(() => {
     // 归属判定：owner/admin 的 /api/orders/:id 200，其余 404（不泄露存在性）
     if (!order || !me) {
@@ -451,7 +455,7 @@ export default function OrderView({ token }: { token: string }) {
               item={item}
               canUpload={canUpload}
               isOwner={isOwner}
-              onChanged={(o) => setOrder({ ...o, access_token: order.access_token })}
+              onChanged={handleOrderChanged}
             />
           ))}
           {canUpload && order.status === 'quoted' && (
@@ -472,7 +476,7 @@ export default function OrderView({ token }: { token: string }) {
                   order={order}
                   canUpload={canUpload}
                   isOwner={isOwner}
-                  onChanged={(o) => setOrder({ ...o, access_token: order.access_token })}
+                  onChanged={handleOrderChanged}
                 />
               ))}
             </div>

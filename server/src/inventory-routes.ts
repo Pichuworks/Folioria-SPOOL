@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { isConstraint } from './errors.js'
 import { requireAdmin } from './guards.js'
 import { getLog } from './logger.js'
 import { formatMoneyC, moneyC } from './money.js'
@@ -57,7 +58,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
       try {
         db.prepare('INSERT INTO locations (id, sensor_id) VALUES (?, ?)').run(b.id, b.sensor_id ?? null)
       } catch (err) {
-        if (err instanceof Error && err.message.includes('UNIQUE')) {
+        if (isConstraint(err, 'UNIQUE')) {
           return reply.status(409).send({ error: 'location_exists' })
         }
         throw err
@@ -151,10 +152,10 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
            VALUES (?, ?, ?, 0, ?, ?)`,
         ).run(id, b.paper_id, b.size_key, locationId, b.notes ?? null)
       } catch (err) {
-        if (err instanceof Error && err.message.includes('UNIQUE')) {
+        if (isConstraint(err, 'UNIQUE')) {
           return reply.status(409).send({ error: 'stock_exists' })
         }
-        if (err instanceof Error && err.message.includes('FOREIGN KEY')) {
+        if (isConstraint(err, 'FOREIGN KEY')) {
           return reply.status(409).send({ error: 'unknown_paper_or_size' })
         }
         throw err
@@ -253,7 +254,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
         return reply.status(422).send({ error: 'currency_fields_purchase_only' })
       }
 
-      const stock = db.prepare('SELECT quantity FROM paper_stocks WHERE id = ?').get(id) as
+      const stock = db.prepare('SELECT quantity FROM paper_stocks WHERE id = ? AND archived = 0').get(id) as
         | { quantity: number }
         | undefined
       if (!stock) return reply.status(404).send({ error: 'not_found' })
@@ -335,9 +336,9 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
         return reply.status(422).send({ error: 'same_stock' })
       }
       const fromStock = db
-        .prepare('SELECT quantity, paper_id FROM paper_stocks WHERE id = ?')
+        .prepare('SELECT quantity, paper_id FROM paper_stocks WHERE id = ? AND archived = 0')
         .get(b.from.stock_id) as { quantity: number; paper_id: number } | undefined
-      const toStock = db.prepare('SELECT paper_id FROM paper_stocks WHERE id = ?').get(b.to.stock_id) as
+      const toStock = db.prepare('SELECT paper_id FROM paper_stocks WHERE id = ? AND archived = 0').get(b.to.stock_id) as
         | { paper_id: number }
         | undefined
       if (!fromStock || !toStock) return reply.status(404).send({ error: 'not_found' })
@@ -453,7 +454,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
           b.alert_threshold_bp ?? 2000,
         )
       } catch (err) {
-        if (err instanceof Error && err.message.includes('FOREIGN KEY')) {
+        if (isConstraint(err, 'FOREIGN KEY')) {
           return reply.status(409).send({ error: 'unknown_printer' })
         }
         throw err

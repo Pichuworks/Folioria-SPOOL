@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type DB } from './db.js'
+import { isConstraint } from './errors.js'
 import { getLog } from './logger.js'
 
 export type AlertSeverity = 'info' | 'warning' | 'critical'
@@ -60,7 +61,7 @@ export function raiseAlert(db: DB, input: RaiseAlertInput): 'created' | 'upgrade
       new Date().toISOString(),
     )
   } catch (err) {
-    if (err instanceof Error && err.message.includes('UNIQUE')) {
+    if (isConstraint(err, 'UNIQUE')) {
       log.debug({ type: input.type, target: input.target_id }, 'alert noop (UNIQUE constraint)')
       return 'noop'
     }

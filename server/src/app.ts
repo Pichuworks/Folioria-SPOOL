@@ -22,6 +22,7 @@ import {
 import { audit, listAudit } from './audit.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { ERROR_SCHEMA, isConstraint } from './errors.js'
 import { initLogger } from './logger.js'
 import { spoolInit } from './init.js'
 import { formatMoney, money } from './money.js'
@@ -89,11 +90,6 @@ const USER_DTO_SCHEMA = {
   },
 }
 
-const ERROR_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: { error: { type: 'string' }, message: { type: 'string' } },
-}
 
 export interface AppOptions {
   /** S6: session cookie 的 Secure 属性。默认 true；仅明文 HTTP 调试时关（生产必须 TLS 前置） */
@@ -195,6 +191,9 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
   registerReportsRoutes(app, db)
   registerAnnouncementsRoutes(app, db)
   registerMembershipRoutes(app, db)
+
+  // health check (no auth, no rate-limit accounting)
+  app.get('/api/health', { config: { rateLimit: false } }, async () => ({ status: 'ok' }))
 
   // ---------- 首次运行: Web 初始化向导（包住 CLI 同款 spoolInit，幂等自锁） ----------
 
@@ -353,10 +352,10 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         ).run(id, b.email, b.username ?? null, await bcrypt.hash(b.password, 12), b.name, b.contact_info ?? null, new Date().toISOString())
       } catch (err) {
         // 部分唯一索引冲突报「index 'uniq_users_username'」，列约束报「users.email」；以 username 子串判别
-        if (err instanceof Error && err.message.includes('username')) {
+        if (isConstraint(err, 'username')) {
           return reply.status(409).send({ error: 'username_taken' })
         }
-        if (err instanceof Error && err.message.includes('UNIQUE')) {
+        if (isConstraint(err, 'UNIQUE')) {
           return reply.status(409).send({ error: 'email_exists' })
         }
         throw err
@@ -698,10 +697,10 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
         ).run(id, body.email, body.username ?? null, await bcrypt.hash(body.password, 12), body.name, body.role, now, now)
       } catch (err) {
         // 部分唯一索引冲突报「index 'uniq_users_username'」，列约束报「users.email」；以 username 子串判别
-        if (err instanceof Error && err.message.includes('username')) {
+        if (isConstraint(err, 'username')) {
           return reply.status(409).send({ error: 'username_taken' })
         }
-        if (err instanceof Error && err.message.includes('UNIQUE')) {
+        if (isConstraint(err, 'UNIQUE')) {
           return reply.status(409).send({ error: 'email_exists' })
         }
         throw err
@@ -873,6 +872,13 @@ export function buildApp(db: DB, opts: AppOptions = {}): App {
       }
     },
   )
+  })
+
+  app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith('/api/')) {
+      return reply.status(404).send({ error: 'not_found' })
+    }
+    return reply.status(404).send('Not Found')
   })
 
   return app

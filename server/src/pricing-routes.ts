@@ -6,7 +6,7 @@ import { type DB } from './db.js'
 import { finishingContribution, type FinishingPricing } from './finishing.js'
 import { requireAdmin } from './guards.js'
 import { formatMoney, formatMoneyC, lineTotal, moneyC } from './money.js'
-import { listProducts, listQuotable, quote } from './pricing.js'
+import { invalidateQuotableCache, listProducts, listQuotable, quote } from './pricing.js'
 import { sendXlsx } from './xlsx.js'
 
 const MONEY_C = { type: 'integer', minimum: 0 }
@@ -16,13 +16,19 @@ const ID_PARAM = {
   properties: { id: { type: 'string', pattern: '^\\d+$' } },
 }
 
-const isConstraint = (err: unknown, kind: string): boolean =>
-  err instanceof Error && err.message.includes(kind)
+import { isConstraint } from './errors.js'
 
 export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   // PC1: 定价/配置编辑审计（单一 audit() 入口，best-effort 不阻断）
   const logEdit = (actorId: string | null, action: string, targetId: string | number, summary: string) =>
     audit(db, { actorId, action, targetType: 'pricing', targetId: String(targetId), summary })
+
+  app.addHook('onResponse', (req, _reply, done) => {
+    if (req.method !== 'GET' && (req.url.startsWith('/api/pricing/') || req.url.startsWith('/api/admin/pricing/'))) {
+      invalidateQuotableCache()
+    }
+    done()
+  })
 
   // ---------- 管理域: sizes ----------
 

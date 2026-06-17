@@ -49,17 +49,19 @@ function SettingsBody() {
   const [form, setForm] = useState<SettingsDto | null>(null)
   const [sysInfo, setSysInfo] = useState<SystemInfoDto | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState(false)
 
   useEffect(() => {
     void send<SettingsDto>('GET', '/api/settings').then((r) => {
       if (r.ok) {
         setSettings(r.data)
         setForm(r.data)
-      }
+      } else setFetchError(true)
     })
     void send<SystemInfoDto>('GET', '/api/settings/system-info').then((r) => r.ok && setSysInfo(r.data))
   }, [])
 
+  if (fetchError) return <p className="p-8 text-[13px] text-wine-ink">设置加载失败，请刷新重试。</p>
   if (!settings || !form) return <Skeleton />
 
   const submit = async (e: FormEvent) => {

@@ -149,7 +149,7 @@ export async function notifyAdmins(db: DB, event: NotifyEvent, msg: Notification
 export const verificationLink = (token: string): string =>
   `${process.env['SPOOL_PUBLIC_ORIGIN'] ?? 'http://localhost:5173'}/#/verify/${token}`
 
-export const resetLink = (token: string): string =>
+const resetLink = (token: string): string =>
   `${process.env['SPOOL_PUBLIC_ORIGIN'] ?? 'http://localhost:5173'}/#/reset/${token}`
 
 export const templates = {
