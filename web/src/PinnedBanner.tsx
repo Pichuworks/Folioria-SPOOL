@@ -33,7 +33,6 @@ export default function PinnedBanner() {
   const [items, setItems] = useState<PublicAnnouncementDto[]>([])
   const [detail, setDetail] = useState<PublicAnnouncementDto | null>(null)
   const trackRef = useRef<HTMLDivElement>(null)
-  const [dur, setDur] = useState(30)
 
   useEffect(() => {
     void fetchPublicAnnouncements().then((all) => {
@@ -42,9 +41,19 @@ export default function PinnedBanner() {
   }, [])
 
   useLayoutEffect(() => {
-    if (!trackRef.current) return
-    const w = trackRef.current.scrollWidth / 2
-    setDur(Math.max(10, w / 60))
+    const track = trackRef.current
+    if (!track) return
+    const measure = () => {
+      const first = track.children[0] as HTMLElement
+      if (!first) return
+      const w = first.getBoundingClientRect().width
+      track.style.setProperty('--marquee-shift', `-${w}px`)
+      track.style.setProperty('--marquee-duration', `${Math.max(10, w / 60)}s`)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(track)
+    return () => ro.disconnect()
   }, [items])
 
   if (!items.length) return null
@@ -59,11 +68,10 @@ export default function PinnedBanner() {
 
   return (
     <>
-      <button type="button" onClick={handleClick} className="group/banner block w-full overflow-hidden text-left">
+      <button type="button" onClick={handleClick} className="block w-full overflow-hidden text-left">
         <div
           ref={trackRef}
-          className="flex animate-marquee whitespace-nowrap group-hover/banner:[animation-play-state:paused]"
-          style={{ '--marquee-duration': `${dur}s` } as React.CSSProperties}
+          className="flex animate-marquee whitespace-nowrap"
         >
           <span className={span}>{text}</span>
           <span className={span}>{text}</span>
