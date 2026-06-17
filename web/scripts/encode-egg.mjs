@@ -279,7 +279,7 @@ const PAIR_IX = [
   { a:'shion',   b:'master',  ad:'——',                   bd:'老样子？',           ch:0.1,  cd:20 },
   // Cross-group (continued)
   { a:'raincandy', b:'nyamu',   ad:'喵梦别闹了！',          bd:'阿雨脸红了！！',     ch:0.15, cd:15 },
-  { a:'nyamu',     b:'mutsumi', ad:'小睦！！♡',             bd:'……喵梦。',          ch:0.15, cd:15 },
+  { a:'nyamu',     b:'mutsumi', ad:'睦子！！♡',             bd:'……喵梦。',          ch:0.15, cd:15 },
   { a:'sakiko',    b:'uika',    ad:'初华……♡',              bd:'小祥！看看那颗星！', ch:0.15, cd:15 },
   { a:'sakiko',    b:'soyo',    ad:'素世……喝茶吗？',        bd:'……好。谢谢小祥。', ch:0.15, cd:15 },
   { a:'mana',      b:'uika',    ad:'小初！分你一个甜甜圈！', bd:'Sumimi不会解散！', ch:0.15, cd:15 },
