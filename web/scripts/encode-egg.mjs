@@ -194,9 +194,32 @@ const CHARS = [
     dl:[],
   },
   {
+    id:'watermelon', n:'西瓜', f:'', g:'西瓜', d:'西瓜', x:0,
+    q:'🐱', m:'喵。',
+    c:'#E8883C', c2:null, op:0.55, sp:1.0, pc:0.25, pd:[1,3], bh:2, cat:1,
+    dl:['喵'],
+  },
+  {
+    id:'flatwhite', n:'澳白', f:'', g:'澳白', d:'澳白', x:0,
+    q:'🐱', m:'喵。',
+    c:'#F0EDE8', c2:'#A07858', op:1, sp:0.6, pc:0.4, pd:[3,6], bh:2, cat:1,
+    dl:['喵'],
+  },
+  {
+    id:'kamaboko', n:'鱼板', f:'', g:'鱼板', d:'鱼板', x:0,
+    q:'🐱', m:'喵。',
+    c:'#F0E6D8', c2:'#6B5044', op:1, sp:0.5, pc:0.5, pd:[3,7], bh:1.5, cat:1,
+    dl:['喵'],
+  },
+  {
+    id:'watermelon_ice', n:'西瓜冰', f:'', g:'西瓜冰', d:'西瓜冰', x:0,
+    q:'🐱', m:'喵。',
+    c:'#E8883C', c2:'#F0EDE8', op:1, sp:0.7, pc:0.35, pd:[2,5], bh:2, cat:1,
+    dl:['喵'],
+  },
+  {
     id:'melon', n:'香瓜', f:'', g:'香瓜', d:'香瓜', x:0,
-    q:'🐱',
-    m:'喵。',
+    q:'🐱', m:'喵。',
     c:'#A08060', sp:0.9, pc:0.3, pd:[1,4], bh:2, cat:1,
     dl:['喵'],
   },
@@ -210,13 +233,9 @@ const FINAL = {
   m:'这里是阿佐谷。CrisIris。Folioria。名字很多，但指的都是同一个地方。门一直开着。',
 }
 
-// ── Cats (pixel stage only, no star messages) ──
+// ── Cats (now in CHARS; keep empty array for payload compat) ──
 
 const CATS = [
-  { id:'watermelon',     d:'西瓜',   c:'#E8883C', c2:null,     op:0.55, sp:1.0, pc:0.25, pd:[1,3], bh:2, dl:['喵'] },
-  { id:'watermelon_ice', d:'西瓜冰', c:'#E8883C', c2:'#F0EDE8', op:1,   sp:0.7, pc:0.35, pd:[2,5], bh:2, dl:['喵'] },
-  { id:'flatwhite',      d:'澳白',   c:'#F0EDE8', c2:'#A07858', op:1,   sp:0.6, pc:0.4,  pd:[3,6], bh:2, dl:['喵'] },
-  { id:'kamaboko',       d:'鱼板',   c:'#F0E6D8', c2:'#6B5044', op:1,   sp:0.5, pc:0.5,  pd:[3,7], bh:1.5, dl:['喵'] },
 ]
 
 // ── Pair interactions ──
@@ -362,6 +381,8 @@ for (const ch of CHARS) {
     sp: ch.sp, pc: ch.pc, pd: ch.pd, bh: ch.bh,
     dl: ch.dl.map(l => e(l)),
     ...(ch.cat ? { cat: 1 } : {}),
+    ...(ch.c2 !== undefined ? { c2: ch.c2 } : {}),
+    ...(ch.op !== undefined ? { op: ch.op } : {}),
   }
 }
 

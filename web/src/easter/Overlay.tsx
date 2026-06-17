@@ -39,7 +39,6 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
   const [finalMsg, setFinalMsg] = useState<StarEntry | null>(null)
   const [tagline, setTagline] = useState<string[]>([])
   const [ending, setEnding] = useState<string[]>([])
-  const [catCredits, setCatCredits] = useState<{ name: string; color: string }[]>([])
   const [glitch, setGlitch] = useState(false)
   const [vis, setVis] = useState(false)
   const keyRef = useRef(decryptionKey)
@@ -49,7 +48,7 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
   useEffect(() => {
     const d = (s: string) => decode(s, keyRef.current)
 
-    setStars(_d.s.filter(ch => !(ch as any).cat).map(ch => ({
+    setStars(_d.s.map(ch => ({
       id: ch.i,
       fullName: d(ch.n),
       familyName: d(ch.f),
@@ -60,9 +59,9 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
       color: ch.c,
     })))
 
-    const bMap = _d.b as Record<string, { sp: number; pc: number; pd: number[]; bh: number; dl: string[]; cat?: number }>
+    const bMap = _d.b as Record<string, { sp: number; pc: number; pd: number[]; bh: number; dl: string[]; cat?: number; c2?: string | null; op?: number }>
     const mutsumiCh = _d.s.find(ch => ch.i === 'mutsumi')
-    const charSprites: SpriteConfig[] = _d.s
+    setSprites(_d.s
       .filter(ch => ch.i !== 'mutsumi')
       .map(ch => {
         const b = bMap[ch.i]!
@@ -70,6 +69,8 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
           id: ch.i,
           displayName: d(ch.d),
           color: ch.c,
+          ...(b.c2 != null ? { color2: b.c2 } : {}),
+          ...(b.op != null ? { opacity: b.op } : {}),
           speed: b.sp,
           pauseChance: b.pc,
           pauseDuration: [b.pd[0], b.pd[1]] as [number, number],
@@ -83,21 +84,7 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
           cfg.altColor = mutsumiCh.c
         }
         return cfg
-      })
-    const catSprites: SpriteConfig[] = _d.k.map(cat => ({
-      id: cat.i,
-      displayName: d(cat.d),
-      color: cat.c,
-      ...(cat.c2 != null ? { color2: cat.c2 as string } : {}),
-      opacity: cat.op,
-      speed: cat.sp,
-      pauseChance: cat.pc,
-      pauseDuration: [cat.pd[0], cat.pd[1]] as [number, number],
-      bounceHeight: cat.bh,
-      isCat: true,
-      dialogues: cat.dl.map(l => d(l)),
-    }))
-    setSprites([...charSprites, ...catSprites])
+      }))
 
     setFinalMsg({
       id: 'nozomu',
@@ -112,15 +99,6 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
 
     setTagline(_d.t.map(l => d(l)))
     setEnding(((_d as any).ed ?? []).map((l: string) => d(l)))
-
-    const catLookup = new Map<string, { name: string; color: string }>()
-    for (const cat of _d.k) catLookup.set(cat.i, { name: d(cat.d), color: cat.c })
-    for (const ch of _d.s) if ((ch as any).cat) catLookup.set(ch.i, { name: d(ch.d), color: ch.c })
-    setCatCredits(
-      ['watermelon', 'flatwhite', 'kamaboko', 'watermelon_ice', 'melon']
-        .map(id => catLookup.get(id))
-        .filter((c): c is { name: string; color: string } => !!c)
-    )
   }, [])
 
   useEffect(() => {
@@ -164,7 +142,6 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
           <Sky />
           <Credits
             stars={stars}
-            cats={catCredits}
             finalMsg={finalMsg}
             tagline={tagline}
             ending={ending}
