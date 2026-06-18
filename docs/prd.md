@@ -345,7 +345,7 @@ Settings:   GET|PATCH /api/settings（admin）
 以 `data/seed.json` 为准（自 folioria_cost.html 提取，金额已转 `_c` 整数，提取脚本零精度损失校验通过）：
 
 - 6 尺寸（6寸/A5/A4/A3/A3+/SRA3，含相对面积）
-- 6 物理打印机（C850/P708/G580/L15168/C650 + CP5225[白碳粉/烫金，暂无成本模式]）
+- 5 物理打印机（C850/P708/G580/L15168/C650）
 - 16 打印模式 · 13 纸张 · 38 组纸张×尺寸采购口径 · 70 组合（20 手动定价 / 50 自动地板价）
 - 耗材：备用 T01 一套（140000_c）—— C850 设备投入 2060000_c 不含此项
 - 系统设置：min_margin_bp 6700 · unify ON · force OFF · 折旧 36月×2000张/月
@@ -416,6 +416,7 @@ feat / fix / refactor / style / data / docs / test / chore
 | D36 | 自定义书册（去成品化） | finishing_ops 增 `category TEXT`（binding/cover/structural/NULL）区分装订方式（互斥）与加工（多选）。order_books.book_id 改可空（SQLite 重建表，migration 0023），自定义书册 book_id=NULL。种子 8 条默认工艺（骑马钉/无线胶装/精装/覆膜哑光亮光/勒口/扉页/护封）。新端点 POST /api/calculator/book-spec-quote（原始组件规格报价，不依赖成品定义）、GET /api/calculator/book-config（纸张×尺寸可用性 + 分组工艺目录）。前端 BookConfigurator 重写为扁平自助表单：尺寸→封面纸→内页(纸+色彩+单双面+页数)→装订→工艺→本数。既有 book_products/book_components 保留（历史订单引用），前台不再使用成品选择器 |
 | D37 | 会员等级系统（migration 0026） | 4 表：membership_tiers（多轨 track 字段，同轨互斥跨轨共存）、tier_criteria（弹性维度 dimension×op×threshold，AND 逻辑）、user_metrics（自定义维度计数器，新活动维度不改 schema）、user_memberships（PK user_id+track，manual 标记防自动覆盖）。orders 增 membership_discount（金额层绝对值，下单时 round_half_up(subtotal×bp/10000) 快照定格）+ membership_tier_id。折扣跨轨取 max（不叠加）；显示头衔取最高 discount_bp（同 bp 用 sort DESC 打破平局）。auto_upgrade 每等级开关，delivered 触发；只升不降，手动绑定不自动覆盖。total = subtotal − discount − membership_discount |
 | D32 | 书行再下单（Track B 收尾） | order_book_components 增 `source_component_id INTEGER REFERENCES book_components(id)`（migration 0015，user_version 14→15，STRICT ALTER ADD COLUMN + REFERENCES 列默认 NULL，既有行回填 NULL）。createOrder 写入时定格 = priceBook 解析的 component_id（目录组件来源）。orderDto 组件增 source_component_id（中性目录引用，两域均回显）。C1 reorder（OrderView）把书行打包进再下单缓冲：book_id + count + 各非封面组件 {source_component_id→sheets_per_book}（封面固定 1 由 priceBook 定）。Quote 消费缓冲时对照实时册子目录（fetchBooks）：成品已归档（目录无此 book）或任一组件已归档（目录组件集合缺 source_component_id）→ 跳过该书行并提示「N 项因成品/组件下架已跳过」，其余按现价 fetchBookQuote 重报填入购物车。单页 item 行沿用既有按现价重报逻辑 |
+| D38 | 数量阶梯定价（migration 0022 combo_price_tiers · 补记录 + 定价应用） | 0022 原仅建表 + admin CRUD（PUT /api/pricing/combos/:id/prices/:size_key 带 tiers 数组）+ has_tiers 速查标记 + xlsx 导出，**定价侧从未读取**（漏闭环，本记录补全）。语义：每 (combo,size) 可配多档 `min_qty>1` 折扣价（sell_c CHECK>0 / internal_sell_c 可空）。报价/下单按数量取 **min_qty ≤ quantity 的最高档**覆盖基础手动价（combo_prices.sell_c）；无命中或 quantity 缺省/≤1 → 回落基础价；internal 取 `internal_sell_c ?? sell_c`（同 combo_prices 口径）。命中后仍走 D8 决策（pricing.ts decideSell 共用）：force_min_margin 开且档价<地板价 → 抬至地板(forced)，关则档价无条件生效并标记 below_margin/LOSS（**禁止静默抬价**）。**唯一舍入点不变**：line_total=lineTotal(unit_price_c,quantity)，阶梯只换 unit_price_c 不新增舍入；金额全整数。仅 `quote()`（→ POST /api/calculator/quote）与 `createOrder`（单页 item，含访客单）应用 quantity；listQuotable/listProducts 与书册组件折叠仍为**基础价 catalog 视图（qty=1）**——min_qty>1 故从不命中 → §2.5 基线(187/43)不动；书册组件折叠无下单时数量、暂不接阶梯（如需另议）。下单 unit_price_c 仍定格快照，改阶梯不动既有单。TIER_SCHEMA sell_c 由 minimum 0 收紧为 1，与 DB CHECK 对齐（原会过 schema 撞 DB 约束 500） |
 
 ---
 

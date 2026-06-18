@@ -4,6 +4,11 @@ import { moneyC, roundHalfUp, type MoneyC } from './money.js'
 
 export interface QuoteOptions {
   internal?: boolean
+  /**
+   * D38 数量阶梯：命中 combo_price_tiers 中 min_qty ≤ quantity 的最高档则取阶梯价覆盖基础手动价。
+   * 缺省 / ≤1 = 基础价（catalog 视图不传；min_qty>1 故 qty=1 永不命中，§2.5 基线守恒）。
+   */
+  quantity?: number
 }
 
 export interface Quote {
@@ -37,6 +42,26 @@ function ceilDiv(num: number, den: number): number {
   }
   const rem = num % den
   return (num - rem) / den + (rem > 0 ? 1 : 0)
+}
+
+/**
+ * §2.3/D8 售价决策（catalog 折叠与点报价共用，保证非阶梯路径完全一致）：
+ *   无手动价 → 自动地板价(auto)；force_min_margin 开且手动 < 地板 → 抬至地板(forced)；
+ *   否则手动价无条件生效，亏本/低毛利仅标记（禁止静默抬价）。
+ */
+function decideSell(
+  total: number,
+  auto: number,
+  manual: number | null,
+  forceMinMargin: number,
+): { sell: number; source: Quote['source']; flag: Quote['flag'] } {
+  if (manual == null) return { sell: auto, source: 'auto', flag: 'auto' }
+  if (forceMinMargin !== 0 && manual < auto) return { sell: auto, source: 'manual', flag: 'forced' }
+  return {
+    sell: manual,
+    source: 'manual',
+    flag: manual < total ? 'LOSS' : manual < auto ? 'below_margin' : 'manual',
+  }
 }
 
 interface PricingConfig {
@@ -143,14 +168,14 @@ export function quote(
 ): Quote | null {
   const comboRow = db
     .prepare(
-      `SELECT cp.sell_c, cp.internal_sell_c
+      `SELECT c.id AS combo_id, cp.sell_c, cp.internal_sell_c
        FROM combos c
        JOIN papers p ON p.id = c.paper_id AND p.archived = 0
        LEFT JOIN combo_prices cp ON cp.combo_id = c.id AND cp.size_key = @size
        WHERE c.mode_id = @mode AND c.paper_id = @paper AND c.archived = 0`,
     )
     .get({ mode: modeId, paper: paperId, size: sizeKey }) as
-    | { sell_c: number | null; internal_sell_c: number | null }
+    | { combo_id: number; sell_c: number | null; internal_sell_c: number | null }
     | undefined
   if (!comboRow) return null
 
@@ -163,27 +188,25 @@ export function quote(
   const cfg = getConfig(db)
   const auto = ceilDiv(total * 10000, 10000 - cfg.min_margin_bp)
 
-  const manual = opts?.internal
-    ? (comboRow.internal_sell_c ?? comboRow.sell_c)
-    : comboRow.sell_c
+  // 基础手动价（combo_prices）；internal 缺省回落对外价
+  let manual = opts?.internal ? (comboRow.internal_sell_c ?? comboRow.sell_c) : comboRow.sell_c
 
-  let sell: number
-  let source: Quote['source']
-  let flag: Quote['flag']
-  if (manual == null) {
-    sell = auto
-    source = 'auto'
-    flag = 'auto'
-  } else if (cfg.force_min_margin !== 0 && manual < auto) {
-    sell = auto
-    source = 'manual'
-    flag = 'forced'
-  } else {
-    // D8: 手动价无条件生效，低毛利/亏本只警示，禁止静默抬价
-    sell = manual
-    source = 'manual'
-    flag = manual < total ? 'LOSS' : manual < auto ? 'below_margin' : 'manual'
+  // D38 数量阶梯：取 min_qty ≤ quantity 的最高档覆盖基础手动价（命中则成为生效手动价，
+  // 仍走下方 decideSell 的 D8 决策）。min_qty>1（schema CHECK）→ qty≤1/缺省永不命中。
+  if (opts?.quantity != null && opts.quantity > 1) {
+    const tier = db
+      .prepare(
+        `SELECT sell_c, internal_sell_c FROM combo_price_tiers
+         WHERE combo_id = ? AND size_key = ? AND min_qty <= ?
+         ORDER BY min_qty DESC LIMIT 1`,
+      )
+      .get(comboRow.combo_id, sizeKey, opts.quantity) as
+      | { sell_c: number; internal_sell_c: number | null }
+      | undefined
+    if (tier) manual = opts.internal ? (tier.internal_sell_c ?? tier.sell_c) : tier.sell_c
   }
+
+  const { sell, source, flag } = decideSell(total, auto, manual, cfg.force_min_margin)
 
   return {
     mode_id: modeId,
@@ -223,18 +246,7 @@ function deriveQuoteFromRow(r: QuotableRow, cfg: PricingConfig, internal?: boole
 
   const auto = ceilDiv(total * 10000, 10000 - cfg.min_margin_bp)
   const manual = internal ? (r.internal_sell_c ?? r.manual_sell_c) : r.manual_sell_c
-
-  let sell: number
-  let source: Quote['source']
-  let flag: Quote['flag']
-  if (manual == null) {
-    sell = auto; source = 'auto'; flag = 'auto'
-  } else if (cfg.force_min_margin !== 0 && manual < auto) {
-    sell = auto; source = 'manual'; flag = 'forced'
-  } else {
-    sell = manual; source = 'manual'
-    flag = manual < total ? 'LOSS' : manual < auto ? 'below_margin' : 'manual'
-  }
+  const { sell, source, flag } = decideSell(total, auto, manual, cfg.force_min_margin)
 
   return {
     mode_id: r.mode_id, paper_id: r.paper_id, size_key: r.size_key,

@@ -415,6 +415,83 @@ describe('计算器（下单域）', () => {
   })
 })
 
+describe('数量阶梯定价（D38）经计算器 / 管理 CRUD', () => {
+  const combo11 = () =>
+    (db.prepare('SELECT id FROM combos WHERE mode_id = 1 AND paper_id = 1').get() as { id: number }).id
+
+  it('PUT tiers → 计算器按数量取阶梯价，唯一舍入点贯通，internal 取 internal_sell_c ?? sell_c', async () => {
+    const put = await app.inject({
+      method: 'PUT',
+      url: `/api/pricing/combos/${combo11()}/prices/A4`,
+      headers: { cookie: adminCookie },
+      payload: {
+        sell_c: 7,
+        tiers: [
+          { min_qty: 100, sell_c: 6, internal_sell_c: 5 },
+          { min_qty: 500, sell_c: 4, internal_sell_c: null },
+        ],
+      },
+    })
+    expect(put.statusCode).toBe(200)
+
+    const at = async (quantity: number, cookie?: string) =>
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/calculator/quote',
+          ...(cookie ? { headers: { cookie } } : {}),
+          payload: { mode_id: 1, paper_id: 1, size_key: 'A4', quantity },
+        })
+      ).json() as { unit_price_c: number; base_unit_price_c: number; line_total: number }
+
+    expect((await at(50)).unit_price_c).toBe(7) // 未达首档 → 基础价
+    const q100 = await at(100)
+    expect(q100.unit_price_c).toBe(6) // 命中 100 档
+    expect(q100.base_unit_price_c).toBe(6)
+    expect(q100.line_total).toBe(6) // round(6×100/100)=6，唯一舍入点
+    expect((await at(500)).unit_price_c).toBe(4) // 命中 500 档
+    // member 内部价：internal_sell_c ?? sell_c
+    expect((await at(100, memberCookie)).unit_price_c).toBe(5)
+    expect((await at(500, memberCookie)).unit_price_c).toBe(4) // 该档 internal 为 null → 回落档内 sell_c
+  })
+
+  it('sell_c = 0 阶梯 → schema 422（对齐 DB CHECK sell_c > 0）', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/pricing/combos/${combo11()}/prices/A4`,
+      headers: { cookie: adminCookie },
+      payload: { sell_c: 7, tiers: [{ min_qty: 100, sell_c: 0 }] },
+    })
+    expect(res.statusCode).toBe(422)
+  })
+
+  it('has_tiers 标记反映配置（admin 速查）', async () => {
+    await app.inject({
+      method: 'PUT',
+      url: `/api/pricing/combos/${combo11()}/prices/A4`,
+      headers: { cookie: adminCookie },
+      payload: { sell_c: 7, tiers: [{ min_qty: 100, sell_c: 6 }] },
+    })
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/pricing/quotes',
+      headers: { cookie: adminCookie },
+    })
+    const rows = res.json() as Array<{
+      mode_id: number
+      paper_id: number
+      size_key: string
+      has_tiers: boolean
+    }>
+    expect(
+      rows.find((q) => q.mode_id === 1 && q.paper_id === 1 && q.size_key === 'A4')?.has_tiers,
+    ).toBe(true)
+    expect(
+      rows.find((q) => q.mode_id === 1 && q.paper_id === 1 && q.size_key === 'A3')?.has_tiers,
+    ).toBe(false)
+  })
+})
+
 describe('限流（PRD §6：/api/calculator/quote 按 IP）', () => {
   it('同 IP 第 61 次报价 → 429', async () => {
     const payload = { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 1 }

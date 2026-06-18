@@ -85,13 +85,6 @@
       "type": "laser",
       "equipment_cost_c": 280000,
       "monthly_cost_c": 0
-    },
-    {
-      "code": "CP5225",
-      "name": "HP Color LaserJet CP5225",
-      "type": "laser",
-      "equipment_cost_c": 200000,
-      "monthly_cost_c": 0
     }
   ],
   "print_modes": [
