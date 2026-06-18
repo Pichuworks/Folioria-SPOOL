@@ -3,7 +3,7 @@ import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { assertJobCostFields } from './db-guards.js'
-import { isConstraint } from './errors.js'
+import { ERROR_SCHEMA, isConstraint } from './errors.js'
 import { requireAdmin } from './guards.js'
 import { availability, canTransition, completeJob, JobError, recommendMachines, scheduleBoard } from './jobs.js'
 import { tryAdvanceToPrinted } from './orders.js'
@@ -12,6 +12,161 @@ import { deriveUnitCost, overheadC } from './pricing.js'
 
 const displayOrNull = (amount: unknown, currency: Currency): string | null =>
   amount == null ? null : formatMoney(money(amount as number), currency)
+
+// ---------- response schema（契约硬化）：字段集逐一镜像 handler 实际返回，宁可多列不可漏列。
+// fast-json-stringify 按 additionalProperties:false 白名单序列化——漏列即静默 strip。
+// 管理域：cost/profit 等成本字段对 admin 可见合规，故照列不剥（acceptance §6 仅约束下单域）。
+
+// jobs 表全列（SELECT * 快照；nullable 与 schema.sql notnull 对齐）
+const JOB_ROW_PROPS = {
+  id: { type: 'string' },
+  order_item_id: { type: ['string', 'null'] },
+  requester_id: { type: 'string' },
+  title: { type: 'string' },
+  mode_id: { type: 'integer' },
+  paper_id: { type: 'integer' },
+  size_key: { type: 'string' },
+  quantity: { type: 'integer' },
+  waste_quantity: { type: 'integer' },
+  pages_consumed: { type: ['integer', 'null'] },
+  file_url: { type: ['string', 'null'] },
+  paper_cost_c: { type: ['integer', 'null'] },
+  consumable_cost_c: { type: ['integer', 'null'] },
+  overhead_cost_c: { type: ['integer', 'null'] },
+  total_cost: { type: ['integer', 'null'] },
+  quoted_price: { type: ['integer', 'null'] },
+  profit: { type: ['integer', 'null'] },
+  status: { type: 'string' },
+  created_at: { type: 'string' },
+  started_at: { type: ['string', 'null'] },
+  completed_at: { type: ['string', 'null'] },
+  operator_id: { type: ['string', 'null'] },
+  notes: { type: ['string', 'null'] },
+}
+const JOB_ROW_SCHEMA = { type: 'object', additionalProperties: false, properties: JOB_ROW_PROPS }
+
+const AVAILABILITY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    paper_id: { type: 'integer' },
+    size_key: { type: 'string' },
+    on_hand: { type: 'integer' },
+    reserved: { type: 'integer' },
+    available: { type: 'integer' },
+  },
+}
+
+// GET /api/jobs item：jobs 全列 + join 名称（LEFT JOIN 书行可空）+ 金额 display
+const JOBS_LIST_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    data: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ...JOB_ROW_PROPS,
+          mode_name: { type: 'string' },
+          paper_name: { type: 'string' },
+          order_book_id: { type: ['string', 'null'] },
+          book_name: { type: ['string', 'null'] },
+          book_role: { type: ['string', 'null'] },
+          total_cost_display: { type: ['string', 'null'] },
+          profit_display: { type: ['string', 'null'] },
+          quoted_price_display: { type: ['string', 'null'] },
+        },
+      },
+    },
+    total: { type: 'integer' },
+  },
+}
+
+// POST /api/jobs：jobs 全列 + 可用量 + 缺料警示
+const JOB_CREATED_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ...JOB_ROW_PROPS,
+    availability: AVAILABILITY_SCHEMA,
+    availability_warning: { type: 'boolean' },
+  },
+}
+
+const BOARD_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      printer_id: { type: 'integer' },
+      code: { type: 'string' },
+      name: { type: 'string' },
+      status: { type: 'string' },
+      jobs: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id: { type: 'string' },
+            title: { type: 'string' },
+            status: { type: 'string' },
+            quantity: { type: 'integer' },
+            mode_name: { type: 'string' },
+            paper_name: { type: 'string' },
+            size_key: { type: 'string' },
+            due_date: { type: ['string', 'null'] },
+          },
+        },
+      },
+      offline_with_jobs: { type: 'boolean' },
+    },
+  },
+}
+
+const PREVIEW_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ink_c: { type: 'integer' },
+    paper_c: { type: 'integer' },
+    overhead_c: { type: 'integer' },
+    unit_total_c: { type: 'integer' },
+    ink_display: { type: 'string' },
+    paper_display: { type: 'string' },
+    overhead_display: { type: 'string' },
+    unit_total_display: { type: 'string' },
+    est_total: { type: ['integer', 'null'] },
+    est_total_display: { type: ['string', 'null'] },
+    // ...availability（扁平展开）
+    paper_id: { type: 'integer' },
+    size_key: { type: 'string' },
+    on_hand: { type: 'integer' },
+    reserved: { type: 'integer' },
+    available: { type: 'integer' },
+  },
+}
+
+const RECOMMEND_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      mode_id: { type: 'integer' },
+      mode_name: { type: 'string' },
+      printer_id: { type: 'integer' },
+      printer_code: { type: 'string' },
+      printer_status: { type: 'string' },
+      unit_cost_c: { type: 'integer' },
+      queue_pages: { type: 'integer' },
+      unit_cost_display: { type: 'string' },
+    },
+  },
+}
 
 export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
   app.get(
@@ -31,6 +186,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
             limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
           },
         },
+        response: { 200: JOBS_LIST_SCHEMA },
       },
     },
     async (req) => {
@@ -63,9 +219,16 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
   )
 
   // B4 按机台排产板（只读）：泳道 + due_date + 离线压活告警
-  app.get('/api/jobs/board', { preHandler: requireAdmin }, async () => scheduleBoard(db))
+  app.get(
+    '/api/jobs/board',
+    { preHandler: requireAdmin, schema: { response: { 200: BOARD_SCHEMA } } },
+    async () => scheduleBoard(db),
+  )
 
-  app.get('/api/jobs/availability', { preHandler: requireAdmin }, async (req, reply) => {
+  app.get(
+    '/api/jobs/availability',
+    { preHandler: requireAdmin, schema: { response: { 200: AVAILABILITY_SCHEMA, 422: ERROR_SCHEMA } } },
+    async (req, reply) => {
     const q = req.query as { paper_id?: string; size_key?: string }
     const paperId = Number(q.paper_id)
     if (!Number.isSafeInteger(paperId) || paperId < 1 || !q.size_key) {
@@ -74,7 +237,10 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
     return availability(db, paperId, q.size_key)
   })
 
-  app.get('/api/jobs/preview', { preHandler: requireAdmin }, async (req, reply) => {
+  app.get(
+    '/api/jobs/preview',
+    { preHandler: requireAdmin, schema: { response: { 200: PREVIEW_SCHEMA, 404: ERROR_SCHEMA, 422: ERROR_SCHEMA } } },
+    async (req, reply) => {
     const q = req.query as {
       mode_id?: string
       paper_id?: string
@@ -136,6 +302,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
             notes: { type: ['string', 'null'] },
           },
         },
+        response: { 201: JOB_CREATED_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -207,6 +374,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
             duplex: { type: 'string', enum: ['0', '1'] },
           },
         },
+        response: { 200: RECOMMEND_SCHEMA },
       },
     },
     async (req) => {
@@ -235,6 +403,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
           additionalProperties: false,
           properties: { mode_id: { type: 'integer', minimum: 1 } },
         },
+        response: { 200: JOB_ROW_SCHEMA, 404: ERROR_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -273,6 +442,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
             notes: { type: ['string', 'null'] },
           },
         },
+        response: { 200: JOB_ROW_SCHEMA, 404: ERROR_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -347,6 +517,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
             pages_consumed: { type: 'integer', minimum: 1 },
           },
         },
+        response: { 200: JOB_ROW_SCHEMA, 404: ERROR_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -360,7 +531,7 @@ export function registerJobsRoutes(app: FastifyInstance, db: DB): void {
         })
       } catch (err) {
         if (err instanceof JobError) {
-          return reply.status(err.statusCode).send({ error: err.message })
+          return reply.status(err.statusCode as 404 | 409).send({ error: err.message })
         }
         throw err
       }

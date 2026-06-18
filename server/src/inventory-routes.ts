@@ -3,7 +3,7 @@ import { type FastifyInstance } from 'fastify'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
 import { assertStockQuantity } from './db-guards.js'
-import { isConstraint } from './errors.js'
+import { ERROR_SCHEMA, isConstraint } from './errors.js'
 import { requireAdmin } from './guards.js'
 import { getLog } from './logger.js'
 import { formatMoneyC, moneyC } from './money.js'
@@ -31,11 +31,126 @@ interface MovementBody {
   exchange_rate_note?: string
 }
 
+// ---------- response schema（契约硬化）：镜像 handler 实际返回（SELECT * 全列 + 计算字段），
+// 宁可多列不可漏列；fast-json-stringify 漏列即静默 strip。管理域成本字段对 admin 合规。
+
+const LOCATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    sensor_id: { type: ['string', 'null'] },
+    moisture_status: { type: 'string' },
+  },
+}
+
+// paper_stocks 全列
+const PAPER_STOCK_PROPS = {
+  id: { type: 'string' },
+  paper_id: { type: 'integer' },
+  size_key: { type: 'string' },
+  quantity: { type: 'integer' },
+  location_id: { type: ['string', 'null'] },
+  opened: { type: 'integer' },
+  opened_at: { type: ['string', 'null'] },
+  notes: { type: ['string', 'null'] },
+  archived: { type: 'integer' },
+}
+const PAPER_STOCK_SCHEMA = { type: 'object', additionalProperties: false, properties: PAPER_STOCK_PROPS }
+// GET 列表：paper_stocks 全列 + join 名称 + 推导湿度状态
+const STOCK_LIST_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...PAPER_STOCK_PROPS,
+      paper_name: { type: 'string' },
+      size_label: { type: 'string' },
+      moisture_status: { type: 'string' },
+    },
+  },
+}
+
+// inventory_log 全列
+const INVENTORY_LOG_PROPS = {
+  id: { type: 'string' },
+  target_type: { type: 'string' },
+  target_id: { type: 'string' },
+  action: { type: 'string' },
+  quantity_delta: { type: 'integer' },
+  convert_group: { type: ['string', 'null'] },
+  reason: { type: ['string', 'null'] },
+  operator_id: { type: ['string', 'null'] },
+  related_job_id: { type: ['string', 'null'] },
+  original_currency: { type: ['string', 'null'] },
+  original_amount: { type: ['integer', 'null'] },
+  converted_cost_c: { type: ['integer', 'null'] },
+  exchange_rate_note: { type: ['string', 'null'] },
+  created_at: { type: 'string' },
+}
+const INVENTORY_LOG_SCHEMA = { type: 'object', additionalProperties: false, properties: INVENTORY_LOG_PROPS }
+const LOG_LIST_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    data: { type: 'array', items: INVENTORY_LOG_SCHEMA },
+    total: { type: 'integer' },
+  },
+}
+
+const CONVERT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { convert_group: { type: 'string' } },
+}
+
+// consumables 全列
+const CONSUMABLE_PROPS = {
+  id: { type: 'string' },
+  name: { type: 'string' },
+  type: { type: 'string' },
+  printer_id: { type: 'integer' },
+  quantity: { type: 'integer' },
+  installed_at: { type: ['string', 'null'] },
+  cost_model: { type: 'string' },
+  rated_life_pages: { type: ['integer', 'null'] },
+  current_usage_pages: { type: 'integer' },
+  unit_cost_c: { type: 'integer' },
+  supplier: { type: ['string', 'null'] },
+  alert_threshold_bp: { type: 'integer' },
+  archived: { type: 'integer' },
+}
+const CONSUMABLE_SCHEMA = { type: 'object', additionalProperties: false, properties: CONSUMABLE_PROPS }
+// POST 创建：consumables 全列 + remaining_bp
+const CONSUMABLE_CREATED_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { ...CONSUMABLE_PROPS, remaining_bp: { type: ['integer', 'null'] } },
+}
+// GET 列表：consumables 全列 + join 设备名 + 推导剩余 + 单价 display
+const CONSUMABLE_LIST_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...CONSUMABLE_PROPS,
+      printer_code: { type: 'string' },
+      printer_name: { type: 'string' },
+      remaining_bp: { type: ['integer', 'null'] },
+      unit_cost_display: { type: 'string' },
+    },
+  },
+}
+
 export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
   // ---------- locations ----------
 
-  app.get('/api/inventory/locations', { preHandler: requireAdmin }, async () =>
-    db.prepare('SELECT * FROM locations ORDER BY id').all(),
+  app.get(
+    '/api/inventory/locations',
+    { preHandler: requireAdmin, schema: { response: { 200: { type: 'array', items: LOCATION_SCHEMA } } } },
+    async () => db.prepare('SELECT * FROM locations ORDER BY id').all(),
   )
 
   app.post(
@@ -52,6 +167,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             sensor_id: { type: ['string', 'null'] },
           },
         },
+        response: { 201: LOCATION_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -82,6 +198,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             moisture_status: { type: 'string', enum: ['ok', 'warning', 'danger'] },
           },
         },
+        response: { 200: LOCATION_SCHEMA, 404: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -102,10 +219,13 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
 
   // ---------- paper_stocks ----------
 
-  app.get('/api/inventory/stocks', { preHandler: requireAdmin }, async () =>
-    db
-      .prepare(
-        `SELECT ps.*, p.name AS paper_name, s.label AS size_label,
+  app.get(
+    '/api/inventory/stocks',
+    { preHandler: requireAdmin, schema: { response: { 200: STOCK_LIST_SCHEMA } } },
+    async () =>
+      db
+        .prepare(
+          `SELECT ps.*, p.name AS paper_name, s.label AS size_label,
                 COALESCE(l.moisture_status, 'ok') AS moisture_status
          FROM paper_stocks ps
          JOIN papers p ON p.id = ps.paper_id
@@ -113,8 +233,8 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
          LEFT JOIN locations l ON l.id = ps.location_id
          WHERE ps.archived = 0
          ORDER BY p.id, s.sort`,
-      )
-      .all(),
+        )
+        .all(),
   )
 
   app.post(
@@ -133,6 +253,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             notes: { type: ['string', 'null'] },
           },
         },
+        response: { 201: PAPER_STOCK_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -181,6 +302,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             archived: { type: 'boolean' },
           },
         },
+        response: { 200: PAPER_STOCK_SCHEMA, 404: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -233,6 +355,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             exchange_rate_note: { type: 'string' },
           },
         },
+        response: { 201: INVENTORY_LOG_SCHEMA, 404: ERROR_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -326,6 +449,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             reason: { type: ['string', 'null'] },
           },
         },
+        response: { 201: CONVERT_SCHEMA, 404: ERROR_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -379,7 +503,10 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
 
   // ---------- consumables（C2：单表 + cost_model 区分） ----------
 
-  app.get('/api/inventory/consumables', { preHandler: requireAdmin }, async () => {
+  app.get(
+    '/api/inventory/consumables',
+    { preHandler: requireAdmin, schema: { response: { 200: CONSUMABLE_LIST_SCHEMA } } },
+    async () => {
     const currency = baseCurrency(db)
     const rows = db
       .prepare(
@@ -421,6 +548,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             alert_threshold_bp: { type: 'integer', minimum: 0, maximum: 10000 },
           },
         },
+        response: { 201: CONSUMABLE_CREATED_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -493,6 +621,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             archived: { type: 'boolean' },
           },
         },
+        response: { 200: CONSUMABLE_SCHEMA, 404: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -539,6 +668,7 @@ export function registerInventoryRoutes(app: FastifyInstance, db: DB): void {
             limit: { type: 'integer', minimum: 1, maximum: 500, default: 100 },
           },
         },
+        response: { 200: LOG_LIST_SCHEMA },
       },
     },
     async (req) => {

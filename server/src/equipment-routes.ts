@@ -3,6 +3,7 @@ import { type FastifyInstance } from 'fastify'
 import { calibrationDue } from './alerts.js'
 import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { ERROR_SCHEMA } from './errors.js'
 import { getLog } from './logger.js'
 import { requireAdmin } from './guards.js'
 import { formatMoney, formatMoneyC, money, moneyC, type Currency } from './money.js'
@@ -39,15 +40,72 @@ const MAINT_TYPES = [
   'other',
 ] as const
 
+// ---------- response schema（契约硬化）：镜像 handler 实际返回，宁可多列不可漏列。
+// 管理域 cost 字段对 admin 可见合规（acceptance §6 仅约束下单域）。
+
+// printers 全列（SELECT *）+ printerDto 计算字段
+const PRINTER_DTO_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'integer' },
+    code: { type: 'string' },
+    name: { type: 'string' },
+    type: { type: 'string' },
+    location: { type: ['string', 'null'] },
+    status: { type: 'string' },
+    total_pages: { type: 'integer' },
+    equipment_cost_c: { type: 'integer' },
+    monthly_cost_c: { type: 'integer' },
+    last_calibration_at: { type: ['string', 'null'] },
+    last_calibration_pages: { type: 'integer' },
+    calibration_interval_pages: { type: ['integer', 'null'] },
+    calibration_interval_days: { type: ['integer', 'null'] },
+    archived: { type: 'integer' },
+    calibration_due: { type: 'boolean' },
+    equipment_cost_display: { type: 'string' },
+    monthly_cost_display: { type: 'string' },
+  },
+}
+
+// maintenance_events 全列（SELECT *）
+const MAINT_EVENT_PROPS = {
+  id: { type: 'string' },
+  printer_id: { type: 'integer' },
+  type: { type: 'string' },
+  occurred_at: { type: 'string' },
+  operator_id: { type: ['string', 'null'] },
+  notes: { type: ['string', 'null'] },
+  next_due: { type: ['string', 'null'] },
+  cost: { type: ['integer', 'null'] },
+  final_usage: { type: ['integer', 'null'] },
+}
+const MAINT_EVENT_SCHEMA = { type: 'object', additionalProperties: false, properties: MAINT_EVENT_PROPS }
+// GET 列表额外带 cost_display
+const MAINT_LIST_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { ...MAINT_EVENT_PROPS, cost_display: { type: ['string', 'null'] } },
+  },
+}
+
 export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
-  app.get('/api/equipment', { preHandler: requireAdmin }, async () => {
+  app.get(
+    '/api/equipment',
+    { preHandler: requireAdmin, schema: { response: { 200: { type: 'array', items: PRINTER_DTO_SCHEMA } } } },
+    async () => {
     const now = new Date()
     const currency = baseCurrency(db)
     const rows = db.prepare('SELECT * FROM printers WHERE archived = 0 ORDER BY id').all() as PrinterRow[]
     return rows.map((p) => printerDto(p, now, currency))
   })
 
-  app.get('/api/equipment/:id', { preHandler: requireAdmin }, async (req, reply) => {
+  app.get(
+    '/api/equipment/:id',
+    { preHandler: requireAdmin, schema: { response: { 200: PRINTER_DTO_SCHEMA, 404: ERROR_SCHEMA } } },
+    async (req, reply) => {
     const id = Number((req.params as { id: string }).id)
     const p = db.prepare('SELECT * FROM printers WHERE id = ? AND archived = 0').get(id) as PrinterRow | undefined
     if (!p) return reply.status(404).send({ error: 'not_found' })
@@ -74,6 +132,7 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
             archived: { type: 'boolean' },
           },
         },
+        response: { 200: PRINTER_DTO_SCHEMA, 404: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {
@@ -97,7 +156,10 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
     },
   )
 
-  app.get('/api/equipment/:id/maintenance', { preHandler: requireAdmin }, async (req, reply) => {
+  app.get(
+    '/api/equipment/:id/maintenance',
+    { preHandler: requireAdmin, schema: { response: { 200: MAINT_LIST_SCHEMA, 404: ERROR_SCHEMA } } },
+    async (req, reply) => {
     const id = Number((req.params as { id: string }).id)
     if (!db.prepare('SELECT 1 FROM printers WHERE id = ? AND archived = 0').get(id)) {
       return reply.status(404).send({ error: 'not_found' })
@@ -131,6 +193,7 @@ export function registerEquipmentRoutes(app: FastifyInstance, db: DB): void {
             consumable_id: { type: 'string' },
           },
         },
+        response: { 201: MAINT_EVENT_SCHEMA, 404: ERROR_SCHEMA, 409: ERROR_SCHEMA, 422: ERROR_SCHEMA },
       },
     },
     async (req, reply) => {

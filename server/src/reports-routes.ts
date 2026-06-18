@@ -212,25 +212,157 @@ function sendCsv(reply: FastifyReply, filename: string, csv: string) {
   return reply.send(csv)
 }
 
+// ---------- response schema（契约硬化）：镜像 handler 实际返回；金额值由 COALESCE 收敛为整数。
+// 管理域报表 cost/profit 对 admin 可见合规（acceptance §6 仅约束下单域）。
+
+const MONTHLY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    month: { type: 'string' },
+    jobs_done: { type: 'integer' },
+    pages: { type: 'integer' },
+    external: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        jobs: { type: 'integer' },
+        revenue: { type: 'integer' },
+        cost: { type: 'integer' },
+        profit: { type: 'integer' },
+        revenue_display: { type: 'string' },
+        cost_display: { type: 'string' },
+        profit_display: { type: 'string' },
+      },
+    },
+    internal: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        jobs: { type: 'integer' },
+        cost: { type: 'integer' },
+        pages: { type: 'integer' },
+        cost_display: { type: 'string' },
+      },
+    },
+    writeoff: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        jobs: { type: 'integer' },
+        cost: { type: 'integer' },
+        cost_display: { type: 'string' },
+      },
+    },
+  },
+}
+
+const EQUIPMENT_USAGE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    month: { type: 'string' },
+    printers: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'integer' },
+          code: { type: 'string' },
+          name: { type: 'string' },
+          status: { type: 'string' },
+          total_pages: { type: 'integer' },
+          month_pages: { type: 'integer' },
+          month_jobs: { type: 'integer' },
+        },
+      },
+    },
+  },
+}
+
+const PAPER_CONSUMPTION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    month: { type: 'string' },
+    rows: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          paper_id: { type: 'integer' },
+          name: { type: 'string' },
+          size_key: { type: 'string' },
+          consumed: { type: 'integer' },
+          scrapped: { type: 'integer' },
+          total: { type: 'integer' },
+        },
+      },
+    },
+  },
+}
+
+const TREND_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      month: { type: 'string' },
+      revenue: { type: 'integer' },
+      cost: { type: 'integer' },
+      profit: { type: 'integer' },
+      internal_cost: { type: 'integer' },
+      revenue_display: { type: 'string' },
+      cost_display: { type: 'string' },
+      profit_display: { type: 'string' },
+    },
+  },
+}
+
+const SNAPSHOTS_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      month: { type: 'string' },
+      ext_revenue: { type: 'integer' },
+      ext_cost: { type: 'integer' },
+      ext_profit: { type: 'integer' },
+      int_cost: { type: 'integer' },
+      jobs_done: { type: 'integer' },
+      pages: { type: 'integer' },
+      generated_at: { type: 'string' },
+      ext_revenue_display: { type: 'string' },
+      ext_cost_display: { type: 'string' },
+      ext_profit_display: { type: 'string' },
+      int_cost_display: { type: 'string' },
+    },
+  },
+}
+
 export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
   // 月度成本/收入，内部消耗单列（PRD §8：内部 = quoted_price IS NULL）
   app.get(
     '/api/reports/monthly',
-    { preHandler: requireAdmin, schema: { querystring: MONTH_QUERY } },
+    { preHandler: requireAdmin, schema: { querystring: MONTH_QUERY, response: { 200: MONTHLY_SCHEMA } } },
     async (req) => monthlyReport(db, monthOf(req.query)),
   )
 
   // 设备利用率：done 作业经 mode→printer 归集本月页数/作业数
   app.get(
     '/api/reports/equipment-usage',
-    { preHandler: requireAdmin, schema: { querystring: MONTH_QUERY } },
+    { preHandler: requireAdmin, schema: { querystring: MONTH_QUERY, response: { 200: EQUIPMENT_USAGE_SCHEMA } } },
     async (req) => equipmentUsage(db, monthOf(req.query)),
   )
 
   // 纸张消耗排行：inventory_log consume/scrap 出库（张），purchase/adjust/convert 不计
   app.get(
     '/api/reports/paper-consumption',
-    { preHandler: requireAdmin, schema: { querystring: MONTH_QUERY } },
+    { preHandler: requireAdmin, schema: { querystring: MONTH_QUERY, response: { 200: PAPER_CONSUMPTION_SCHEMA } } },
     async (req) => paperConsumption(db, monthOf(req.query)),
   )
 
@@ -283,12 +415,17 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
   )
 
   // 趋势数据：最近 6 个月汇总（Dashboard 图表用）——单条 GROUP BY SQL
-  app.get('/api/reports/trend', { preHandler: requireAdmin }, async () => {
+  app.get(
+    '/api/reports/trend',
+    { preHandler: requireAdmin, schema: { response: { 200: TREND_SCHEMA } } },
+    async () => {
     const now = new Date()
-    const startMonth = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().slice(0, 7)
+    // review M5：月份标签一律 UTC，与 DB 的 substr(completed_at,1,7)（UTC 时间戳）对齐。
+    // 曾用本地时区构造（new Date(y, m-i, 1)），在 UTC+N 服务器上整体错位一个月、当前月显示为 0。
+    const startMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1)).toISOString().slice(0, 7)
     const months: string[] = []
     for (let i = 5; i >= 0; i--) {
-      months.push(new Date(now.getFullYear(), now.getMonth() - i, 1).toISOString().slice(0, 7))
+      months.push(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1)).toISOString().slice(0, 7))
     }
 
     const [rangeStart] = monthRange(startMonth)
@@ -330,7 +467,10 @@ export function registerReportsRoutes(app: FastifyInstance, db: DB): void {
   })
 
   // D34 历史快照列表（admin）：月初 timer 归档，按月倒序
-  app.get('/api/reports/snapshots', { preHandler: requireAdmin }, async () => {
+  app.get(
+    '/api/reports/snapshots',
+    { preHandler: requireAdmin, schema: { response: { 200: SNAPSHOTS_SCHEMA } } },
+    async () => {
     const currency = baseCurrency(db)
     return listSnapshots(db).map((s) => ({
       ...s,
