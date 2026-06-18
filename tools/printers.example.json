@@ -1,0 +1,11 @@
+{
+  "printers": [
+    { "code": "C850",   "name": "Canon imagePRESS C850", "ip": "192.168.x.x" },
+    { "code": "P708",   "name": "Epson SC-P708",         "ip": "192.168.x.x" },
+    { "code": "G580",   "name": "Canon G580",            "ip": "192.168.x.x" },
+    { "code": "L15168", "name": "Epson L15168",          "ip": "192.168.x.x" },
+    { "code": "C650",   "name": "OKI C650",              "ip": "192.168.x.x" }
+  ],
+  "snmpCommunity": "public",
+  "timeoutMs": 5000
+}

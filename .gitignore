@@ -7,3 +7,5 @@ coverage/
 *.db-wal
 *.db-shm
 .env
+tools/printers.json
+tools/probe-results.json

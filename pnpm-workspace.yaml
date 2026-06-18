@@ -1,6 +1,7 @@
 packages:
   - server
   - web
+  - tools
 
 allowBuilds:
   better-sqlite3: true
