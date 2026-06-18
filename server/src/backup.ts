@@ -8,8 +8,10 @@ export interface BackupOptions {
   stamp?: string
 }
 
+// review L-backup：含毫秒避免同秒两次备份撞名（VACUUM INTO 目标已存在会失败）。
+// 'YYYYMMDD-HHmmss.SSS'，毫秒零填充故字典序仍等于时间序。
 const stampNow = (): string =>
-  new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
+  new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 19)
 
 /**
  * PRD E 节：备份一律 VACUUM INTO（一致性快照），禁止直接 cp（WAL 下不一致）。

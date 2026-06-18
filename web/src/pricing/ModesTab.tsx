@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
+import { parseIntStrict } from '../num'
 import { Field, Modal, PillBtn, specInput, toast } from '../spec'
 import { actionBtn, type ModeDto, type PrinterDto, type SizeDto } from './types'
 
@@ -25,9 +26,9 @@ function ModeEditModal({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    const price = Math.trunc(Number(inkPrice))
-    const ys = Math.trunc(Number(yieldSheets))
-    if (name.trim() === '' || price < 0 || ys < 1) {
+    const price = parseIntStrict(inkPrice)
+    const ys = parseIntStrict(yieldSheets)
+    if (name.trim() === '' || price === null || price < 0 || ys === null || ys < 1) {
       setError('名称非空、墨价非负整数（_c）、产能正整数')
       return
     }
@@ -40,7 +41,12 @@ function ModeEditModal({
       color_class: colorClass.trim() === '' ? null : colorClass.trim(),
     }
     if (mode.pricing_mode === 'ml' && mlPerBatch.trim() !== '') {
-      body.ml_per_batch = Math.trunc(Number(mlPerBatch))
+      const ml = parseIntStrict(mlPerBatch)
+      if (ml === null || ml < 1) {
+        setError('每批 ml 须为正整数')
+        return
+      }
+      body.ml_per_batch = ml
     }
     const res = await send('PATCH', `/api/pricing/modes/${mode.id}`, body)
     if (res.ok) { toast('模式已保存', 'ok'); onDone() }
@@ -156,20 +162,27 @@ export default function ModesTab({
 
   const addMode = async (e: FormEvent) => {
     e.preventDefault()
+    const inkC = parseIntStrict(form.ink_price_c)
+    const ys = parseIntStrict(form.yield_sheets)
+    const ml = form.pricing_mode === 'ml' ? parseIntStrict(form.ml_per_batch) : null
+    if (form.name.trim() === '' || !Number(form.printer_id) || form.ref_size === '' || form.max_size === '') return
+    if (inkC === null || inkC < 0 || ys === null || ys < 1 || (form.pricing_mode === 'ml' && (ml === null || ml < 1))) {
+      setNotice('墨价非负整数、产能正整数' + (form.pricing_mode === 'ml' ? '、每批 ml 正整数' : ''))
+      return
+    }
     const body = {
       name: form.name.trim(),
       printer_id: Number(form.printer_id),
       ink_type: form.ink_type,
       pricing_mode: form.pricing_mode,
-      ink_price_c: Math.trunc(Number(form.ink_price_c)),
-      ml_per_batch: form.pricing_mode === 'ml' ? Math.trunc(Number(form.ml_per_batch)) : null,
-      yield_sheets: Math.trunc(Number(form.yield_sheets)),
+      ink_price_c: inkC,
+      ml_per_batch: ml,
+      yield_sheets: ys,
       ref_size: form.ref_size,
       max_size: form.max_size,
       duplex: form.duplex,
       color_class: form.color_class.trim() === '' ? null : form.color_class.trim(),
     }
-    if (body.name === '' || !body.printer_id || body.ref_size === '' || body.max_size === '') return
     const res = await send('POST', '/api/pricing/modes', body)
     if (res.ok) {
       setAdding(false)

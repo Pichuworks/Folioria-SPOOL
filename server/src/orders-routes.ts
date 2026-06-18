@@ -35,10 +35,6 @@ import {
 import { checkAutoUpgrade } from './membership.js'
 import { getPayments, PaymentError, projectStatus, recordPayment, type PaymentRow } from './payments.js'
 
-// Re-export from shared module for backward compatibility
-export { ORDER_SCHEMA, orderDto, type DtoOptions } from './order-dto.js'
-export { PRECHECK_SCHEMA, ORDER_ITEM_SCHEMA, ORDER_BOOK_COMPONENT_SCHEMA, ORDER_BOOK_FINISHING_SCHEMA, ORDER_BOOK_SCHEMA, PAYMENT_SCHEMA } from './order-dto.js'
-
 
 // ---------- 下单请求行（单页 item + D27 书行），两个下单端点共用 ----------
 
@@ -497,6 +493,17 @@ export function registerOrdersRoutes(app: FastifyInstance, db: DB): void {
             },
             offset: { type: 'integer', minimum: 0, default: 0 },
             limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+          },
+        },
+        // review L-list：与单查端点一致，列表也走 ORDER_SCHEMA 序列化白名单（additionalProperties:false strip）
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              data: { type: 'array', items: ORDER_SCHEMA },
+              total: { type: 'integer' },
+            },
           },
         },
       },

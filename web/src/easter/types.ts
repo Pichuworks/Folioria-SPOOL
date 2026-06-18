@@ -35,6 +35,19 @@ export type SoloType =
   | 'pause' | 'sequence' | 'turn' | 'spin' | 'cat_antics'
   | null
 
+/**
+ * payload.ts(@generated) 互动段的原始结构（codec 解码前的字段缩写形状）。
+ * 集中声明以替代 interactions.ts / Overlay.tsx 中散落的 `as any`（review L-easter）。
+ * 字段缺省可空：旧 payload 不含某段时 `?? []` 兜底，行为与原 `as any` 完全一致。
+ */
+export interface RawPayload {
+  ix?: Array<{ a: string; b: string; ad: string; bd: string; ch: number; cd: number }>
+  cx?: Array<{ cat: string; tgt: string; td: string; ch: number; cd: number }>
+  so?: Array<{ id: string; ty: string; dl?: string[] }>
+  ge?: Array<{ ty: string; ch: number; cd: number }>
+  ed?: string[]
+}
+
 export interface SpriteInstance {
   cfg: SpriteConfig
   x: number

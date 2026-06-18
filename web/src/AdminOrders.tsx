@@ -267,6 +267,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
     const mag = Number(payAmount)
     if (!Number.isSafeInteger(mag) || mag <= 0) {
       setErr('金额须为正整数（最小货币单位）。')
+      setBusy(false) // review H1：校验失败必须解锁，否则整个订单抽屉的按钮永久禁用（死锁）
       return
     }
     // 退款落负数；收款落正数（amount 带符号）
@@ -302,6 +303,7 @@ const OrderDetail = memo(function OrderDetail({ order, onUpdated, onRefresh }: {
     const value = Number(discount)
     if (!Number.isSafeInteger(value) || value < 0) {
       setErr('折扣必须是非负整数减额（C7 禁百分比）。')
+      setBusy(false) // review H1：同上，校验失败必须解锁
       return
     }
     const res = await patchOrderDiscount(order.id, value)

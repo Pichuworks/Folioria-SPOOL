@@ -179,6 +179,11 @@ export async function changePassword(
       `UPDATE sessions SET revoked_at = ?
        WHERE user_id = ? AND revoked_at IS NULL AND (? IS NULL OR token_hash != ?)`,
     ).run(now, userId, keepHash, keepHash)
+    // review L-auth：主动改密后作废该用户在途未消费的重置 token（与 resetPassword 对齐），
+    // 防止已签发的重置链接在改密后仍可被持有者用来夺回账号。
+    db.prepare(
+      'UPDATE password_reset_tokens SET consumed_at = ? WHERE user_id = ? AND consumed_at IS NULL',
+    ).run(now, userId)
   })()
   return true
 }

@@ -150,6 +150,26 @@ describe('R3 下单与金额（§1.2/§1.3 唯一舍入点 + 快照）', () => {
     expect(dto.subtotal).toBe(14)
   })
 
+  it('数量阶梯：下单 unit_price_c 取命中档价并定格快照，改阶梯不动既有单（D38）', async () => {
+    const comboId = (
+      db.prepare('SELECT id FROM combos WHERE mode_id = 1 AND paper_id = 1').get() as { id: number }
+    ).id
+    db.prepare(
+      'INSERT INTO combo_price_tiers (combo_id, size_key, min_qty, sell_c, internal_sell_c) VALUES (?, ?, ?, ?, ?)',
+    ).run(comboId, 'A4', 200, 5, null)
+    const cookie = await login('a@cust.example')
+    // qty 200 命中 200 档 → 单价 5；line_total = round(5×200/100)=10（唯一舍入点）
+    const order = await placeOrder(cookie, [{ mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 200 }])
+    expect(order.items[0]?.unit_price_c).toBe(5)
+    expect(order.items[0]?.line_total).toBe(10)
+    // 改阶梯不影响既有订单（快照定格）
+    db.prepare('UPDATE combo_price_tiers SET sell_c = 99 WHERE combo_id = ? AND size_key = ?').run(comboId, 'A4')
+    const after = (
+      await app.inject({ method: 'GET', url: `/api/orders/${order.id}`, headers: { cookie } })
+    ).json() as OrderDto
+    expect(after.items[0]?.unit_price_c).toBe(5)
+  })
+
   it('member 下单取 internal_sell_c 口径并置 is_internal=1（B1.1）', async () => {
     db.prepare(
       `UPDATE combo_prices SET internal_sell_c = 5

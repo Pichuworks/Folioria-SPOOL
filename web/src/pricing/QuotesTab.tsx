@@ -1,5 +1,6 @@
 import { useRef, useMemo, useState, type FormEvent } from 'react'
 import { send } from '../api'
+import { parseIntStrict } from '../num'
 import { Field, Leader, Modal, Paginator, PillBtn, specInput, toast, usePagination } from '../spec'
 import {
   actionBtn,
@@ -49,11 +50,13 @@ function TierEditor({
   const [iPrice, setIPrice] = useState('')
 
   const add = () => {
-    const q = Math.trunc(Number(qty))
-    const p = Math.trunc(Number(price))
-    if (q < 2 || p < 0) return
+    // review L-input/L-tier-nan：严格解析，NaN/非整数 → null → 被守卫拦下（旧 Math.trunc 让 NaN 绕过）
+    const q = parseIntStrict(qty)
+    const p = parseIntStrict(price)
+    if (q === null || q < 2 || p === null || p < 0) return
     if (tiers.some((t) => t.min_qty === q)) return
-    const ip = iPrice.trim() === '' ? null : Math.trunc(Number(iPrice))
+    const ip = iPrice.trim() === '' ? null : parseIntStrict(iPrice)
+    if (iPrice.trim() !== '' && (ip === null || ip < 1)) return
     const next = [...tiers, { min_qty: q, sell_c: p, internal_sell_c: ip }].sort(
       (a, b) => a.min_qty - b.min_qty,
     )

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { decode, checkTrigger } from './codec'
 import { _d } from './payload'
-import type { StarEntry, SpriteConfig, Phase } from './types'
+import type { StarEntry, SpriteConfig, Phase, RawPayload } from './types'
 import Sky from './Sky'
 import Credits from './Credits'
 import Stage from './Stage'
@@ -98,7 +98,7 @@ export default function Overlay({ decryptionKey, onClose }: Props) {
     })
 
     setTagline(_d.t.map(l => d(l)))
-    setEnding(((_d as any).ed ?? []).map((l: string) => d(l)))
+    setEnding(((_d as unknown as RawPayload).ed ?? []).map((l) => d(l)))
   }, [])
 
   useEffect(() => {

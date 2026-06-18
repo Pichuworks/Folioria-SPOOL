@@ -286,16 +286,21 @@ export interface CreateOrderInput {
 
 /** R1/R3 + D27: 下单——unit_price_c 当场定格快照（单页 item 与书行同口径），line_total 唯一舍入点，subtotal 整数加法 */
 export function createOrder(db: DB, input: CreateOrderInput): string {
-  const cfg = db.prepare('SELECT quote_valid_days FROM system_config WHERE id = 1').get() as
-    | { quote_valid_days: number }
-    | undefined
+  const cfg = db
+    .prepare('SELECT quote_valid_days, pricing_needs_reentry FROM system_config WHERE id = 1')
+    .get() as { quote_valid_days: number; pricing_needs_reentry: number } | undefined
   if (!cfg) throw new Error('orders: system_config missing (run spool init)')
+  // M8 切币防护栏：定价待按新币种重录期间拒绝下单，避免静默按旧量级计价（见 migration 0034 / 0019）
+  if (cfg.pricing_needs_reentry !== 0) throw new OrderError(409, 'pricing_reentry_required')
 
   const getModeForFin = db.prepare('SELECT duplex FROM print_modes WHERE id = ?')
   const getSizeForFin = db.prepare('SELECT area FROM sizes WHERE key = ?')
 
   const priced = input.items.map((item, idx) => {
-    const q = quote(db, item.mode_id, item.paper_id, item.size_key, { internal: input.internal })
+    const q = quote(db, item.mode_id, item.paper_id, item.size_key, {
+      internal: input.internal,
+      quantity: item.quantity,
+    })
     if (!q) throw new OrderError(422, `item_${idx}_not_quotable`)
 
     let unitC = q.sell_c as number

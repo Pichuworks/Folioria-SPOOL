@@ -34,6 +34,14 @@ export function migrate(db: DB, dir: string = MIGRATIONS_DIR): number {
     try {
       db.transaction(() => {
         db.exec(sql)
+        // 迁移含表重建时，内联的 PRAGMA foreign_key_check 结果被 db.exec 丢弃（review L-0027）；
+        // 在事务内显式校验，发现孤儿 FK 即抛错回滚，不让违规静默 COMMIT。
+        const violations = db.pragma('foreign_key_check') as unknown[]
+        if (violations.length > 0) {
+          throw new Error(
+            `migration ${file}: foreign_key_check failed: ${JSON.stringify(violations)}`,
+          )
+        }
         db.pragma(`user_version = ${version}`)
       })()
     } catch (err) {

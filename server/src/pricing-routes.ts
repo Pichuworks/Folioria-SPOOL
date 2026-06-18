@@ -10,6 +10,17 @@ import { invalidateQuotableCache, listProducts, listQuotable, quote } from './pr
 import { sendXlsx } from './xlsx.js'
 
 const MONEY_C = { type: 'integer', minimum: 0 }
+// review M3：下单域 calculator 端点的序列化白名单——货币对象（books/finishings/book-config 返回；
+// quote 端点返回 currency.code 字符串，不用本 schema）。additionalProperties:false 机械拦截成本字段泄露。
+const CALC_CURRENCY = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    code: { type: 'string' },
+    symbol: { type: 'string' },
+    decimal_places: { type: 'integer' },
+  },
+}
 const ID_PARAM = {
   type: 'object',
   required: ['id'],
@@ -537,8 +548,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     additionalProperties: false,
     properties: {
       min_qty: { type: 'integer', minimum: 2 },
-      sell_c: { type: 'integer', minimum: 0 },
-      internal_sell_c: { type: ['integer', 'null'], minimum: 0 },
+      sell_c: { type: 'integer', minimum: 1 }, // DB CHECK (sell_c > 0)：minimum 0 会过 schema 但撞 DB 约束
+      internal_sell_c: { type: ['integer', 'null'], minimum: 1 },
     },
   }
 
@@ -775,6 +786,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     const ExcelJS = (await import('exceljs')).default
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.read(file.file)
+    // review L-import：超 200MB 上游会截断流，给出干净 413 而非解析失败的 500
+    if (file.file.truncated) return reply.status(413).send({ error: 'file_too_large' })
     const ws = wb.worksheets[0]
     if (!ws) return reply.status(400).send({ error: 'empty_workbook' })
 
@@ -1056,7 +1069,62 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   // ③⑤/D27 下单域: 书册目录（机器对客户不可见，组件含纸/尺寸/色彩档/单双面 + 工艺）
   app.get(
     '/api/calculator/books',
-    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              currency: CALC_CURRENCY,
+              books: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: 'integer' },
+                    name: { type: 'string' },
+                    components: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          id: { type: 'integer' },
+                          role: { type: 'string' },
+                          paper_id: { type: 'integer' },
+                          paper_name: { type: 'string' },
+                          size_key: { type: 'string' },
+                          size_label: { type: 'string' },
+                          color_class: { type: 'string' },
+                          duplex: { type: 'boolean' },
+                        },
+                      },
+                    },
+                    finishings: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          id: { type: 'integer' },
+                          name: { type: 'string' },
+                          pricing: { type: 'string' },
+                          price_c: { type: 'integer' },
+                          price_display: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     async () => {
       const currency = baseCurrency(db)
       const books = db.prepare('SELECT id, name FROM book_products WHERE archived = 0 ORDER BY id').all() as Array<{
@@ -1238,7 +1306,35 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   // 下单域: 工艺目录（客户自选单张工艺——排除 binding 类，装订仅书册用）
   app.get(
     '/api/calculator/finishings',
-    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              currency: CALC_CURRENCY,
+              finishings: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: 'integer' },
+                    name: { type: 'string' },
+                    pricing: { type: 'string' },
+                    price_c: { type: 'integer' },
+                    category: { type: ['string', 'null'] },
+                    price_display: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     async () => {
       const currency = baseCurrency(db)
       const fins = db
@@ -1261,7 +1357,85 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   // D36 下单域: 书册配置菜单（纸张×尺寸可用性 + 分组工艺目录）
   app.get(
     '/api/calculator/book-config',
-    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              currency: CALC_CURRENCY,
+              sizes: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    key: { type: 'string' },
+                    label: { type: 'string' },
+                    area: { type: 'number' },
+                    sort: { type: 'integer' },
+                    width_mm: { type: ['integer', 'null'] },
+                    height_mm: { type: ['integer', 'null'] },
+                  },
+                },
+              },
+              papers: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: 'integer' },
+                    name: { type: 'string' },
+                    category: { type: ['string', 'null'] },
+                    gsm: { type: ['integer', 'null'] },
+                    available_sizes: { type: 'array', items: { type: 'string' } },
+                    color_classes: { type: 'array', items: { type: 'string' } },
+                  },
+                },
+              },
+              finishings: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  binding: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        id: { type: 'integer' },
+                        name: { type: 'string' },
+                        pricing: { type: 'string' },
+                        price_c: { type: 'integer' },
+                        price_display: { type: 'string' },
+                      },
+                    },
+                  },
+                  addons: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        id: { type: 'integer' },
+                        name: { type: 'string' },
+                        pricing: { type: 'string' },
+                        price_c: { type: 'integer' },
+                        category: { type: ['string', 'null'] },
+                        price_display: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     async (req) => {
       const internal = req.user?.role === 'member'
       const currency = baseCurrency(db)
@@ -1355,6 +1529,55 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
             finishing_ids: { type: 'array', maxItems: 20, items: { type: 'integer', minimum: 1 } },
           },
         },
+        // review M3：仅售价侧白名单（成本字段不入下单域）
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              book_id: { type: ['integer', 'null'] },
+              name: { type: 'string' },
+              count: { type: 'integer' },
+              unit_price_c: { type: 'integer' },
+              unit_display: { type: 'string' },
+              line_total: { type: 'integer' },
+              line_total_display: { type: 'string' },
+              components: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    component_id: { type: 'integer' },
+                    role: { type: 'string' },
+                    sheets_per_book: { type: 'integer' },
+                    unit_sell_c: { type: 'integer' },
+                    unit_display: { type: 'string' },
+                  },
+                },
+              },
+              finishings: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    finishing_id: { type: 'integer' },
+                    name: { type: 'string' },
+                    pricing: { type: 'string' },
+                    contribution_c: { type: 'integer' },
+                    contribution_display: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          422: {
+            type: 'object',
+            additionalProperties: false,
+            properties: { error: { type: 'string' }, message: { type: 'string' } },
+          },
+        },
       },
     },
     async (req, reply) => {
@@ -1417,6 +1640,46 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
             finishing_ids: { type: 'array', maxItems: 20, items: { type: 'integer', minimum: 1 } },
           },
         },
+        // review M3：仅售价侧白名单。currency 此处是 currency.code 字符串（非对象）
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              mode_id: { type: 'integer' },
+              paper_id: { type: 'integer' },
+              size_key: { type: 'string' },
+              quantity: { type: 'integer' },
+              base_unit_price_c: { type: 'integer' },
+              base_unit_display: { type: 'string' },
+              unit_price_c: { type: 'integer' },
+              unit_display: { type: 'string' },
+              line_total: { type: 'integer' },
+              line_total_display: { type: 'string' },
+              currency: { type: 'string' },
+              finishings: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    finishing_id: { type: 'integer' },
+                    name: { type: 'string' },
+                    pricing: { type: 'string' },
+                    price_c: { type: 'integer' },
+                    contribution_c: { type: 'integer' },
+                    contribution_display: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          404: {
+            type: 'object',
+            additionalProperties: false,
+            properties: { error: { type: 'string' } },
+          },
+        },
       },
     },
     async (req, reply) => {
@@ -1425,7 +1688,7 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         finishing_ids?: number[]
       }
       const internal = req.user?.role === 'member'
-      const q = quote(db, b.mode_id, b.paper_id, b.size_key, { internal })
+      const q = quote(db, b.mode_id, b.paper_id, b.size_key, { internal, quantity: b.quantity })
       if (!q) return reply.status(404).send({ error: 'not_quotable' })
       const currency = baseCurrency(db)
 

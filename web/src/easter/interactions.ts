@@ -1,7 +1,7 @@
 import { decode } from './codec'
 import { _d } from './payload'
 import { findNearPairs } from './proximity'
-import type { SoloType, SpriteInstance } from './types'
+import type { RawPayload, SoloType, SpriteInstance } from './types'
 
 export interface PairRule {
   a: string
@@ -41,25 +41,27 @@ interface DecodedRules {
 
 export function loadRules(key: string): DecodedRules {
   const d = (s: string) => decode(s, key)
+  // review L-easter：用 RawPayload 取代 as any，元素类型化（运行时值不变，?? [] 仍兜底）
+  const raw = _d as unknown as RawPayload
 
-  const pairs: PairRule[] = ((_d as any).ix ?? []).map((r: any) => ({
+  const pairs: PairRule[] = (raw.ix ?? []).map((r) => ({
     a: r.a, b: r.b,
     aDialogue: d(r.ad), bDialogue: d(r.bd),
     chance: r.ch, cooldown: r.cd,
   }))
 
-  const cats: CatRule[] = ((_d as any).cx ?? []).map((r: any) => ({
+  const cats: CatRule[] = (raw.cx ?? []).map((r) => ({
     cat: r.cat, target: r.tgt,
     dialogue: d(r.td),
     chance: r.ch, cooldown: r.cd,
   }))
 
-  const solos: SoloRule[] = ((_d as any).so ?? []).map((r: any) => ({
+  const solos: SoloRule[] = (raw.so ?? []).map((r) => ({
     id: r.id, type: r.ty,
-    dialogues: (r.dl ?? []).map((l: string) => d(l)),
+    dialogues: (r.dl ?? []).map((l) => d(l)),
   }))
 
-  const groups: GroupEvent[] = ((_d as any).ge ?? []).map((r: any) => ({
+  const groups: GroupEvent[] = (raw.ge ?? []).map((r) => ({
     type: r.ty, chance: r.ch, cooldown: r.cd,
   }))
 
