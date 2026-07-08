@@ -48,7 +48,15 @@ interface SeedData {
     duplex: boolean
     color_tag: string | null
   }>
-  papers: Array<{ id: number; name: string; color_tag: string | null }>
+  papers: Array<{
+    id: number
+    name: string
+    category?: string | null
+    gsm?: number | null
+    color_tag: string | null
+    supplier?: string | null
+    notes?: string | null
+  }>
   paper_size_costs: Array<{
     paper_id: number
     size_key: string
@@ -143,10 +151,20 @@ export function importSeed(db: DB, seedPath: string = SEED_PATH): void {
     }
 
     const insertPaper = db.prepare(
-      'INSERT INTO papers (id, name, color_tag) VALUES (@id, @name, @color_tag)',
+      `INSERT INTO papers (id, name, category, gsm, color_tag, supplier, notes)
+       VALUES (@id, @name, @category, @gsm, @color_tag, @supplier, @notes)`,
     )
-    for (const p of seed.papers) insertPaper.run(p)
-
+    for (const p of seed.papers) {
+      insertPaper.run({
+        id: p.id,
+        name: p.name,
+        category: p.category ?? null,
+        gsm: p.gsm ?? null,
+        color_tag: p.color_tag,
+        supplier: p.supplier ?? null,
+        notes: p.notes ?? null,
+      })
+    }
     const insertPsc = db.prepare(
       `INSERT INTO paper_size_costs (paper_id, size_key, pack_price_c, pack_count)
        VALUES (@paper_id, @size_key, @pack_price_c, @pack_count)`,

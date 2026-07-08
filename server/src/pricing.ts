@@ -297,7 +297,7 @@ export interface Product {
 /**
  * ③⑤ 客户产品视图：把可报价 (mode,paper,size) 按「色彩档 × 技术 × 纸 × 尺寸 × 单双面」折叠，
  * 取最低售价 + 对应最便宜模式（机器对客户不可见）。color_class 多值（如 'bw,color'）= 同时归多档。
- * combos/价不变 → §2.5 stored 基线(187/43)不动，这是叠加的展示层。
+ * combos/价不变；纸张 seed 覆盖后 §2.5 stored 基线为 60/13，这是叠加的展示层。
  */
 export function listProducts(db: DB, opts?: QuoteOptions): Product[] {
   const key = opts?.internal ? 'internal' : 'normal'

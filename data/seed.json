@@ -1,9 +1,10 @@
 {
   "_meta": {
-    "source": "folioria_cost.html (defaultData)",
-    "generated": "2026-06-10",
+    "source": "纸种.xlsx (paper catalog replacement) + legacy index.html cost table cross-check",
+    "generated": "2026-07-08",
     "money": "All *_c fields are integer fixed-point: minor currency unit ×100 (price layer, per C7 of the PRD v1.1 revision). Amount-layer values do not appear in seed data.",
-    "note": "Base currency chosen at spool init; these numbers are in the operating currency of the source sheet."
+    "note": "Base currency chosen at spool init; these numbers are in the operating currency of the source sheet.",
+    "cost_basis": "D40: conservative consumable basis. C850 T01 CMYK set = 1400 RMB; G580/L15168 ink set = 250 RMB; P708 legacy table range maps to refill mode only, while original-cartridge mode remains high-cost."
   },
   "settings": {
     "min_margin_bp": 6700,
@@ -48,6 +49,12 @@
       "label": "A3++",
       "area": 250,
       "sort": 5
+    },
+    {
+      "key": "A3PP",
+      "label": "A3+++",
+      "area": 270,
+      "sort": 6
     }
   ],
   "printers": [
@@ -316,298 +323,755 @@
   "papers": [
     {
       "id": 1,
-      "name": "打印纸70g",
-      "color_tag": "bond"
+      "name": "亚太森博 A4",
+      "category": "plain",
+      "gsm": 80,
+      "color_tag": "bond",
+      "supplier": "亚太森博",
+      "notes": "source=纸种.xlsx row=6"
     },
     {
       "id": 2,
-      "name": "打印纸80g",
-      "color_tag": "bond"
+      "name": "亚太森博 A3",
+      "category": "plain",
+      "gsm": 80,
+      "color_tag": "bond",
+      "supplier": "亚太森博",
+      "notes": "source=纸种.xlsx row=5"
     },
     {
       "id": 3,
-      "name": "道林80g",
-      "color_tag": "bond"
+      "name": "金华盛 彩激纸激光打印纸A4",
+      "category": "plain",
+      "gsm": 100,
+      "color_tag": "bond",
+      "supplier": "金华盛",
+      "notes": "source=纸种.xlsx row=4"
     },
     {
       "id": 4,
-      "name": "道林100g",
-      "color_tag": "fine"
+      "name": "金华盛 彩激纸激光打印纸A3",
+      "category": "plain",
+      "gsm": 100,
+      "color_tag": "bond",
+      "supplier": "金华盛",
+      "notes": "source=纸种.xlsx row=3"
     },
     {
       "id": 5,
-      "name": "道林120g",
-      "color_tag": "fine"
+      "name": "宏利得护眼道林纸A4",
+      "category": "plain",
+      "gsm": 120,
+      "color_tag": "bond",
+      "supplier": "宏利得",
+      "notes": "source=纸种.xlsx row=47"
     },
     {
       "id": 6,
-      "name": "铜版128g",
-      "color_tag": "rc"
+      "name": "哑光铜版纸 哑粉纸 A3",
+      "category": "coated",
+      "gsm": 128,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=7"
     },
     {
       "id": 7,
-      "name": "铜版157g",
-      "color_tag": "rc"
+      "name": "双面喷墨铜版纸 A3++双面高光",
+      "category": "coated",
+      "gsm": 160,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=10"
     },
     {
       "id": 8,
-      "name": "铜版200g",
-      "color_tag": "rc"
+      "name": "艾利不干胶纸打印标签激光A4光面",
+      "category": "adhesive",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "艾利",
+      "notes": "source=纸种.xlsx row=9"
     },
     {
       "id": 9,
-      "name": "铜版250g",
-      "color_tag": "pb"
+      "name": "双面喷墨铜版纸 A3++哑光",
+      "category": "coated",
+      "gsm": 250,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=12"
     },
     {
       "id": 10,
-      "name": "铜版300g",
-      "color_tag": "pb"
+      "name": "双面喷墨铜版纸 A3+++双面高光",
+      "category": "coated",
+      "gsm": 300,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=11"
     },
     {
       "id": 11,
-      "name": "微喷纸",
-      "color_tag": "fine"
+      "name": "泛太克RC 家用艺术纸蚀刻A3",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=32"
     },
     {
       "id": 12,
-      "name": "RC相纸",
-      "color_tag": "rc"
+      "name": "珠光纸冰白激光打印喷墨6寸",
+      "category": "pearl",
+      "gsm": 350,
+      "color_tag": "pb",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=13"
     },
     {
       "id": 13,
-      "name": "硫化钡艺术纸",
-      "color_tag": "pb"
+      "name": "珠光纸冰白激光打印喷墨6寸",
+      "category": "pearl",
+      "gsm": 120,
+      "color_tag": "pb",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=14"
+    },
+    {
+      "id": 14,
+      "name": "激光铜版纸 光面A3",
+      "category": "coated",
+      "gsm": 105,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=2"
+    },
+    {
+      "id": 15,
+      "name": "艾利不干胶纸打印标签激光A4哑面",
+      "category": "adhesive",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "艾利",
+      "notes": "source=纸种.xlsx row=8"
+    },
+    {
+      "id": 16,
+      "name": "珠光纸冰白激光打印喷墨A5",
+      "category": "pearl",
+      "gsm": 350,
+      "color_tag": "pb",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=15"
+    },
+    {
+      "id": 17,
+      "name": "珠光纸冰白激光打印喷墨A5",
+      "category": "pearl",
+      "gsm": 120,
+      "color_tag": "pb",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=16"
+    },
+    {
+      "id": 18,
+      "name": "喷墨铜版纸 双面照片纸 A4",
+      "category": "rc",
+      "gsm": 140,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=17"
+    },
+    {
+      "id": 19,
+      "name": "喷墨铜版纸 双面照片纸 A3",
+      "category": "rc",
+      "gsm": 300,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=18"
+    },
+    {
+      "id": 20,
+      "name": "喷墨铜版纸 双面照片纸 A4双面哑光白板纸",
+      "category": "rc",
+      "gsm": 300,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=19"
+    },
+    {
+      "id": 21,
+      "name": "喷墨铜版纸 双面照片纸 A3",
+      "category": "rc",
+      "gsm": 120,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=20"
+    },
+    {
+      "id": 22,
+      "name": "泛太克RC 家用艺术纸A4",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=21"
+    },
+    {
+      "id": 23,
+      "name": "泛太克RC 二次元艺术纸6寸",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=22"
+    },
+    {
+      "id": 24,
+      "name": "泛太克RC 二次元艺术纸A4",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=23"
+    },
+    {
+      "id": 25,
+      "name": "泛太克RC 高光防水防刮擦A3",
+      "category": "rc",
+      "gsm": 255,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=24"
+    },
+    {
+      "id": 26,
+      "name": "泛太克RC 插画艺术纸6寸",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=25"
+    },
+    {
+      "id": 27,
+      "name": "泛太克RC 家用艺术纸 粗面6寸",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=26"
+    },
+    {
+      "id": 28,
+      "name": "泛太克RC 家用艺术纸 粗绒6寸",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=27"
+    },
+    {
+      "id": 29,
+      "name": "泛太克RC 高光防水防刮擦A4",
+      "category": "rc",
+      "gsm": 250,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=28"
+    },
+    {
+      "id": 30,
+      "name": "泛太克RC 写真照专用艺术纸A4",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=29"
+    },
+    {
+      "id": 31,
+      "name": "泛太克RC 家用艺术纸蚀刻6寸",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=30"
+    },
+    {
+      "id": 32,
+      "name": "泛太克RC 绒面防水防刮擦绒面6寸",
+      "category": "rc",
+      "gsm": 250,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=31"
+    },
+    {
+      "id": 33,
+      "name": "泛太克RC 写真照专用艺术纸6寸",
+      "category": "rc",
+      "gsm": null,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=33"
+    },
+    {
+      "id": 34,
+      "name": "泛太克RC 高光防水防刮擦高光6寸",
+      "category": "rc",
+      "gsm": 250,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=34"
+    },
+    {
+      "id": 35,
+      "name": "泛太克RC 粗面艺术纸A4",
+      "category": "rc",
+      "gsm": 230,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=35"
+    },
+    {
+      "id": 36,
+      "name": "泛太克RC 绒面防水防刮擦绒面A4",
+      "category": "rc",
+      "gsm": 250,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=36"
+    },
+    {
+      "id": 37,
+      "name": "泛太克RC 粗绒艺术纸A4",
+      "category": "rc",
+      "gsm": 250,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=37"
+    },
+    {
+      "id": 38,
+      "name": "泛太克RC 粗面艺术纸A3",
+      "category": "rc",
+      "gsm": 230,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=38"
+    },
+    {
+      "id": 39,
+      "name": "泛太克RC 证件照专用防刮擦6寸",
+      "category": "rc",
+      "gsm": 255,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=39"
+    },
+    {
+      "id": 40,
+      "name": "泛太克RC 冷调滤镜专用艺术纸6寸",
+      "category": "rc",
+      "gsm": 255,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=40"
+    },
+    {
+      "id": 41,
+      "name": "泛太克RC 明星签名照专用艺术纸6寸",
+      "category": "rc",
+      "gsm": 230,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=41"
+    },
+    {
+      "id": 42,
+      "name": "泛太克RC 进口纸基高光相纸6寸",
+      "category": "rc",
+      "gsm": 210,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=42"
+    },
+    {
+      "id": 43,
+      "name": "泛太克RC 插画专用艺术纸A4",
+      "category": "rc",
+      "gsm": 210,
+      "color_tag": "rc",
+      "supplier": "泛太克",
+      "notes": "source=纸种.xlsx row=43"
+    },
+    {
+      "id": 44,
+      "name": "双面高光激光铜版纸 哑面",
+      "category": "coated",
+      "gsm": 300,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=44; size=A3 inferred"
+    },
+    {
+      "id": 45,
+      "name": "双面高光激光铜版纸 A3",
+      "category": "coated",
+      "gsm": 300,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=45"
+    },
+    {
+      "id": 46,
+      "name": "宏利得护眼道林纸A5",
+      "category": "plain",
+      "gsm": 120,
+      "color_tag": "bond",
+      "supplier": "宏利得",
+      "notes": "source=纸种.xlsx row=46"
+    },
+    {
+      "id": 47,
+      "name": "宏利得护眼道林纸A3",
+      "category": "plain",
+      "gsm": 120,
+      "color_tag": "bond",
+      "supplier": "宏利得",
+      "notes": "source=纸种.xlsx row=48"
+    },
+    {
+      "id": 48,
+      "name": "双面喷墨铜版纸 哑光A3++",
+      "category": "coated",
+      "gsm": 250,
+      "color_tag": "rc",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=49"
+    },
+    {
+      "id": 49,
+      "name": "透明菲林片菲林纸 A4",
+      "category": "photo_film",
+      "gsm": null,
+      "color_tag": "pb",
+      "supplier": null,
+      "notes": "source=纸种.xlsx row=50"
+    },
+    {
+      "id": 50,
+      "name": "爱克发高光相片纸 6寸",
+      "category": "rc",
+      "gsm": 180,
+      "color_tag": "rc",
+      "supplier": "爱克发",
+      "notes": "source=纸种.xlsx row=51"
     }
   ],
   "paper_size_costs": [
     {
       "paper_id": 1,
-      "size_key": "A5",
-      "pack_price_c": 8000,
-      "pack_count": 5000
-    },
-    {
-      "paper_id": 1,
       "size_key": "A4",
-      "pack_price_c": 8000,
-      "pack_count": 2500
-    },
-    {
-      "paper_id": 1,
-      "size_key": "A3",
-      "pack_price_c": 12200,
-      "pack_count": 2000
-    },
-    {
-      "paper_id": 2,
-      "size_key": "A5",
-      "pack_price_c": 9000,
-      "pack_count": 5000
-    },
-    {
-      "paper_id": 2,
-      "size_key": "A4",
-      "pack_price_c": 8700,
-      "pack_count": 2500
+      "pack_price_c": 39653,
+      "pack_count": 12500
     },
     {
       "paper_id": 2,
       "size_key": "A3",
-      "pack_price_c": 17800,
+      "pack_price_c": 14788,
       "pack_count": 2500
     },
     {
       "paper_id": 3,
-      "size_key": "A5",
-      "pack_price_c": 2160,
-      "pack_count": 1000
-    },
-    {
-      "paper_id": 3,
       "size_key": "A4",
-      "pack_price_c": 2160,
-      "pack_count": 500
-    },
-    {
-      "paper_id": 3,
-      "size_key": "A3",
-      "pack_price_c": 4180,
-      "pack_count": 500
-    },
-    {
-      "paper_id": 4,
-      "size_key": "A5",
-      "pack_price_c": 3420,
-      "pack_count": 1000
-    },
-    {
-      "paper_id": 4,
-      "size_key": "A4",
-      "pack_price_c": 3190,
+      "pack_price_c": 3493,
       "pack_count": 500
     },
     {
       "paper_id": 4,
       "size_key": "A3",
-      "pack_price_c": 6378,
-      "pack_count": 500
-    },
-    {
-      "paper_id": 5,
-      "size_key": "A5",
-      "pack_price_c": 3553,
-      "pack_count": 1000
+      "pack_price_c": 3493,
+      "pack_count": 250
     },
     {
       "paper_id": 5,
       "size_key": "A4",
-      "pack_price_c": 4050,
-      "pack_count": 500
-    },
-    {
-      "paper_id": 5,
-      "size_key": "A3",
-      "pack_price_c": 8280,
-      "pack_count": 500
-    },
-    {
-      "paper_id": 6,
-      "size_key": "A4",
-      "pack_price_c": 5000,
+      "pack_price_c": 3398,
       "pack_count": 500
     },
     {
       "paper_id": 6,
       "size_key": "A3",
-      "pack_price_c": 9200,
-      "pack_count": 500
-    },
-    {
-      "paper_id": 6,
-      "size_key": "SRA3",
-      "pack_price_c": 11800,
+      "pack_price_c": 8147,
       "pack_count": 500
     },
     {
       "paper_id": 7,
-      "size_key": "A3",
-      "pack_price_c": 6000,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 7,
-      "size_key": "A3P",
-      "pack_price_c": 6900,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 7,
       "size_key": "SRA3",
-      "pack_price_c": 7200,
-      "pack_count": 250
+      "pack_price_c": 2031,
+      "pack_count": 50
     },
     {
       "paper_id": 8,
       "size_key": "A4",
-      "pack_price_c": 4900,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 8,
-      "size_key": "A3",
-      "pack_price_c": 7500,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 8,
-      "size_key": "A3P",
-      "pack_price_c": 8500,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 8,
-      "size_key": "SRA3",
-      "pack_price_c": 8800,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 9,
-      "size_key": "A3",
-      "pack_price_c": 9500,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 9,
-      "size_key": "A3P",
-      "pack_price_c": 10500,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 9,
-      "size_key": "SRA3",
-      "pack_price_c": 11200,
-      "pack_count": 250
-    },
-    {
-      "paper_id": 10,
-      "size_key": "A3",
-      "pack_price_c": 4900,
+      "pack_price_c": 2883,
       "pack_count": 100
     },
     {
-      "paper_id": 10,
+      "paper_id": 9,
       "size_key": "SRA3",
-      "pack_price_c": 5500,
-      "pack_count": 100
+      "pack_price_c": 2611,
+      "pack_count": 50
     },
     {
-      "paper_id": 11,
-      "size_key": "6",
-      "pack_price_c": 1990,
+      "paper_id": 10,
+      "size_key": "A3PP",
+      "pack_price_c": 2611,
       "pack_count": 50
     },
     {
       "paper_id": 11,
-      "size_key": "A4",
-      "pack_price_c": 2700,
-      "pack_count": 20
-    },
-    {
-      "paper_id": 11,
       "size_key": "A3",
-      "pack_price_c": 5000,
+      "pack_price_c": 4927,
       "pack_count": 20
     },
     {
       "paper_id": 12,
       "size_key": "6",
-      "pack_price_c": 2500,
+      "pack_price_c": 2737,
       "pack_count": 100
-    },
-    {
-      "paper_id": 12,
-      "size_key": "A4",
-      "pack_price_c": 2200,
-      "pack_count": 20
     },
     {
       "paper_id": 13,
       "size_key": "6",
-      "pack_price_c": 7970,
-      "pack_count": 300
+      "pack_price_c": 1662,
+      "pack_count": 100
     },
     {
-      "paper_id": 13,
+      "paper_id": 14,
+      "size_key": "A3",
+      "pack_price_c": 5503,
+      "pack_count": 500
+    },
+    {
+      "paper_id": 15,
       "size_key": "A4",
-      "pack_price_c": 3190,
+      "pack_price_c": 2683,
+      "pack_count": 100
+    },
+    {
+      "paper_id": 16,
+      "size_key": "A5",
+      "pack_price_c": 2052,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 17,
+      "size_key": "A5",
+      "pack_price_c": 1124,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 18,
+      "size_key": "A4",
+      "pack_price_c": 1681,
+      "pack_count": 100
+    },
+    {
+      "paper_id": 19,
+      "size_key": "A3",
+      "pack_price_c": 2869,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 20,
+      "size_key": "A4",
+      "pack_price_c": 1681,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 21,
+      "size_key": "A3",
+      "pack_price_c": 2128,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 22,
+      "size_key": "A4",
+      "pack_price_c": 2571,
       "pack_count": 20
     },
     {
-      "paper_id": 13,
-      "size_key": "A3",
-      "pack_price_c": 7970,
+      "paper_id": 23,
+      "size_key": "6",
+      "pack_price_c": 1945,
       "pack_count": 50
+    },
+    {
+      "paper_id": 24,
+      "size_key": "A4",
+      "pack_price_c": 2150,
+      "pack_count": 20
+    },
+    {
+      "paper_id": 25,
+      "size_key": "A3",
+      "pack_price_c": 4109,
+      "pack_count": 20
+    },
+    {
+      "paper_id": 26,
+      "size_key": "6",
+      "pack_price_c": 1828,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 27,
+      "size_key": "6",
+      "pack_price_c": 1867,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 28,
+      "size_key": "6",
+      "pack_price_c": 1896,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 29,
+      "size_key": "A4",
+      "pack_price_c": 2088,
+      "pack_count": 20
+    },
+    {
+      "paper_id": 30,
+      "size_key": "A4",
+      "pack_price_c": 2648,
+      "pack_count": 40
+    },
+    {
+      "paper_id": 31,
+      "size_key": "6",
+      "pack_price_c": 1945,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 32,
+      "size_key": "6",
+      "pack_price_c": 2411,
+      "pack_count": 100
+    },
+    {
+      "paper_id": 33,
+      "size_key": "6",
+      "pack_price_c": 2033,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 34,
+      "size_key": "6",
+      "pack_price_c": 2411,
+      "pack_count": 100
+    },
+    {
+      "paper_id": 35,
+      "size_key": "A4",
+      "pack_price_c": 2062,
+      "pack_count": 20
+    },
+    {
+      "paper_id": 36,
+      "size_key": "A4",
+      "pack_price_c": 2088,
+      "pack_count": 20
+    },
+    {
+      "paper_id": 37,
+      "size_key": "A4",
+      "pack_price_c": 2482,
+      "pack_count": 20
+    },
+    {
+      "paper_id": 38,
+      "size_key": "A3",
+      "pack_price_c": 3772,
+      "pack_count": 20
+    },
+    {
+      "paper_id": 39,
+      "size_key": "6",
+      "pack_price_c": 2155,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 40,
+      "size_key": "6",
+      "pack_price_c": 2238,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 41,
+      "size_key": "6",
+      "pack_price_c": 1945,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 42,
+      "size_key": "6",
+      "pack_price_c": 870,
+      "pack_count": 100
+    },
+    {
+      "paper_id": 43,
+      "size_key": "A4",
+      "pack_price_c": 2492,
+      "pack_count": 20
+    },
+    {
+      "paper_id": 44,
+      "size_key": "A3",
+      "pack_price_c": 24747,
+      "pack_count": 625
+    },
+    {
+      "paper_id": 45,
+      "size_key": "A3",
+      "pack_price_c": 26753,
+      "pack_count": 625
+    },
+    {
+      "paper_id": 46,
+      "size_key": "A5",
+      "pack_price_c": 3113,
+      "pack_count": 1000
+    },
+    {
+      "paper_id": 47,
+      "size_key": "A3",
+      "pack_price_c": 7253,
+      "pack_count": 500
+    },
+    {
+      "paper_id": 48,
+      "size_key": "SRA3",
+      "pack_price_c": 2678,
+      "pack_count": 50
+    },
+    {
+      "paper_id": 49,
+      "size_key": "A4",
+      "pack_price_c": 880,
+      "pack_count": 10
+    },
+    {
+      "paper_id": 50,
+      "size_key": "6",
+      "pack_price_c": 530,
+      "pack_count": 100
     }
   ],
   "combos": [
@@ -1105,7 +1569,7 @@
       "cost_model": "per_page",
       "rated_life_pages": 56000,
       "alert_threshold_bp": 2000,
-      "note": "备品1套 = v1.0设备投入22000与计算器20600的差额；rated_life 取黑白·单基准，admin 可调"
+      "note": "成本口径D40：C850 T01 CMYK套装按1400RMB/套；rated_life取黑白·单56000面，报价模式另按覆盖率保守摊销；P708低成本表格只对应灌装模式。"
     }
   ]
 }

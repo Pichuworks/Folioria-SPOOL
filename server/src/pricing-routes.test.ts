@@ -255,7 +255,7 @@ describe('定价四表 CRUD', () => {
       url: '/api/calculator/quote',
       payload: { mode_id: 1, paper_id: 3, size_key: 'A4', quantity: 100 },
     })
-    expect((before.json() as { unit_price_c: number }).unit_price_c).toBe(22)
+    expect((before.json() as { unit_price_c: number }).unit_price_c).toBe(31)
 
     const put = await app.inject({
       method: 'PUT',
@@ -402,16 +402,16 @@ describe('计算器（下单域）', () => {
     expect(collectForbiddenKeys(quote.json())).toEqual([])
   })
 
-  it('options：187 个可报价组合尺寸对全量带价', async () => {
+  it('options：60 个可报价组合尺寸对全量带价', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/calculator/options' })
     const body = res.json() as {
       options: Array<{ mode_id: number; paper_id: number; prices: Record<string, unknown> }>
     }
     const totalPairs = body.options.reduce((n, o) => n + Object.keys(o.prices).length, 0)
-    expect(totalPairs).toBe(187)
-    const m9p11 = body.options.find((o) => o.mode_id === 9 && o.paper_id === 11)
-    expect(m9p11?.prices['A4']).toBeDefined()
-    expect(m9p11?.prices['A3']).toBeUndefined()
+    expect(totalPairs).toBe(60)
+    const m9p12 = body.options.find((o) => o.mode_id === 9 && o.paper_id === 12)
+    expect(m9p12?.prices['6']).toBeDefined()
+    expect(m9p12?.prices['A3']).toBeUndefined()
   })
 })
 
@@ -487,7 +487,7 @@ describe('数量阶梯定价（D38）经计算器 / 管理 CRUD', () => {
       rows.find((q) => q.mode_id === 1 && q.paper_id === 1 && q.size_key === 'A4')?.has_tiers,
     ).toBe(true)
     expect(
-      rows.find((q) => q.mode_id === 1 && q.paper_id === 1 && q.size_key === 'A3')?.has_tiers,
+      rows.find((q) => q.mode_id === 2 && q.paper_id === 1 && q.size_key === 'A4')?.has_tiers,
     ).toBe(false)
   })
 })
@@ -508,7 +508,7 @@ describe('限流（PRD §6：/api/calculator/quote 按 IP）', () => {
 })
 
 describe('管理域成本速查', () => {
-  it('GET /api/admin/pricing/quotes：187 行含成本与警示 flag；下单域不可达', async () => {
+  it('GET /api/admin/pricing/quotes：60 行含成本与警示 flag；下单域不可达', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/admin/pricing/quotes',
@@ -516,8 +516,8 @@ describe('管理域成本速查', () => {
     })
     expect(res.statusCode).toBe(200)
     const rows = res.json() as Array<{ flag: string; total_c: number }>
-    expect(rows.length).toBe(187)
-    expect(rows.filter((r) => r.flag === 'LOSS').length).toBe(4)
+    expect(rows.length).toBe(60)
+    expect(rows.filter((r) => r.flag === 'LOSS').length).toBe(1)
 
     expect(
       (await app.inject({ method: 'GET', url: '/api/admin/pricing/quotes' })).statusCode,
@@ -533,7 +533,7 @@ describe('管理域成本速查', () => {
     ).toBe(403)
   })
 
-  it('quotes 行带 display（服务端唯一除法点）：用例 A 6×6 A3 = 0.74/2.25/0.9', async () => {
+  it('quotes 行带 display（服务端唯一除法点）：用例 A 6×6 A3 = 0.72/2.19/0.9', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/admin/pricing/quotes',
@@ -541,8 +541,8 @@ describe('管理域成本速查', () => {
     })
     const rows = res.json() as Array<Record<string, unknown>>
     const a = rows.find((r) => r['mode_id'] === 6 && r['paper_id'] === 6 && r['size_key'] === 'A3')
-    expect(a?.['total_display']).toBe('¥0.74')
-    expect(a?.['auto_display']).toBe('¥2.25')
+    expect(a?.['total_display']).toBe('¥0.72')
+    expect(a?.['auto_display']).toBe('¥2.19')
     expect(a?.['sell_display']).toBe('¥0.9')
     expect(a?.['flag']).toBe('below_margin')
   })
@@ -571,7 +571,7 @@ describe('③⑤ /api/calculator/products（客户产品视图）', () => {
       papers: unknown[]
       sizes: unknown[]
     }
-    expect(body.products.length).toBeGreaterThan(50)
+    expect(body.products.length).toBeGreaterThanOrEqual(50)
     const cats = new Set(body.products.map((p) => p.category))
     expect(cats.has('bw')).toBe(true)
     expect(cats.has('color')).toBe(true)
