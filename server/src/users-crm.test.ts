@@ -12,7 +12,7 @@ let app: App
 let customerId: string
 beforeEach(() => {
   db = makeTestDb()
-  spoolInit(db, { baseCurrency: 'JPY', adminEmail: 'admin@folioria.jp', adminName: 'K君', adminPassword: 'initial-secret-pw' })
+  spoolInit(db, { baseCurrency: 'CNY', adminEmail: 'admin@folioria.jp', adminName: 'K君', adminPassword: 'initial-secret-pw' })
   importSeed(db)
   customerId = createTestUser(db, { email: 'a@cust.example' })
   createTestUser(db, { email: 'staff@folioria.jp', role: 'admin' })
@@ -33,7 +33,7 @@ describe('GET /api/admin/users/:id/summary', () => {
   it('订单史 + 累计已收 + 欠款投影', async () => {
     const cust = await login('a@cust.example')
     const admin = await login('staff@folioria.jp')
-    // total 14 的订单
+    // total 1400 的订单
     const created = await app.inject({
       method: 'POST',
       url: '/api/orders',
@@ -41,7 +41,7 @@ describe('GET /api/admin/users/:id/summary', () => {
       payload: { items: [{ mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 200 }] },
     })
     const orderId = (created.json() as { id: string }).id
-    await app.inject({ method: 'POST', url: `/api/orders/${orderId}/payments`, headers: { cookie: admin }, payload: { kind: 'deposit', amount: 7 } })
+    await app.inject({ method: 'POST', url: `/api/orders/${orderId}/payments`, headers: { cookie: admin }, payload: { kind: 'deposit', amount: 700 } })
 
     const res = await app.inject({ method: 'GET', url: `/api/admin/users/${customerId}/summary`, headers: { cookie: admin } })
     expect(res.statusCode).toBe(200)
@@ -52,11 +52,11 @@ describe('GET /api/admin/users/:id/summary', () => {
     }
     expect(body.user.email).toBe('a@cust.example')
     expect(body.stats.order_count).toBe(1)
-    expect(body.stats.total_paid).toBe(7)
-    expect(body.stats.outstanding).toBe(7) // 14 − 7
+    expect(body.stats.total_paid).toBe(700)
+    expect(body.stats.outstanding).toBe(700) // 1400 − 700
     expect(body.orders).toHaveLength(1)
-    expect(body.orders[0]!.total).toBe(14)
-    expect(body.orders[0]!.paid_amount).toBe(7)
+    expect(body.orders[0]!.total).toBe(1400)
+    expect(body.orders[0]!.paid_amount).toBe(700)
   })
 
   it('customer 调用 → 403；未知用户 / guest → 404', async () => {

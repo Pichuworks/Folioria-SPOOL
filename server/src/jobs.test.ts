@@ -12,7 +12,7 @@ let stockId: string
 
 beforeEach(async () => {
   db = makeTestDb()
-  withSystemConfig(db)
+  withSystemConfig(db, 'CNY')
   importSeed(db)
   createTestUser(db, { email: 'admin@t.jp', role: 'admin' })
   app = buildApp(db)
@@ -73,7 +73,7 @@ describe('§3.1 done 落账（单事务）', () => {
        VALUES ('ctl-other', '他机碳粉', 'toner', ?, 0, 'per_page', 10000, 0)`,
     ).run(p708)
 
-    const jobId = await makeJob(200, 14)
+    const jobId = await makeJob(200, 1400)
     await patch(`/api/jobs/${jobId}`, { status: 'queued' })
     await patch(`/api/jobs/${jobId}`, { status: 'printing' })
 
@@ -107,7 +107,8 @@ describe('§3.1 done 落账（单事务）', () => {
     }
     expect(printer.total_pages).toBe(203)
 
-    // 成本快照：ink 3 + paper 3 + overhead 29 = 35_c/张；total = round(35×203/100) = 71；profit = 14 − 71
+    // 成本快照：ink 250 + paper 317 + overhead 2861 = 3428_c/张；
+    // total = round(3428×203/100) = 6959；profit = 1400 − 6959
     const job = db
       .prepare(
         'SELECT status, waste_quantity, pages_consumed, paper_cost_c, consumable_cost_c, overhead_cost_c, total_cost, profit, completed_at FROM jobs WHERE id = ?',
@@ -116,11 +117,11 @@ describe('§3.1 done 落账（单事务）', () => {
     expect(job['status']).toBe('done')
     expect(job['waste_quantity']).toBe(3)
     expect(job['pages_consumed']).toBe(203)
-    expect(job['paper_cost_c']).toBe(3)
-    expect(job['consumable_cost_c']).toBe(3)
-    expect(job['overhead_cost_c']).toBe(29)
-    expect(job['total_cost']).toBe(71)
-    expect(job['profit']).toBe(14 - 71)
+    expect(job['paper_cost_c']).toBe(317)
+    expect(job['consumable_cost_c']).toBe(250)
+    expect(job['overhead_cost_c']).toBe(2861)
+    expect(job['total_cost']).toBe(6959)
+    expect(job['profit']).toBe(1400 - 6959)
     expect(job['completed_at']).not.toBeNull()
   })
 
@@ -129,7 +130,7 @@ describe('§3.1 done 落账（单事务）', () => {
     db.prepare("INSERT INTO paper_stocks (id, paper_id, size_key, quantity) VALUES ('r-big', 1, 'A4', 120)").run()
     db.prepare("INSERT INTO paper_stocks (id, paper_id, size_key, quantity) VALUES ('r-small', 1, 'A4', 90)").run()
 
-    const jobId = await makeJob(200, 14)
+    const jobId = await makeJob(200, 1400)
     await patch(`/api/jobs/${jobId}`, { status: 'queued' })
     expect((await post(`/api/jobs/${jobId}/done`, { waste_quantity: 3 })).statusCode).toBe(200)
 
@@ -262,10 +263,10 @@ describe('作业其他', () => {
     })
     expect(res.statusCode).toBe(200)
     const body = res.json() as Record<string, unknown>
-    expect(body['ink_c']).toBe(3)
-    expect(body['paper_c']).toBe(3)
-    expect(body['overhead_c']).toBe(29)
-    expect(body['unit_total_c']).toBe(35)
+    expect(body['ink_c']).toBe(250)
+    expect(body['paper_c']).toBe(317)
+    expect(body['overhead_c']).toBe(2861)
+    expect(body['unit_total_c']).toBe(3428)
     expect(body['on_hand']).toBe(500)
   })
 
@@ -284,7 +285,7 @@ describe('作业其他', () => {
   })
 
   it('GET /api/jobs：done 作业带金额 display（服务端唯一除法点）；未 done 为 null', async () => {
-    const jobId = await makeJob(200, 14)
+    const jobId = await makeJob(200, 1400)
     await patch(`/api/jobs/${jobId}`, { status: 'queued' })
     await post(`/api/jobs/${jobId}/done`, { waste_quantity: 3 })
     const draftId = await makeJob(10)
@@ -293,17 +294,17 @@ describe('作业其他', () => {
     expect(res.statusCode).toBe(200)
     const rows = (res.json() as { data: Array<Record<string, unknown>> }).data
     const done = rows.find((r) => r['id'] === jobId)
-    // §3.1 基准：total_cost 71、profit 14 − 71 = −57
-    expect(done?.['total_cost_display']).toBe('¥71')
-    expect(done?.['profit_display']).toBe('-¥57')
-    expect(done?.['quoted_price_display']).toBe('¥14')
+    // §3.1 基准：total_cost 6959、profit 1400 − 6959 = −5559
+    expect(done?.['total_cost_display']).toBe('￥69.59')
+    expect(done?.['profit_display']).toBe('-￥55.59')
+    expect(done?.['quoted_price_display']).toBe('￥14.00')
     const draft = rows.find((r) => r['id'] === draftId)
     expect(draft?.['total_cost_display']).toBeNull()
     expect(draft?.['profit_display']).toBeNull()
     expect(draft?.['quoted_price_display']).toBeNull()
   })
 
-  it('preview 带 quantity：est_total 走唯一舍入点（35_c × 333 → 117）+ 分项 display', async () => {
+  it('preview 带 quantity：est_total 走唯一舍入点（3428_c × 333 → 11415）+ 分项 display', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/jobs/preview?mode_id=1&paper_id=1&size_key=A4&quantity=333',
@@ -311,12 +312,12 @@ describe('作业其他', () => {
     })
     expect(res.statusCode).toBe(200)
     const body = res.json() as Record<string, unknown>
-    expect(body['ink_display']).toBe('¥0.03')
-    expect(body['paper_display']).toBe('¥0.03')
-    expect(body['overhead_display']).toBe('¥0.29')
-    expect(body['unit_total_display']).toBe('¥0.35')
-    expect(body['est_total']).toBe(117)
-    expect(body['est_total_display']).toBe('¥117')
+    expect(body['ink_display']).toBe('￥0.025')
+    expect(body['paper_display']).toBe('￥0.0317')
+    expect(body['overhead_display']).toBe('￥0.2861')
+    expect(body['unit_total_display']).toBe('￥0.3428')
+    expect(body['est_total']).toBe(11415)
+    expect(body['est_total_display']).toBe('￥114.15')
   })
 
   it('preview 不带 quantity：est_total 为 null', async () => {

@@ -11,7 +11,7 @@ let memberCookie: string
 
 beforeEach(async () => {
   db = makeTestDb()
-  withSystemConfig(db)
+  withSystemConfig(db, 'CNY')
   importSeed(db)
   createTestUser(db, { email: 'admin@t.jp', role: 'admin' })
   createTestUser(db, { email: 'member@t.jp', role: 'member' })
@@ -255,13 +255,13 @@ describe('定价四表 CRUD', () => {
       url: '/api/calculator/quote',
       payload: { mode_id: 1, paper_id: 3, size_key: 'A4', quantity: 100 },
     })
-    expect((before.json() as { unit_price_c: number }).unit_price_c).toBe(31)
+    expect((before.json() as { unit_price_c: number }).unit_price_c).toBe(2876)
 
     const put = await app.inject({
       method: 'PUT',
       url: '/api/pricing/paper-size-costs',
       headers: { cookie: adminCookie },
-      payload: { paper_id: 3, size_key: 'A4', pack_price_c: 4320, pack_count: 500 },
+      payload: { paper_id: 3, size_key: 'A4', pack_price_c: 432000, pack_count: 500 },
     })
     expect(put.statusCode).toBe(200)
 
@@ -270,8 +270,8 @@ describe('定价四表 CRUD', () => {
       url: '/api/calculator/quote',
       payload: { mode_id: 1, paper_id: 3, size_key: 'A4', quantity: 100 },
     })
-    // paper_c 4.32→8.64→9, total 3+9=12, auto=ceil(120000/3300)=37
-    expect((after.json() as { unit_price_c: number }).unit_price_c).toBe(37)
+    // paper_c 432000/500=864, total 250+864=1114, auto=ceil(1114*10000/3300)=3376
+    expect((after.json() as { unit_price_c: number }).unit_price_c).toBe(3376)
   })
 
   it('combos：重复 409；新建组合 + 手动价 → 报价生效；置 null 回落自动', async () => {
@@ -304,7 +304,7 @@ describe('定价四表 CRUD', () => {
       method: 'PUT',
       url: `/api/pricing/combos/${comboId}/prices/A3`,
       headers: { cookie: adminCookie },
-      payload: { sell_c: 999 },
+      payload: { sell_c: 99900 },
     })
     expect(put.statusCode).toBe(200)
     const quoteManual = await app.inject({
@@ -312,7 +312,7 @@ describe('定价四表 CRUD', () => {
       url: '/api/calculator/quote',
       payload: { mode_id: 1, paper_id: 11, size_key: 'A3', quantity: 1 },
     })
-    expect((quoteManual.json() as { unit_price_c: number }).unit_price_c).toBe(999)
+    expect((quoteManual.json() as { unit_price_c: number }).unit_price_c).toBe(99900)
 
     await app.inject({
       method: 'PUT',
@@ -330,7 +330,7 @@ describe('定价四表 CRUD', () => {
 })
 
 describe('计算器（下单域）', () => {
-  it('quote：mode1×paper1@A4×200 → 单价 ¥0.07，小计 ¥14（唯一舍入点贯通）', async () => {
+  it('quote：mode1×paper1@A4×200 → 单价 ￥0.07，小计 ￥14.00（唯一舍入点贯通）', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/calculator/quote',
@@ -338,10 +338,10 @@ describe('计算器（下单域）', () => {
     })
     expect(res.statusCode).toBe(200)
     const body = res.json() as Record<string, unknown>
-    expect(body['unit_price_c']).toBe(7)
-    expect(body['unit_display']).toBe('¥0.07')
-    expect(body['line_total']).toBe(14)
-    expect(body['line_total_display']).toBe('¥14')
+    expect(body['unit_price_c']).toBe(700)
+    expect(body['unit_display']).toBe('￥0.07')
+    expect(body['line_total']).toBe(1400)
+    expect(body['line_total_display']).toBe('￥14.00')
   })
 
   it('可选性三条件不满足 → 404（§2.4 经 API）', async () => {
@@ -372,21 +372,21 @@ describe('计算器（下单域）', () => {
 
   it('member 内部价覆盖（B1.1）：internal_sell_c 只对 member 生效', async () => {
     db.prepare(
-      "UPDATE combo_prices SET internal_sell_c = 5 WHERE combo_id = 1 AND size_key = 'A4'",
+      "UPDATE combo_prices SET internal_sell_c = 500 WHERE combo_id = 1 AND size_key = 'A4'",
     ).run()
     const guest = await app.inject({
       method: 'POST',
       url: '/api/calculator/quote',
       payload: { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 100 },
     })
-    expect((guest.json() as { unit_price_c: number }).unit_price_c).toBe(7)
+    expect((guest.json() as { unit_price_c: number }).unit_price_c).toBe(700)
     const member = await app.inject({
       method: 'POST',
       url: '/api/calculator/quote',
       payload: { mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 100 },
       headers: { cookie: memberCookie },
     })
-    expect((member.json() as { unit_price_c: number }).unit_price_c).toBe(5)
+    expect((member.json() as { unit_price_c: number }).unit_price_c).toBe(500)
   })
 
   it('§6 序列化白名单：options 与 quote 深度遍历无 cost/profit/margin 键', async () => {
@@ -425,10 +425,10 @@ describe('数量阶梯定价（D38）经计算器 / 管理 CRUD', () => {
       url: `/api/pricing/combos/${combo11()}/prices/A4`,
       headers: { cookie: adminCookie },
       payload: {
-        sell_c: 7,
+        sell_c: 700,
         tiers: [
-          { min_qty: 100, sell_c: 6, internal_sell_c: 5 },
-          { min_qty: 500, sell_c: 4, internal_sell_c: null },
+          { min_qty: 100, sell_c: 600, internal_sell_c: 500 },
+          { min_qty: 500, sell_c: 400, internal_sell_c: null },
         ],
       },
     })
@@ -444,15 +444,15 @@ describe('数量阶梯定价（D38）经计算器 / 管理 CRUD', () => {
         })
       ).json() as { unit_price_c: number; base_unit_price_c: number; line_total: number }
 
-    expect((await at(50)).unit_price_c).toBe(7) // 未达首档 → 基础价
+    expect((await at(50)).unit_price_c).toBe(700) // 未达首档 → 基础价
     const q100 = await at(100)
-    expect(q100.unit_price_c).toBe(6) // 命中 100 档
-    expect(q100.base_unit_price_c).toBe(6)
-    expect(q100.line_total).toBe(6) // round(6×100/100)=6，唯一舍入点
-    expect((await at(500)).unit_price_c).toBe(4) // 命中 500 档
+    expect(q100.unit_price_c).toBe(600) // 命中 100 档
+    expect(q100.base_unit_price_c).toBe(600)
+    expect(q100.line_total).toBe(600) // round(600×100/100)=600，唯一舍入点
+    expect((await at(500)).unit_price_c).toBe(400) // 命中 500 档
     // member 内部价：internal_sell_c ?? sell_c
-    expect((await at(100, memberCookie)).unit_price_c).toBe(5)
-    expect((await at(500, memberCookie)).unit_price_c).toBe(4) // 该档 internal 为 null → 回落档内 sell_c
+    expect((await at(100, memberCookie)).unit_price_c).toBe(500)
+    expect((await at(500, memberCookie)).unit_price_c).toBe(400) // 该档 internal 为 null → 回落档内 sell_c
   })
 
   it('sell_c = 0 阶梯 → schema 422（对齐 DB CHECK sell_c > 0）', async () => {
@@ -460,7 +460,7 @@ describe('数量阶梯定价（D38）经计算器 / 管理 CRUD', () => {
       method: 'PUT',
       url: `/api/pricing/combos/${combo11()}/prices/A4`,
       headers: { cookie: adminCookie },
-      payload: { sell_c: 7, tiers: [{ min_qty: 100, sell_c: 0 }] },
+      payload: { sell_c: 700, tiers: [{ min_qty: 100, sell_c: 0 }] },
     })
     expect(res.statusCode).toBe(422)
   })
@@ -470,7 +470,7 @@ describe('数量阶梯定价（D38）经计算器 / 管理 CRUD', () => {
       method: 'PUT',
       url: `/api/pricing/combos/${combo11()}/prices/A4`,
       headers: { cookie: adminCookie },
-      payload: { sell_c: 7, tiers: [{ min_qty: 100, sell_c: 6 }] },
+      payload: { sell_c: 700, tiers: [{ min_qty: 100, sell_c: 600 }] },
     })
     const res = await app.inject({
       method: 'GET',
@@ -533,7 +533,7 @@ describe('管理域成本速查', () => {
     ).toBe(403)
   })
 
-  it('quotes 行带 display（服务端唯一除法点）：用例 A 6×6 A3 = 0.72/2.19/0.9', async () => {
+  it('quotes 行带 display（服务端唯一除法点）：用例 A 6×6 A3 = 0.72/2.1819/0.90', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/admin/pricing/quotes',
@@ -541,9 +541,9 @@ describe('管理域成本速查', () => {
     })
     const rows = res.json() as Array<Record<string, unknown>>
     const a = rows.find((r) => r['mode_id'] === 6 && r['paper_id'] === 6 && r['size_key'] === 'A3')
-    expect(a?.['total_display']).toBe('¥0.72')
-    expect(a?.['auto_display']).toBe('¥2.19')
-    expect(a?.['sell_display']).toBe('¥0.9')
+    expect(a?.['total_display']).toBe('￥0.72')
+    expect(a?.['auto_display']).toBe('￥2.1819')
+    expect(a?.['sell_display']).toBe('￥0.90')
     expect(a?.['flag']).toBe('below_margin')
   })
 })
@@ -612,7 +612,7 @@ describe('工艺目录 & 带工艺报价', () => {
     const res = await app.inject({ method: 'GET', url: '/api/calculator/finishings' })
     expect(res.statusCode).toBe(200)
     const body = res.json() as { currency: { code: string }; finishings: Array<{ id: number; name: string }> }
-    expect(body.currency.code).toBe('JPY')
+    expect(body.currency.code).toBe('CNY')
     expect(body.finishings.length).toBeGreaterThan(0)
     expect(body.finishings.some((f) => f.name === '骑马钉')).toBe(true)
   })

@@ -86,7 +86,7 @@ printers + maintenance_events（字段见 schema.sql）。要点：
 
 - 校准**双触发**：calibration_interval_pages 或 calibration_interval_days，先到为准（任一为 NULL 则该维度不触发）。
 - equipment_cost_c / monthly_cost_c 在单价层（参与折旧摊薄除法）。
-- C850 设备成本 = 2060000_c（不含备品碳粉；备用 T01 一套归 consumables 初始库存）。
+- C850 设备成本 = 206000000_c（CNY 20600 元；不含备品碳粉；备用 T01 一套归 consumables 初始库存）。
 
 ### 2.3 🎨 定价推导模型（Pricing）
 
@@ -110,7 +110,7 @@ auto_sell_c = ceil( total_c × 10000 ÷ (10000 − min_margin_bp) )
 
 ```
 报价 = 手动价存在 ? 手动价 : auto_sell_c
-手动价允许低于地板价（引流价/市场价，如黑白 ¥0.07）：
+手动价允许低于地板价（引流价/市场价，如黑白 ￥0.07）：
   管理域对低毛利标橙、亏本标红，但不篡改售价
 force_min_margin 设置开启时才将手动价抬升至地板价（默认关闭）
 unify_pricing 设置：同纸张同尺寸同单双面取各模式最低有效价（管理域展示用）
@@ -347,7 +347,7 @@ Settings:   GET|PATCH /api/settings（admin）
 - 7 尺寸（6寸/A5/A4/A3/A3+/SRA3/A3+++，含相对面积）
 - 5 物理打印机（C850/P708/G580/L15168/C650）
 - 16 打印模式 · 50 纸张 · 50 组纸张×尺寸采购口径 · 70 组合（20 组带手动定价 / 50 组纯自动地板价）
-- 耗材：备用 T01 一套（140000_c）—— C850 设备投入 2060000_c 不含此项
+- 耗材：备用 T01 一套（14000000_c，CNY 1400 元）—— C850 设备投入 206000000_c 不含此项
 - 系统设置：min_margin_bp 6700 · unify ON · force OFF · 折旧 36月×2000张/月
 
 ---
@@ -384,7 +384,7 @@ feat / fix / refactor / style / data / docs / test / chore
 | D5 | 成本可见性 | 双域切分，字段级白名单在序列化层（否决角色打补丁） |
 | D6 | 通知 | email 先行 + Notifier 可插拔（LINE Notify 已停服） |
 | D7 | 货币 | 注册表 + 实例基准货币，init 选定后锁死；两级整数定点 |
-| D8 | 定价模型 | 推导式（C9），否决 CostRule 平面表；手动价无条件生效，force 默认关——**曾误写为强制抬价，全量回归测试否决，引流价（黑白¥0.07）必须可低于地板价** |
+| D8 | 定价模型 | 推导式（C9），否决 CostRule 平面表；手动价无条件生效，force 默认关——**曾误写为强制抬价，全量回归测试否决，引流价（黑白￥0.07）必须可低于地板价** |
 | D9 | Auth | session 表 + httpOnly cookie（否决 JWT：黑名单查库后无状态收益归零） |
 | D10 | 账号供给 | 下单域开放注册；member 升格制；admin 仅手动添加 + init 引导 |
 | D11 | 首登改密标记 | users.must_change_password 列（0002 migration）；spool init 创建的 admin 置 1，改密成功后应用层清零（B1 首登强制改密的落地载体） |
@@ -418,7 +418,8 @@ feat / fix / refactor / style / data / docs / test / chore
 | D32 | 书行再下单（Track B 收尾） | order_book_components 增 `source_component_id INTEGER REFERENCES book_components(id)`（migration 0015，user_version 14→15，STRICT ALTER ADD COLUMN + REFERENCES 列默认 NULL，既有行回填 NULL）。createOrder 写入时定格 = priceBook 解析的 component_id（目录组件来源）。orderDto 组件增 source_component_id（中性目录引用，两域均回显）。C1 reorder（OrderView）把书行打包进再下单缓冲：book_id + count + 各非封面组件 {source_component_id→sheets_per_book}（封面固定 1 由 priceBook 定）。Quote 消费缓冲时对照实时册子目录（fetchBooks）：成品已归档（目录无此 book）或任一组件已归档（目录组件集合缺 source_component_id）→ 跳过该书行并提示「N 项因成品/组件下架已跳过」，其余按现价 fetchBookQuote 重报填入购物车。单页 item 行沿用既有按现价重报逻辑 |
 | D38 | 数量阶梯定价（migration 0022 combo_price_tiers · 补记录 + 定价应用） | 0022 原仅建表 + admin CRUD（PUT /api/pricing/combos/:id/prices/:size_key 带 tiers 数组）+ has_tiers 速查标记 + xlsx 导出，**定价侧从未读取**（漏闭环，本记录补全）。语义：每 (combo,size) 可配多档 `min_qty>1` 折扣价（sell_c CHECK>0 / internal_sell_c 可空）。报价/下单按数量取 **min_qty ≤ quantity 的最高档**覆盖基础手动价（combo_prices.sell_c）；无命中或 quantity 缺省/≤1 → 回落基础价；internal 取 `internal_sell_c ?? sell_c`（同 combo_prices 口径）。命中后仍走 D8 决策（pricing.ts decideSell 共用）：force_min_margin 开且档价<地板价 → 抬至地板(forced)，关则档价无条件生效并标记 below_margin/LOSS（**禁止静默抬价**）。**唯一舍入点不变**：line_total=lineTotal(unit_price_c,quantity)，阶梯只换 unit_price_c 不新增舍入；金额全整数。仅 `quote()`（→ POST /api/calculator/quote）与 `createOrder`（单页 item，含访客单）应用 quantity；listQuotable/listProducts 与书册组件折叠仍为**基础价 catalog 视图（qty=1）**——min_qty>1 故从不命中 → §2.5 基线 D39 后为 60/13；书册组件折叠无下单时数量、暂不接阶梯（如需另议）。下单 unit_price_c 仍定格快照，改阶梯不动既有单。TIER_SCHEMA sell_c 由 minimum 0 收紧为 1，与 DB CHECK 对齐（原会过 schema 撞 DB 约束 500） |
 | D39 | 纸张 seed 覆盖（纸种.xlsx） | 用 `D:/Users/neko/Downloads/纸种.xlsx` 覆盖 `data/seed.json` 的 `papers` / `paper_size_costs`，新增尺寸 `A3PP`（label `A3+++`，area 270，mm 留 NULL）。为保持既有 combos/书册/订单 fixture 的引用稳定，常用旧 id 槽映射到最接近的新纸张（如 paper1=亚太森博 A4、paper6=哑光铜版纸 A3、paper11=RC艺术纸 A3），其余 Excel 行追加。seed 基线更新为 7 sizes / 50 papers / 50 paper_size_costs；§2.5 可报价组合 60，手动 13（LOSS 1 / below_margin 7 / manual 5），自动 47。 |
-| D40 | 打印耗材成本覆盖（旧 index.html 校验） | `D:/Users/neko/Desktop/印刷生产系统/枫光映刻-生产级打印系统-v3/index.html` 的设备成本表经公开资料校验后只作为保守经验口径导入 `print_modes`，仍沿 D8/D22 的推导式模型，不恢复平面 CostRule。确认口径：C850 T01 CMYK 套装按 140000_c；G580/L15168 墨水套装按 25000_c；P708 表格低成本区间只对应 `P708 灌装`（mode 8，ml 口径 eff=100×1000=100000_c，yield 440@A3），不覆盖 `P708 原装`（mode 7 继续保留 250000_c 高成本原装核算）。seed `_meta.cost_basis` 与耗材 JSON note 留痕；schema 不变，喷墨墨水成本继续由 print_modes 面积推导，C850 备用粉库存继续仅一条 per_page consumable。 |
+| D40 | 打印耗材成本覆盖（旧 index.html 校验） | `D:/Users/neko/Desktop/印刷生产系统/枫光映刻-生产级打印系统-v3/index.html` 的设备成本表经公开资料校验后只作为保守经验口径导入 `print_modes`，仍沿 D8/D22 的推导式模型，不恢复平面 CostRule。确认口径：C850 T01 CMYK 套装按 14000000_c；G580/L15168 墨水套装按 2500000_c；P708 表格低成本区间只对应 `P708 灌装`（mode 8，ml 口径 eff=10000×1000=10000000_c，yield 440@A3），不覆盖 `P708 原装`（mode 7 继续保留 25000000_c 高成本原装核算）。seed `_meta.cost_basis` 与耗材 JSON note 留痕；schema 不变，喷墨墨水成本继续由 print_modes 面积推导，C850 备用粉库存继续仅一条 per_page consumable。 |
+| D41 | CNY 单价层低 100 倍修复（migration 0035） | `_c` 定义始终是“最小货币单位×100”；CNY 最小单位为分，因此 `1 RMB=10000_c`。D39/D40 数据曾按 `RMB×100` 写入，导致显示和行小计均低 100 倍。`data/seed.json` 的 printers/print_modes/paper_size_costs/combo sell_c/consumables 全部补乘 100；0035 仅对既有 CNY 实例的配置/价格事实源（printers、print_modes、paper_size_costs、combo_prices、combo_price_tiers、consumables、finishing_ops）补乘 100，不改订单、作业、报表等历史金额快照。 |
 
 ---
 

@@ -43,7 +43,7 @@ describe('折扣改动后收款投影一致（D28）', () => {
   let app: App
   beforeEach(() => {
     db = makeTestDb()
-    spoolInit(db, { baseCurrency: 'JPY', adminEmail: 'admin@folioria.jp', adminName: 'K君', adminPassword: 'pw-initial-x' })
+    spoolInit(db, { baseCurrency: 'CNY', adminEmail: 'admin@folioria.jp', adminName: 'K君', adminPassword: 'pw-initial-x' })
     importSeed(db)
     createTestUser(db, { email: 'a@cust.example' })
     createTestUser(db, { email: 'staff@folioria.jp', role: 'admin' })
@@ -63,21 +63,21 @@ describe('折扣改动后收款投影一致（D28）', () => {
     const cust = await login('a@cust.example')
     const admin = await login('staff@folioria.jp')
     const created = await app.inject({ method: 'POST', url: '/api/orders', headers: { cookie: cust }, payload: { items: [{ mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 200 }] } })
-    const id = (created.json() as { id: string }).id // total 14
-    // 先收 10（deposit）
-    await app.inject({ method: 'POST', url: `/api/orders/${id}/payments`, headers: { cookie: admin }, payload: { kind: 'deposit', amount: 10 } })
+    const id = (created.json() as { id: string }).id // total 1400
+    // 先收 1000（deposit）
+    await app.inject({ method: 'POST', url: `/api/orders/${id}/payments`, headers: { cookie: admin }, payload: { kind: 'deposit', amount: 1000 } })
 
-    // 折扣 6 → total 8 < 已收 10 → 422
-    const below = await app.inject({ method: 'PATCH', url: `/api/orders/${id}/discount`, headers: { cookie: admin }, payload: { discount: 6 } })
+    // 折扣 600 → total 800 < 已收 1000 → 422
+    const below = await app.inject({ method: 'PATCH', url: `/api/orders/${id}/discount`, headers: { cookie: admin }, payload: { discount: 600 } })
     expect(below.statusCode).toBe(422)
     expect((below.json() as { error: string }).error).toBe('discount_below_paid')
 
-    // 折扣 4 → total 10 == 已收 10 → 200，投影 paid
-    const ok = await app.inject({ method: 'PATCH', url: `/api/orders/${id}/discount`, headers: { cookie: admin }, payload: { discount: 4 } })
+    // 折扣 400 → total 1000 == 已收 1000 → 200，投影 paid
+    const ok = await app.inject({ method: 'PATCH', url: `/api/orders/${id}/discount`, headers: { cookie: admin }, payload: { discount: 400 } })
     expect(ok.statusCode).toBe(200)
     const o = ok.json() as { total: number; paid_amount: number; payment_status: string }
-    expect(o.total).toBe(10)
-    expect(o.paid_amount).toBe(10)
+    expect(o.total).toBe(1000)
+    expect(o.paid_amount).toBe(1000)
     expect(o.payment_status).toBe('paid') // 不再停留在 deposit
   })
 })

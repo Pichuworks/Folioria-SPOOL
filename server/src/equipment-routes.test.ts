@@ -12,7 +12,7 @@ let tonerId: string
 
 beforeEach(async () => {
   db = makeTestDb()
-  withSystemConfig(db)
+  withSystemConfig(db, 'CNY')
   importSeed(db)
   createTestUser(db, { email: 'admin@t.jp', role: 'admin' })
   app = buildApp(db)
@@ -234,18 +234,18 @@ describe('管理域金额展示（display 由服务端唯一除法点生成）',
     const res = await app.inject({ method: 'GET', url: '/api/equipment', headers: { cookie: adminCookie } })
     const rows = res.json() as Array<Record<string, unknown>>
     const c850 = rows.find((r) => r['code'] === 'C850')
-    expect(c850?.['equipment_cost_display']).toBe('¥20,600')
-    expect(c850?.['monthly_cost_display']).toBe('¥500')
+    expect(c850?.['equipment_cost_display']).toBe('￥20,600.00')
+    expect(c850?.['monthly_cost_display']).toBe('￥500.00')
   })
 
-  it('GET /api/inventory/consumables：T01 unit_cost_display ¥1,400', async () => {
+  it('GET /api/inventory/consumables：T01 unit_cost_display ￥1,400.00', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/inventory/consumables',
       headers: { cookie: adminCookie },
     })
     const rows = res.json() as Array<Record<string, unknown>>
-    expect(rows[0]?.['unit_cost_display']).toBe('¥1,400')
+    expect(rows[0]?.['unit_cost_display']).toBe('￥1,400.00')
   })
 
   it('GET maintenance：cost 有值出 display，NULL 为 null', async () => {
@@ -267,7 +267,7 @@ describe('管理域金额展示（display 由服务端唯一除法点生成）',
       headers: { cookie: adminCookie },
     })
     const rows = res.json() as Array<Record<string, unknown>>
-    expect(rows.find((r) => r['type'] === 'deep_clean')?.['cost_display']).toBe('¥3,500')
+    expect(rows.find((r) => r['type'] === 'deep_clean')?.['cost_display']).toBe('￥35.00')
     expect(rows.find((r) => r['type'] === 'nozzle_check')?.['cost_display']).toBeNull()
   })
 })

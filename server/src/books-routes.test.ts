@@ -65,7 +65,7 @@ describe('下单域目录 / 实时报价（机器不可见）', () => {
     expect(collectForbiddenKeys(body)).toEqual([])
   })
 
-  it('POST /api/calculator/book-quote：unit 2185 / line_total 109；组件无 mode_id；工艺贡献 [2000,33]', async () => {
+  it('POST /api/calculator/book-quote：unit 17346 / line_total 867；组件无 mode_id；工艺贡献 [2000,33]', async () => {
     const ids = buildBook()
     const res = await app.inject({
       method: 'POST',
@@ -79,8 +79,8 @@ describe('下单域目录 / 实时报价（机器不可见）', () => {
       components: Array<Record<string, unknown>>
       finishings: Array<{ contribution_c: number }>
     }
-    expect(q.unit_price_c).toBe(2185)
-    expect(q.line_total).toBe(109)
+    expect(q.unit_price_c).toBe(17346)
+    expect(q.line_total).toBe(867)
     for (const c of q.components) expect(c).not.toHaveProperty('mode_id')
     expect(q.finishings.map((f) => f.contribution_c).sort((a, b) => a - b)).toEqual([33, 2000])
     expect(collectForbiddenKeys(q)).toEqual([])
@@ -98,7 +98,7 @@ describe('下单域目录 / 实时报价（机器不可见）', () => {
 
   it('member 实时报价走内部价口径（internal_sell 覆盖生效）', async () => {
     const ids = buildBook()
-    db.prepare("UPDATE combo_prices SET internal_sell_c = 5 WHERE combo_id = 1 AND size_key = 'A4'").run()
+    db.prepare("UPDATE combo_prices SET internal_sell_c = 500 WHERE combo_id = 1 AND size_key = 'A4'").run()
     const member = await login('m@member.example')
     const res = await app.inject({
       method: 'POST',
@@ -107,6 +107,6 @@ describe('下单域目录 / 实时报价（机器不可见）', () => {
       payload: { book_id: ids.book, count: 1, components: [{ component_id: ids.inner, sheets_per_book: 10 }] },
     })
     const q = res.json() as { unit_price_c: number }
-    expect(q.unit_price_c).toBe(2165)
+    expect(q.unit_price_c).toBe(15346)
   })
 })

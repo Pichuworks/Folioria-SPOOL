@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { baseCurrency } from './currency.js'
 import { type DB } from './db.js'
+import { formatMoney, formatMoneyC, lineTotal } from './money.js'
+import { quote } from './pricing.js'
 import { importSeed } from './seed.js'
 import { makeTestDb, withSystemConfig } from './test-helpers.js'
 
@@ -83,16 +86,16 @@ describe('seed 导入（data/seed.json，金额已是 _c 整数，禁止换算�
     expect(eligible - manual).toBe(47)
   })
 
-  it('金额原样落库：mode 1 ink_price_c=140000 · 设备 C850 equipment_cost_c=2060000 · 耗材 unit_cost_c=140000', () => {
+  it('金额原样落库：mode 1 ink_price_c=14000000 · 设备 C850 equipment_cost_c=206000000 · 耗材 unit_cost_c=14000000', () => {
     const mode = db
       .prepare('SELECT ink_price_c, yield_sheets FROM print_modes WHERE id = 1')
       .get() as { ink_price_c: number; yield_sheets: number }
-    expect(mode).toEqual({ ink_price_c: 140000, yield_sheets: 56000 })
+    expect(mode).toEqual({ ink_price_c: 14000000, yield_sheets: 56000 })
 
     const printer = db
       .prepare("SELECT equipment_cost_c, monthly_cost_c FROM printers WHERE code = 'C850'")
       .get() as { equipment_cost_c: number; monthly_cost_c: number }
-    expect(printer).toEqual({ equipment_cost_c: 2060000, monthly_cost_c: 50000 })
+    expect(printer).toEqual({ equipment_cost_c: 206000000, monthly_cost_c: 5000000 })
 
     const consumable = db
       .prepare('SELECT unit_cost_c, quantity, current_usage_pages, cost_model FROM consumables')
@@ -103,7 +106,7 @@ describe('seed 导入（data/seed.json，金额已是 _c 整数，禁止换算�
       cost_model: string
     }
     expect(consumable).toEqual({
-      unit_cost_c: 140000,
+      unit_cost_c: 14000000,
       quantity: 1,
       current_usage_pages: 0,
       cost_model: 'per_page',
@@ -127,12 +130,12 @@ describe('seed 导入（data/seed.json，金额已是 _c 整数，禁止换算�
     }>
 
     expect(modes).toEqual([
-      { id: 7, name: 'P708 原装', ink_price_c: 250000, ml_per_batch: 250, yield_sheets: 110 },
-      { id: 8, name: 'P708 灌装', ink_price_c: 100, ml_per_batch: 1000, yield_sheets: 440 },
-      { id: 9, name: 'G580', ink_price_c: 25000, ml_per_batch: 360, yield_sheets: 1300 },
-      { id: 10, name: 'L15168 照片', ink_price_c: 25000, ml_per_batch: 200, yield_sheets: 175 },
-      { id: 11, name: 'L15168 文档·单', ink_price_c: 25000, ml_per_batch: 200, yield_sheets: 1500 },
-      { id: 14, name: 'L15168 文档·双', ink_price_c: 25000, ml_per_batch: 200, yield_sheets: 750 },
+      { id: 7, name: 'P708 原装', ink_price_c: 25000000, ml_per_batch: 250, yield_sheets: 110 },
+      { id: 8, name: 'P708 灌装', ink_price_c: 10000, ml_per_batch: 1000, yield_sheets: 440 },
+      { id: 9, name: 'G580', ink_price_c: 2500000, ml_per_batch: 360, yield_sheets: 1300 },
+      { id: 10, name: 'L15168 照片', ink_price_c: 2500000, ml_per_batch: 200, yield_sheets: 175 },
+      { id: 11, name: 'L15168 文档·单', ink_price_c: 2500000, ml_per_batch: 200, yield_sheets: 1500 },
+      { id: 14, name: 'L15168 文档·双', ink_price_c: 2500000, ml_per_batch: 200, yield_sheets: 750 },
     ])
 
     const consumable = db.prepare('SELECT unit_cost_c, rated_life_pages FROM consumables').get() as {
@@ -140,7 +143,7 @@ describe('seed 导入（data/seed.json，金额已是 _c 整数，禁止换算�
       rated_life_pages: number
     }
     expect(consumable).toEqual({
-      unit_cost_c: 140000,
+      unit_cost_c: 14000000,
       rated_life_pages: 56000,
     })
   })
@@ -185,5 +188,22 @@ describe('seed 导入（data/seed.json，金额已是 _c 整数，禁止换算�
     expect(() => importSeed(fresh)).toThrow(/spool init/i)
     expect((fresh.prepare('SELECT COUNT(*) n FROM sizes').get() as { n: number }).n).toBe(0)
     fresh.close()
+  })
+
+  it('CNY 单价层按“分×100”落库：A4 黑白手动 7 分/张，1000 张合计 70 元', () => {
+    const cny = makeTestDb()
+    try {
+      withSystemConfig(cny, 'CNY')
+      importSeed(cny)
+
+      const currency = baseCurrency(cny)
+      const q = quote(cny, 1, 1, 'A4')
+      expect(q).not.toBeNull()
+      expect(q?.sell_c).toBe(700)
+      expect(formatMoneyC(q!.sell_c, currency)).toBe('￥0.07')
+      expect(formatMoney(lineTotal(q!.sell_c, 1000), currency)).toBe('￥70.00')
+    } finally {
+      cny.close()
+    }
   })
 })

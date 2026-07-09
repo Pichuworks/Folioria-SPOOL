@@ -69,7 +69,7 @@ describe('F1 PATCH /api/settings', () => {
       url: '/api/calculator/quote',
       payload: { mode_id: 1, paper_id: 3, size_key: 'A4', quantity: 100 },
     })
-    expect((before.json() as { unit_price_c: number }).unit_price_c).toBe(31)
+    expect((before.json() as { unit_price_c: number }).unit_price_c).toBe(2876)
 
     const res = await patch({ min_margin_bp: 5000, quote_valid_days: 7 })
     expect(res.statusCode).toBe(200)
@@ -77,13 +77,13 @@ describe('F1 PATCH /api/settings', () => {
     expect(body['min_margin_bp']).toBe(5000)
     expect(body['quote_valid_days']).toBe(7)
 
-    // total_c=10（paper3/A4）→ ceil(10 / 0.5) = 20
+    // total_c=949（paper3/A4）→ ceil(949 / 0.5) = 1898
     const after = await app.inject({
       method: 'POST',
       url: '/api/calculator/quote',
       payload: { mode_id: 1, paper_id: 3, size_key: 'A4', quantity: 100 },
     })
-    expect((after.json() as { unit_price_c: number }).unit_price_c).toBe(20)
+    expect((after.json() as { unit_price_c: number }).unit_price_c).toBe(1898)
   })
 
   it('force_min_margin 布尔开关落库为 0/1', async () => {

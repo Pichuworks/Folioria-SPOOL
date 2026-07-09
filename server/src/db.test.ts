@@ -22,10 +22,77 @@ describe('migration runner', () => {
   })
 
   it('migrate 应用全部 migration 后 user_version=最新，重复执行幂等', () => {
-    expect(migrate(db)).toBe(34)
-    expect(db.pragma('user_version', { simple: true })).toBe(34)
+    expect(migrate(db)).toBe(35)
+    expect(db.pragma('user_version', { simple: true })).toBe(35)
     expect(migrate(db)).toBe(0)
-    expect(db.pragma('user_version', { simple: true })).toBe(34)
+    expect(db.pragma('user_version', { simple: true })).toBe(35)
+  })
+
+  it('0035：已切 CNY 的配置类单价层从 RMB×100 补正为分×100', () => {
+    migrate(db)
+    db.prepare(
+      "INSERT INTO system_config (id, base_currency, initialized_at) VALUES (1, 'CNY', '2026-07-09T00:00:00Z')",
+    ).run()
+    db.prepare("INSERT INTO sizes (key, label, area, sort) VALUES ('A4', 'A4', 97, 1)").run()
+    db.prepare(
+      "INSERT INTO printers (id, code, name, type, equipment_cost_c, monthly_cost_c) VALUES (1, 'C850', 'C850', 'laser', 2060000, 50000)",
+    ).run()
+    db.prepare(
+      `INSERT INTO print_modes (id, name, printer_id, ink_type, pricing_mode, ink_price_c,
+                                yield_sheets, ref_size, max_size)
+       VALUES (1, 'C850 黑白', 1, 'toner', 'set', 140000, 56000, 'A4', 'A4')`,
+    ).run()
+    db.prepare("INSERT INTO papers (id, name, category) VALUES (1, '亚太森博 A4', 'plain')").run()
+    db.prepare(
+      "INSERT INTO paper_size_costs (paper_id, size_key, pack_price_c, pack_count) VALUES (1, 'A4', 39653, 12500)",
+    ).run()
+    db.prepare("INSERT INTO combos (id, mode_id, paper_id) VALUES (1, 1, 1)").run()
+    db.prepare(
+      "INSERT INTO combo_prices (combo_id, size_key, sell_c, internal_sell_c) VALUES (1, 'A4', 7, 5)",
+    ).run()
+    db.prepare(
+      "INSERT INTO combo_price_tiers (combo_id, size_key, min_qty, sell_c, internal_sell_c) VALUES (1, 'A4', 100, 6, 4)",
+    ).run()
+    db.prepare(
+      `INSERT INTO consumables (id, name, type, printer_id, quantity, cost_model, rated_life_pages, unit_cost_c)
+       VALUES ('t01', 'T01', 'toner', 1, 1, 'per_page', 56000, 140000)`,
+    ).run()
+    db.prepare(
+      "INSERT INTO finishing_ops (id, name, pricing, price_c, category) VALUES (99, '测试工艺', 'per_book', 200, 'binding')",
+    ).run()
+
+    db.pragma('user_version = 34')
+
+    expect(migrate(db)).toBe(1)
+    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(
+      db
+        .prepare(
+          `SELECT p.equipment_cost_c, p.monthly_cost_c, m.ink_price_c,
+                  psc.pack_price_c, cp.sell_c, cp.internal_sell_c,
+                  cpt.sell_c AS tier_sell_c, cpt.internal_sell_c AS tier_internal_sell_c,
+                  c.unit_cost_c, f.price_c
+           FROM printers p
+           JOIN print_modes m ON m.printer_id = p.id
+           JOIN paper_size_costs psc ON psc.paper_id = 1 AND psc.size_key = 'A4'
+           JOIN combo_prices cp ON cp.combo_id = 1 AND cp.size_key = 'A4'
+           JOIN combo_price_tiers cpt ON cpt.combo_id = 1 AND cpt.size_key = 'A4'
+           JOIN consumables c ON c.printer_id = p.id
+           JOIN finishing_ops f ON f.id = 99`,
+        )
+        .get(),
+    ).toEqual({
+      equipment_cost_c: 206000000,
+      monthly_cost_c: 5000000,
+      ink_price_c: 14000000,
+      pack_price_c: 3965300,
+      sell_c: 700,
+      internal_sell_c: 500,
+      tier_sell_c: 600,
+      tier_internal_sell_c: 400,
+      unit_cost_c: 14000000,
+      price_c: 20000,
+    })
   })
 
   it('外键每连接开启', () => {

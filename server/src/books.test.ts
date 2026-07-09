@@ -7,11 +7,10 @@ import { makeTestDb, withSystemConfig } from './test-helpers.js'
 
 /**
  * D27 书定价（seed 基准）。已知单页价（priceComponentSpec 折叠最低）：
- *   bw  · paper 1 亚太森博 · A4 · 单 → 7_c   (mode 1)
- *   color · paper 6 哑光铜版纸 · A3 · 单 → 82_c  (mode 4)
- *   color · paper 8 不干胶光面 · A4 · 单 → 60_c  (mode 6)
- *   color · paper 6 铜版128g · A4 · 双 → 64_c  (mode 5)
- *   photo-art · paper 11 RC艺术纸 · A3 · 单 → 2500_c (mode 7)
+ *   bw  · paper 1 亚太森博 · A4 · 单 → 700_c   (mode 1)
+ *   color · paper 6 哑光铜版纸 · A3 · 单 → 8313_c  (mode 4)
+ *   color · paper 8 不干胶光面 · A4 · 单 → 6000_c  (mode 6)
+ *   photo-art · paper 11 RC艺术纸 · A3 · 单 → 250000_c (mode 7)
  * 尺寸面积：A4 = 97，A3 = 193。
  */
 
@@ -62,16 +61,16 @@ describe('priceBook — 组件解析 + 每本单价装配', () => {
     const inner = addComp(book, 'inner', 1, 'A4', 'bw', 0, 1)
 
     const q = priceBook(db, { book_id: book, count: 5, sheets: { [inner]: 10 } })
-    // 组件：封面 82×1 + 内页 7×10 = 82 + 70 = 152
-    expect(q.unit_price_c).toBe(152)
+    // 组件：封面 8313×1 + 内页 700×10 = 8313 + 7000 = 15313
+    expect(q.unit_price_c).toBe(15313)
     expect(q.components).toHaveLength(2)
     const coverC = q.components.find((c) => c.component_id === cover)!
     expect(coverC.sheets_per_book).toBe(1)
-    expect(coverC.unit_sell_c).toBe(82)
+    expect(coverC.unit_sell_c).toBe(8313)
     expect(coverC.mode_id).toBe(4) // 机器解析（admin 用，客户不可见）
     const innerC = q.components.find((c) => c.component_id === inner)!
     expect(innerC.sheets_per_book).toBe(10)
-    expect(innerC.unit_sell_c).toBe(7)
+    expect(innerC.unit_sell_c).toBe(700)
   })
 
   it('line_total = lineTotal(unit_price_c, count)（唯一舍入点）', () => {
@@ -84,10 +83,10 @@ describe('priceBook — 组件解析 + 每本单价装配', () => {
     attach(book, number)
 
     const q = priceBook(db, { book_id: book, count: 5, sheets: { [inner]: 10 } })
-    // 组件 152 + per_book 2000 + per_page 3×(1+10=11)=33 → unit 2185
-    expect(q.unit_price_c).toBe(2185)
-    // lineTotal(2185, 5) = round_half_up(10925/100) = round_half_up(109.25) = 109
-    expect(lineTotal(moneyC(2185), 5)).toBe(109)
+    // 组件 15313 + per_book 2000 + per_page 3×(1+10=11)=33 → unit 17346
+    expect(q.unit_price_c).toBe(17346)
+    // lineTotal(17346, 5) = round_half_up(86730/100) = 867
+    expect(lineTotal(moneyC(17346), 5)).toBe(867)
     void cover
   })
 })
@@ -99,8 +98,8 @@ describe('priceBook — 工艺三计价口径', () => {
     const f = addFinishing('精装', 'per_book', 1500)
     attach(book, f)
     const q = priceBook(db, { book_id: book, count: 3, sheets: {} })
-    // 82 + 1500 = 1582
-    expect(q.unit_price_c).toBe(1582)
+    // 8313 + 1500 = 9813
+    expect(q.unit_price_c).toBe(9813)
     expect(q.finishings[0]!.contribution_c).toBe(1500)
   })
 
@@ -110,8 +109,8 @@ describe('priceBook — 工艺三计价口径', () => {
     const f = addFinishing('压痕', 'per_page', 10)
     attach(book, f)
     const q = priceBook(db, { book_id: book, count: 2, sheets: { [inner]: 3 } })
-    // 组件 60×3 = 180；页数 3；per_page 10×3 = 30 → unit 210
-    expect(q.unit_price_c).toBe(210)
+    // 组件 6000×3 = 18000；页数 3；per_page 10×3 = 30 → unit 18030
+    expect(q.unit_price_c).toBe(18030)
     expect(q.finishings[0]!.contribution_c).toBe(30)
   })
 
@@ -121,8 +120,8 @@ describe('priceBook — 工艺三计价口径', () => {
     const f = addFinishing('覆膜', 'per_area', 5)
     attach(book, f)
     const q = priceBook(db, { book_id: book, count: 1, sheets: { [inner]: 4 } })
-    // 组件 60×4 = 240；面积 97×4 = 388；per_area 5×388 = 1940 → unit 2180
-    expect(q.unit_price_c).toBe(2180)
+    // 组件 6000×4 = 24000；面积 97×4 = 388；per_area 5×388 = 1940 → unit 25940
+    expect(q.unit_price_c).toBe(25940)
     expect(q.finishings[0]!.contribution_c).toBe(1940)
   })
 })
@@ -136,12 +135,12 @@ describe('priceBook — 张数语义与可选性', () => {
 
     const without = priceBook(db, { book_id: book, count: 1, sheets: { [inner]: 10 } })
     expect(without.components).toHaveLength(2) // 仅封面 + 内页
-    expect(without.unit_price_c).toBe(152)
+    expect(without.unit_price_c).toBe(15313)
 
     const withInsert = priceBook(db, { book_id: book, count: 1, sheets: { [inner]: 10, [insert]: 2 } })
     expect(withInsert.components).toHaveLength(3)
-    // 152 + 2500×2 = 5152
-    expect(withInsert.unit_price_c).toBe(5152)
+    // 15313 + 250000×2 = 515313
+    expect(withInsert.unit_price_c).toBe(515313)
   })
 
   it('内页必填：缺张数 → 422 inner_sheets_required', () => {
@@ -179,10 +178,10 @@ describe('priceBook — 内部价（member）口径', () => {
   it('internal 走 internal_sell_c（缺省回落对外）；与对外口径独立', () => {
     const book = makeBook('intl')
     const inner = addComp(book, 'inner', 1, 'A4', 'bw', 0, 0)
-    db.prepare("UPDATE combo_prices SET internal_sell_c = 5 WHERE combo_id = 1 AND size_key = 'A4'").run()
+    db.prepare("UPDATE combo_prices SET internal_sell_c = 500 WHERE combo_id = 1 AND size_key = 'A4'").run()
     const ext = priceBook(db, { book_id: book, count: 1, sheets: { [inner]: 10 } })
     const intl = priceBook(db, { book_id: book, count: 1, sheets: { [inner]: 10 } }, { internal: true })
-    expect(ext.unit_price_c).toBe(70) // 7×10
-    expect(intl.unit_price_c).toBe(50) // 5×10
+    expect(ext.unit_price_c).toBe(7000) // 700×10
+    expect(intl.unit_price_c).toBe(5000) // 500×10
   })
 })

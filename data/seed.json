@@ -1,9 +1,9 @@
 {
   "_meta": {
     "source": "纸种.xlsx (paper catalog replacement) + legacy index.html cost table cross-check",
-    "generated": "2026-07-08",
+    "generated": "2026-07-09",
     "money": "All *_c fields are integer fixed-point: minor currency unit ×100 (price layer, per C7 of the PRD v1.1 revision). Amount-layer values do not appear in seed data.",
-    "note": "Base currency chosen at spool init; these numbers are in the operating currency of the source sheet.",
+    "note": "Current seed values are CNY price-layer integers: 1 RMB = 100 fen = 10000_c. Import keeps values verbatim; choosing another base currency requires re-entering price-layer data.",
     "cost_basis": "D40: conservative consumable basis. C850 T01 CMYK set = 1400 RMB; G580/L15168 ink set = 250 RMB; P708 legacy table range maps to refill mode only, while original-cartridge mode remains high-cost."
   },
   "settings": {
@@ -62,14 +62,14 @@
       "code": "C850",
       "name": "Canon imagePRESS C850",
       "type": "laser",
-      "equipment_cost_c": 2060000,
-      "monthly_cost_c": 50000
+      "equipment_cost_c": 206000000,
+      "monthly_cost_c": 5000000
     },
     {
       "code": "P708",
       "name": "Epson SC-P708",
       "type": "inkjet",
-      "equipment_cost_c": 500000,
+      "equipment_cost_c": 50000000,
       "monthly_cost_c": 0
     },
     {
@@ -83,14 +83,14 @@
       "code": "L15168",
       "name": "Epson L15168",
       "type": "inkjet",
-      "equipment_cost_c": 300000,
+      "equipment_cost_c": 30000000,
       "monthly_cost_c": 0
     },
     {
       "code": "C650",
       "name": "OKI C650",
       "type": "laser",
-      "equipment_cost_c": 280000,
+      "equipment_cost_c": 28000000,
       "monthly_cost_c": 0
     }
   ],
@@ -101,7 +101,7 @@
       "printer_code": "C850",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 140000,
+      "ink_price_c": 14000000,
       "ml_per_batch": null,
       "yield_sheets": 56000,
       "ref_size": "A4",
@@ -115,7 +115,7 @@
       "printer_code": "C850",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 140000,
+      "ink_price_c": 14000000,
       "ml_per_batch": null,
       "yield_sheets": 28000,
       "ref_size": "A4",
@@ -129,7 +129,7 @@
       "printer_code": "C850",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 140000,
+      "ink_price_c": 14000000,
       "ml_per_batch": null,
       "yield_sheets": 40000,
       "ref_size": "A4",
@@ -143,7 +143,7 @@
       "printer_code": "C850",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 140000,
+      "ink_price_c": 14000000,
       "ml_per_batch": null,
       "yield_sheets": 25000,
       "ref_size": "A4",
@@ -157,7 +157,7 @@
       "printer_code": "C850",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 140000,
+      "ink_price_c": 14000000,
       "ml_per_batch": null,
       "yield_sheets": 12500,
       "ref_size": "A4",
@@ -171,7 +171,7 @@
       "printer_code": "C850",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 140000,
+      "ink_price_c": 14000000,
       "ml_per_batch": null,
       "yield_sheets": 5000,
       "ref_size": "A4",
@@ -185,7 +185,7 @@
       "printer_code": "P708",
       "ink_type": "pigment",
       "pricing_mode": "set",
-      "ink_price_c": 250000,
+      "ink_price_c": 25000000,
       "ml_per_batch": 250,
       "yield_sheets": 110,
       "ref_size": "A3",
@@ -199,7 +199,7 @@
       "printer_code": "P708",
       "ink_type": "pigment",
       "pricing_mode": "ml",
-      "ink_price_c": 100,
+      "ink_price_c": 10000,
       "ml_per_batch": 1000,
       "yield_sheets": 440,
       "ref_size": "A3",
@@ -213,7 +213,7 @@
       "printer_code": "G580",
       "ink_type": "dye",
       "pricing_mode": "set",
-      "ink_price_c": 25000,
+      "ink_price_c": 2500000,
       "ml_per_batch": 360,
       "yield_sheets": 1300,
       "ref_size": "6",
@@ -227,7 +227,7 @@
       "printer_code": "L15168",
       "ink_type": "pigment",
       "pricing_mode": "set",
-      "ink_price_c": 25000,
+      "ink_price_c": 2500000,
       "ml_per_batch": 200,
       "yield_sheets": 175,
       "ref_size": "A4",
@@ -241,7 +241,7 @@
       "printer_code": "L15168",
       "ink_type": "pigment",
       "pricing_mode": "set",
-      "ink_price_c": 25000,
+      "ink_price_c": 2500000,
       "ml_per_batch": 200,
       "yield_sheets": 1500,
       "ref_size": "A4",
@@ -255,7 +255,7 @@
       "printer_code": "C650",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 30000,
+      "ink_price_c": 3000000,
       "ml_per_batch": null,
       "yield_sheets": 7000,
       "ref_size": "A4",
@@ -269,7 +269,7 @@
       "printer_code": "C650",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 195000,
+      "ink_price_c": 19500000,
       "ml_per_batch": null,
       "yield_sheets": 6000,
       "ref_size": "A4",
@@ -283,7 +283,7 @@
       "printer_code": "L15168",
       "ink_type": "pigment",
       "pricing_mode": "set",
-      "ink_price_c": 25000,
+      "ink_price_c": 2500000,
       "ml_per_batch": 200,
       "yield_sheets": 750,
       "ref_size": "A4",
@@ -297,7 +297,7 @@
       "printer_code": "C650",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 30000,
+      "ink_price_c": 3000000,
       "ml_per_batch": null,
       "yield_sheets": 3500,
       "ref_size": "A4",
@@ -311,7 +311,7 @@
       "printer_code": "C650",
       "ink_type": "toner",
       "pricing_mode": "set",
-      "ink_price_c": 195000,
+      "ink_price_c": 19500000,
       "ml_per_batch": null,
       "yield_sheets": 3000,
       "ref_size": "A4",
@@ -776,301 +776,301 @@
     {
       "paper_id": 1,
       "size_key": "A4",
-      "pack_price_c": 39653,
+      "pack_price_c": 3965300,
       "pack_count": 12500
     },
     {
       "paper_id": 2,
       "size_key": "A3",
-      "pack_price_c": 14788,
+      "pack_price_c": 1478800,
       "pack_count": 2500
     },
     {
       "paper_id": 3,
       "size_key": "A4",
-      "pack_price_c": 3493,
+      "pack_price_c": 349300,
       "pack_count": 500
     },
     {
       "paper_id": 4,
       "size_key": "A3",
-      "pack_price_c": 3493,
+      "pack_price_c": 349300,
       "pack_count": 250
     },
     {
       "paper_id": 5,
       "size_key": "A4",
-      "pack_price_c": 3398,
+      "pack_price_c": 339800,
       "pack_count": 500
     },
     {
       "paper_id": 6,
       "size_key": "A3",
-      "pack_price_c": 8147,
+      "pack_price_c": 814700,
       "pack_count": 500
     },
     {
       "paper_id": 7,
       "size_key": "SRA3",
-      "pack_price_c": 2031,
+      "pack_price_c": 203100,
       "pack_count": 50
     },
     {
       "paper_id": 8,
       "size_key": "A4",
-      "pack_price_c": 2883,
+      "pack_price_c": 288300,
       "pack_count": 100
     },
     {
       "paper_id": 9,
       "size_key": "SRA3",
-      "pack_price_c": 2611,
+      "pack_price_c": 261100,
       "pack_count": 50
     },
     {
       "paper_id": 10,
       "size_key": "A3PP",
-      "pack_price_c": 2611,
+      "pack_price_c": 261100,
       "pack_count": 50
     },
     {
       "paper_id": 11,
       "size_key": "A3",
-      "pack_price_c": 4927,
+      "pack_price_c": 492700,
       "pack_count": 20
     },
     {
       "paper_id": 12,
       "size_key": "6",
-      "pack_price_c": 2737,
+      "pack_price_c": 273700,
       "pack_count": 100
     },
     {
       "paper_id": 13,
       "size_key": "6",
-      "pack_price_c": 1662,
+      "pack_price_c": 166200,
       "pack_count": 100
     },
     {
       "paper_id": 14,
       "size_key": "A3",
-      "pack_price_c": 5503,
+      "pack_price_c": 550300,
       "pack_count": 500
     },
     {
       "paper_id": 15,
       "size_key": "A4",
-      "pack_price_c": 2683,
+      "pack_price_c": 268300,
       "pack_count": 100
     },
     {
       "paper_id": 16,
       "size_key": "A5",
-      "pack_price_c": 2052,
+      "pack_price_c": 205200,
       "pack_count": 50
     },
     {
       "paper_id": 17,
       "size_key": "A5",
-      "pack_price_c": 1124,
+      "pack_price_c": 112400,
       "pack_count": 50
     },
     {
       "paper_id": 18,
       "size_key": "A4",
-      "pack_price_c": 1681,
+      "pack_price_c": 168100,
       "pack_count": 100
     },
     {
       "paper_id": 19,
       "size_key": "A3",
-      "pack_price_c": 2869,
+      "pack_price_c": 286900,
       "pack_count": 50
     },
     {
       "paper_id": 20,
       "size_key": "A4",
-      "pack_price_c": 1681,
+      "pack_price_c": 168100,
       "pack_count": 50
     },
     {
       "paper_id": 21,
       "size_key": "A3",
-      "pack_price_c": 2128,
+      "pack_price_c": 212800,
       "pack_count": 50
     },
     {
       "paper_id": 22,
       "size_key": "A4",
-      "pack_price_c": 2571,
+      "pack_price_c": 257100,
       "pack_count": 20
     },
     {
       "paper_id": 23,
       "size_key": "6",
-      "pack_price_c": 1945,
+      "pack_price_c": 194500,
       "pack_count": 50
     },
     {
       "paper_id": 24,
       "size_key": "A4",
-      "pack_price_c": 2150,
+      "pack_price_c": 215000,
       "pack_count": 20
     },
     {
       "paper_id": 25,
       "size_key": "A3",
-      "pack_price_c": 4109,
+      "pack_price_c": 410900,
       "pack_count": 20
     },
     {
       "paper_id": 26,
       "size_key": "6",
-      "pack_price_c": 1828,
+      "pack_price_c": 182800,
       "pack_count": 50
     },
     {
       "paper_id": 27,
       "size_key": "6",
-      "pack_price_c": 1867,
+      "pack_price_c": 186700,
       "pack_count": 50
     },
     {
       "paper_id": 28,
       "size_key": "6",
-      "pack_price_c": 1896,
+      "pack_price_c": 189600,
       "pack_count": 50
     },
     {
       "paper_id": 29,
       "size_key": "A4",
-      "pack_price_c": 2088,
+      "pack_price_c": 208800,
       "pack_count": 20
     },
     {
       "paper_id": 30,
       "size_key": "A4",
-      "pack_price_c": 2648,
+      "pack_price_c": 264800,
       "pack_count": 40
     },
     {
       "paper_id": 31,
       "size_key": "6",
-      "pack_price_c": 1945,
+      "pack_price_c": 194500,
       "pack_count": 50
     },
     {
       "paper_id": 32,
       "size_key": "6",
-      "pack_price_c": 2411,
+      "pack_price_c": 241100,
       "pack_count": 100
     },
     {
       "paper_id": 33,
       "size_key": "6",
-      "pack_price_c": 2033,
+      "pack_price_c": 203300,
       "pack_count": 50
     },
     {
       "paper_id": 34,
       "size_key": "6",
-      "pack_price_c": 2411,
+      "pack_price_c": 241100,
       "pack_count": 100
     },
     {
       "paper_id": 35,
       "size_key": "A4",
-      "pack_price_c": 2062,
+      "pack_price_c": 206200,
       "pack_count": 20
     },
     {
       "paper_id": 36,
       "size_key": "A4",
-      "pack_price_c": 2088,
+      "pack_price_c": 208800,
       "pack_count": 20
     },
     {
       "paper_id": 37,
       "size_key": "A4",
-      "pack_price_c": 2482,
+      "pack_price_c": 248200,
       "pack_count": 20
     },
     {
       "paper_id": 38,
       "size_key": "A3",
-      "pack_price_c": 3772,
+      "pack_price_c": 377200,
       "pack_count": 20
     },
     {
       "paper_id": 39,
       "size_key": "6",
-      "pack_price_c": 2155,
+      "pack_price_c": 215500,
       "pack_count": 50
     },
     {
       "paper_id": 40,
       "size_key": "6",
-      "pack_price_c": 2238,
+      "pack_price_c": 223800,
       "pack_count": 50
     },
     {
       "paper_id": 41,
       "size_key": "6",
-      "pack_price_c": 1945,
+      "pack_price_c": 194500,
       "pack_count": 50
     },
     {
       "paper_id": 42,
       "size_key": "6",
-      "pack_price_c": 870,
+      "pack_price_c": 87000,
       "pack_count": 100
     },
     {
       "paper_id": 43,
       "size_key": "A4",
-      "pack_price_c": 2492,
+      "pack_price_c": 249200,
       "pack_count": 20
     },
     {
       "paper_id": 44,
       "size_key": "A3",
-      "pack_price_c": 24747,
+      "pack_price_c": 2474700,
       "pack_count": 625
     },
     {
       "paper_id": 45,
       "size_key": "A3",
-      "pack_price_c": 26753,
+      "pack_price_c": 2675300,
       "pack_count": 625
     },
     {
       "paper_id": 46,
       "size_key": "A5",
-      "pack_price_c": 3113,
+      "pack_price_c": 311300,
       "pack_count": 1000
     },
     {
       "paper_id": 47,
       "size_key": "A3",
-      "pack_price_c": 7253,
+      "pack_price_c": 725300,
       "pack_count": 500
     },
     {
       "paper_id": 48,
       "size_key": "SRA3",
-      "pack_price_c": 2678,
+      "pack_price_c": 267800,
       "pack_count": 50
     },
     {
       "paper_id": 49,
       "size_key": "A4",
-      "pack_price_c": 880,
+      "pack_price_c": 88000,
       "pack_count": 10
     },
     {
       "paper_id": 50,
       "size_key": "6",
-      "pack_price_c": 530,
+      "pack_price_c": 53000,
       "pack_count": 100
     }
   ],
@@ -1080,9 +1080,9 @@
       "mode_id": 1,
       "paper_id": 1,
       "sell_c": {
-        "A5": 5,
-        "A4": 7,
-        "A3": 13
+        "A5": 500,
+        "A4": 700,
+        "A3": 1300
       }
     },
     {
@@ -1090,9 +1090,9 @@
       "mode_id": 2,
       "paper_id": 1,
       "sell_c": {
-        "A5": 8,
-        "A4": 10,
-        "A3": 18
+        "A5": 800,
+        "A4": 1000,
+        "A3": 1800
       }
     },
     {
@@ -1112,7 +1112,7 @@
       "mode_id": 3,
       "paper_id": 2,
       "sell_c": {
-        "A4": 18
+        "A4": 1800
       }
     },
     {
@@ -1120,7 +1120,7 @@
       "mode_id": 4,
       "paper_id": 2,
       "sell_c": {
-        "A4": 28
+        "A4": 2800
       }
     },
     {
@@ -1134,8 +1134,8 @@
       "mode_id": 3,
       "paper_id": 4,
       "sell_c": {
-        "A5": 8,
-        "A4": 9
+        "A5": 800,
+        "A4": 900
       }
     },
     {
@@ -1149,8 +1149,8 @@
       "mode_id": 6,
       "paper_id": 6,
       "sell_c": {
-        "A4": 45,
-        "A3": 90
+        "A4": 4500,
+        "A3": 9000
       }
     },
     {
@@ -1164,8 +1164,8 @@
       "mode_id": 6,
       "paper_id": 8,
       "sell_c": {
-        "A4": 60,
-        "A3": 110
+        "A4": 6000,
+        "A3": 11000
       }
     },
     {
@@ -1173,7 +1173,7 @@
       "mode_id": 6,
       "paper_id": 9,
       "sell_c": {
-        "A3": 130
+        "A3": 13000
       }
     },
     {
@@ -1181,7 +1181,7 @@
       "mode_id": 6,
       "paper_id": 10,
       "sell_c": {
-        "A3": 150
+        "A3": 15000
       }
     },
     {
@@ -1189,7 +1189,7 @@
       "mode_id": 4,
       "paper_id": 6,
       "sell_c": {
-        "A4": 35
+        "A4": 3500
       }
     },
     {
@@ -1203,8 +1203,8 @@
       "mode_id": 11,
       "paper_id": 4,
       "sell_c": {
-        "A4": 200,
-        "A3": 500
+        "A4": 20000,
+        "A3": 50000
       }
     },
     {
@@ -1212,9 +1212,9 @@
       "mode_id": 7,
       "paper_id": 11,
       "sell_c": {
-        "6": 300,
-        "A4": 1000,
-        "A3": 2500
+        "6": 30000,
+        "A4": 100000,
+        "A3": 250000
       }
     },
     {
@@ -1222,9 +1222,9 @@
       "mode_id": 8,
       "paper_id": 11,
       "sell_c": {
-        "6": 300,
-        "A4": 1000,
-        "A3": 2500
+        "6": 30000,
+        "A4": 100000,
+        "A3": 250000
       }
     },
     {
@@ -1232,8 +1232,8 @@
       "mode_id": 9,
       "paper_id": 12,
       "sell_c": {
-        "6": 200,
-        "A4": 600
+        "6": 20000,
+        "A4": 60000
       }
     },
     {
@@ -1241,8 +1241,8 @@
       "mode_id": 9,
       "paper_id": 11,
       "sell_c": {
-        "6": 250,
-        "A4": 800
+        "6": 25000,
+        "A4": 80000
       }
     },
     {
@@ -1250,8 +1250,8 @@
       "mode_id": 10,
       "paper_id": 12,
       "sell_c": {
-        "6": 150,
-        "A4": 500
+        "6": 15000,
+        "A4": 50000
       }
     },
     {
@@ -1259,9 +1259,9 @@
       "mode_id": 10,
       "paper_id": 11,
       "sell_c": {
-        "6": 200,
-        "A4": 700,
-        "A3": 1800
+        "6": 20000,
+        "A4": 70000,
+        "A3": 180000
       }
     },
     {
@@ -1269,9 +1269,9 @@
       "mode_id": 8,
       "paper_id": 13,
       "sell_c": {
-        "6": 800,
-        "A4": 3000,
-        "A3": 6500
+        "6": 80000,
+        "A4": 300000,
+        "A3": 650000
       }
     },
     {
@@ -1279,9 +1279,9 @@
       "mode_id": 7,
       "paper_id": 13,
       "sell_c": {
-        "6": 800,
-        "A4": 3000,
-        "A3": 6500
+        "6": 80000,
+        "A4": 300000,
+        "A3": 650000
       }
     },
     {
@@ -1289,9 +1289,9 @@
       "mode_id": 1,
       "paper_id": 2,
       "sell_c": {
-        "A5": 5,
-        "A4": 7,
-        "A3": 13
+        "A5": 500,
+        "A4": 700,
+        "A3": 1300
       }
     },
     {
@@ -1565,7 +1565,7 @@
       "type": "toner",
       "printer_code": "C850",
       "quantity": 1,
-      "unit_cost_c": 140000,
+      "unit_cost_c": 14000000,
       "cost_model": "per_page",
       "rated_life_pages": 56000,
       "alert_threshold_bp": 2000,

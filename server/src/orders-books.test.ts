@@ -7,7 +7,7 @@ import { collectForbiddenKeys, createTestUser, makeTestDb } from './test-helpers
 
 /**
  * D27 书行下单（acceptance §5/§6 同口径：unit_price_c 定格快照；下单域无 cost/profit/margin；机器对客户不可见）。
- * seed 基准书：封面 color·paper6·A3 = 88_c；内页 bw·paper1·A4 = 7_c。
+ * seed 基准书：封面 color·paper6·A3 = 8313_c；内页 bw·paper1·A4 = 700_c。
  */
 
 let db: DB
@@ -19,7 +19,7 @@ let coverId: number
 beforeEach(() => {
   db = makeTestDb()
   spoolInit(db, {
-    baseCurrency: 'JPY',
+    baseCurrency: 'CNY',
     adminEmail: 'admin@folioria.jp',
     adminName: 'K君',
     adminPassword: 'initial-secret-pw',
@@ -91,12 +91,12 @@ describe('§D27 书行下单', () => {
     }
     expect(order.items).toHaveLength(0)
     expect(order.books).toHaveLength(1)
-    // 组件 88 + 7×10=70 → 158；per_book 2000；per_page 3×11=33 → unit 2185
-    expect(order.books[0]!.unit_price_c).toBe(2185)
-    // lineTotal(2185, 5) = round_half_up(109.55) = 110
-    expect(order.books[0]!.line_total).toBe(109)
-    expect(order.subtotal).toBe(109)
-    expect(order.total).toBe(109)
+    // 组件 8313 + 700×10=7000 → 15313；per_book 2000；per_page 3×11=33 → unit 17346
+    expect(order.books[0]!.unit_price_c).toBe(17346)
+    // lineTotal(17346, 5) = round_half_up(867.3) = 867
+    expect(order.books[0]!.line_total).toBe(867)
+    expect(order.subtotal).toBe(867)
+    expect(order.total).toBe(867)
     expect(order.books[0]!.components).toHaveLength(2) // 封面 + 内页
     expect(order.books[0]!.finishings).toHaveLength(2)
   })
@@ -144,15 +144,15 @@ describe('§D27 书行下单', () => {
       url: '/api/orders',
       headers: { cookie },
       payload: {
-        items: [{ mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 200 }], // 7×200/100 = 14
-        books: [bookLine(5, 10)], // line_total 109
+        items: [{ mode_id: 1, paper_id: 1, size_key: 'A4', quantity: 200 }], // 700×200/100 = 1400
+        books: [bookLine(5, 10)], // line_total 867
       },
     })
     expect(res.statusCode).toBe(201)
     const order = res.json() as { items: Array<{ line_total: number }>; books: Array<{ line_total: number }>; subtotal: number }
-    expect(order.items[0]!.line_total).toBe(14)
-    expect(order.books[0]!.line_total).toBe(109)
-    expect(order.subtotal).toBe(123)
+    expect(order.items[0]!.line_total).toBe(1400)
+    expect(order.books[0]!.line_total).toBe(867)
+    expect(order.subtotal).toBe(2267)
   })
 
   it('unit_price_c 下单定格：改工艺价不动既有书单', async () => {
@@ -168,8 +168,8 @@ describe('§D27 书行下单', () => {
     db.prepare("UPDATE finishing_ops SET price_c = 99999 WHERE name = '骑马钉'").run()
     const refetched = await app.inject({ method: 'GET', url: `/api/orders/${id}`, headers: { cookie } })
     const order = refetched.json() as { books: Array<{ unit_price_c: number; line_total: number }> }
-    expect(order.books[0]!.unit_price_c).toBe(2185) // 不变
-    expect(order.books[0]!.line_total).toBe(109)
+    expect(order.books[0]!.unit_price_c).toBe(17346) // 不变
+    expect(order.books[0]!.line_total).toBe(867)
   })
 
   it('空单（无 item 无 book）→ 422 empty_order', async () => {
@@ -293,8 +293,8 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
     expect(cover.mode_id).toBe(4)
     expect(inner.quantity).toBe(50) // 10 张/本 × 5 本
     expect(inner.mode_id).toBe(1)
-    // Σ quoted_price === total（书行营收守恒，line_total 109）
-    expect(jobs.reduce((s, j) => s + j.quoted_price, 0)).toBe(109)
+    // Σ quoted_price === total（书行营收守恒，line_total 867）
+    expect(jobs.reduce((s, j) => s + j.quoted_price, 0)).toBe(867)
   })
 
   it('折扣后 Σ(组件 quoted_price) === total 守恒', async () => {
@@ -306,7 +306,7 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
       headers: { cookie: admin },
       payload: { discount: 10 },
     })
-    expect((disc.json() as { total: number }).total).toBe(99)
+    expect((disc.json() as { total: number }).total).toBe(857)
     await app.inject({ method: 'PATCH', url: `/api/orders/${id}/status`, headers: { cookie: admin }, payload: { status: 'confirmed' } })
     const sum = (
       db
@@ -317,7 +317,7 @@ describe('§D27 书行 confirm → 组件作业 / cancel 连带 / done 落账', 
         )
         .get(id) as { s: number }
     ).s
-    expect(sum).toBe(99)
+    expect(sum).toBe(857)
   })
 
   it('AdminJobs 编组字段：GET /api/jobs 暴露 order_book_id/book_name/book_role', async () => {
