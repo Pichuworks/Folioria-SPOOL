@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import AdminGate from './AdminGate'
 import { send } from './api'
+import CostTableTab from './pricing/CostTableTab'
 import FinishingsTab from './pricing/FinishingsTab'
 import ModesTab from './pricing/ModesTab'
 import PapersTab from './pricing/PapersTab'
@@ -20,6 +21,7 @@ import { useFetch } from './useFetch'
 
 const TABS = [
   { key: 'quotes', label: '报价' },
+  { key: 'costs', label: '成本表' },
   { key: 'papers', label: '纸张' },
   { key: 'modes', label: '模式' },
   { key: 'sizes', label: '尺寸' },
@@ -62,6 +64,7 @@ function PricingBody() {
 
   const counts: Record<TabKey, number> = {
     quotes: quotes.length,
+    costs: quotes.length,
     papers: papers.filter((p) => p.archived === 0).length,
     modes: modes.filter((m) => m.archived === 0).length,
     sizes: sizes.length,
@@ -76,6 +79,9 @@ function PricingBody() {
 
       {tab === 'quotes' && (
         <QuotesTab quotes={quotes} combos={combos} modes={modes} papers={papers} sizes={sizes} onChanged={reload} />
+      )}
+      {tab === 'costs' && (
+        <CostTableTab quotes={quotes} modes={modes} papers={papers} />
       )}
       {tab === 'papers' && (
         <PapersTab papers={papers} sizes={sizes} onChanged={reload} />
