@@ -1,18 +1,36 @@
-import { readFileSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { migrate, openDb, type DB } from './db.js'
+import { MIGRATIONS_DIR, migrate, openDb, type DB } from './db.js'
+import { spoolInit } from './init.js'
+import { importSeed } from './seed.js'
 
 const SCHEMA_PATH = fileURLToPath(new URL('../../docs/schema.sql', import.meta.url))
 const MIGRATION_0001_PATH = fileURLToPath(new URL('../migrations/0001_init.sql', import.meta.url))
 
 describe('migration runner', () => {
   let db: DB
+  const tempDirs: string[] = []
+
+  function migrationDirThrough(maxVersion: number): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'spool-migrations-'))
+    tempDirs.push(dir)
+    for (const name of readdirSync(MIGRATIONS_DIR)) {
+      if (/^\d{4}_.+\.sql$/.test(name) && Number(name.slice(0, 4)) <= maxVersion) {
+        copyFileSync(path.join(MIGRATIONS_DIR, name), path.join(dir, name))
+      }
+    }
+    return dir
+  }
+
   beforeEach(() => {
     db = openDb(':memory:')
   })
   afterEach(() => {
     db.close()
+    for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
   })
 
   it('0001_init.sql 与 docs/schema.sql 字节级一致（分歧守卫——schema 变更必须走新 migration）', () => {
@@ -22,49 +40,100 @@ describe('migration runner', () => {
   })
 
   it('migrate 应用全部 migration 后 user_version=最新，重复执行幂等', () => {
-    expect(migrate(db)).toBe(35)
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(migrate(db)).toBe(36)
+    expect(db.pragma('user_version', { simple: true })).toBe(36)
     expect(migrate(db)).toBe(0)
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(db.pragma('user_version', { simple: true })).toBe(36)
   })
 
-  it('0035：已切 CNY 的配置类单价层从 RMB×100 补正为分×100', () => {
-    migrate(db)
+  it('0019：v18 JPY 实例升级时保留业务数据与基准货币', () => {
+    expect(migrate(db, migrationDirThrough(18))).toBe(18)
+    spoolInit(db, {
+      baseCurrency: 'JPY',
+      adminEmail: 'admin@example.com',
+      adminName: 'Admin',
+      adminPassword: 'strong-pass-1',
+    })
+    importSeed(db)
+    const adminId = (db.prepare("SELECT id FROM users WHERE role = 'admin'").get() as { id: string }).id
+    db.prepare(
+      `INSERT INTO orders (id, order_number, access_token, customer_id, subtotal, total,
+                           quote_valid_until, created_at)
+       VALUES ('o1', 'FOL-2026-0001', 'token-1', ?, 100, 100,
+               '2026-08-01T00:00:00Z', '2026-07-01T00:00:00Z')`,
+    ).run(adminId)
+    db.prepare(
+      `INSERT INTO payments (id, order_id, kind, amount, operator_id, created_at)
+       VALUES ('pay1', 'o1', 'deposit', 50, ?, '2026-07-01T01:00:00Z')`,
+    ).run(adminId)
+    db.prepare(
+      `INSERT INTO admin_audit (id, actor_id, action, target_type, target_id, summary, created_at)
+       VALUES ('audit1', ?, 'order.create', 'order', 'o1', 'created', '2026-07-01T00:00:00Z')`,
+    ).run(adminId)
+    db.prepare(
+      `INSERT INTO report_snapshots
+         (month, ext_revenue, ext_cost, ext_profit, int_cost, jobs_done, pages, payload, generated_at)
+       VALUES ('2026-06', 100, 40, 60, 0, 1, 10, '{}', '2026-07-01T05:00:00Z')`,
+    ).run()
+    db.prepare(
+      `INSERT INTO maintenance_events (id, printer_id, type, occurred_at, operator_id, cost)
+       VALUES ('maint1', 1, 'calibration', '2026-07-01T00:00:00Z', ?, 20)`,
+    ).run(adminId)
+
+    const before = {
+      orders: (db.prepare('SELECT COUNT(*) AS n FROM orders').get() as { n: number }).n,
+      payments: (db.prepare('SELECT COUNT(*) AS n FROM payments').get() as { n: number }).n,
+      audit: (db.prepare('SELECT COUNT(*) AS n FROM admin_audit').get() as { n: number }).n,
+      snapshots: (db.prepare('SELECT COUNT(*) AS n FROM report_snapshots').get() as { n: number }).n,
+      maintenance: (db.prepare('SELECT COUNT(*) AS n FROM maintenance_events').get() as { n: number }).n,
+    }
+
+    expect(migrate(db)).toBe(18)
+    expect((db.prepare('SELECT base_currency FROM system_config WHERE id = 1').get() as { base_currency: string }).base_currency).toBe('JPY')
+    expect({
+      orders: (db.prepare('SELECT COUNT(*) AS n FROM orders').get() as { n: number }).n,
+      payments: (db.prepare('SELECT COUNT(*) AS n FROM payments').get() as { n: number }).n,
+      audit: (db.prepare('SELECT COUNT(*) AS n FROM admin_audit').get() as { n: number }).n,
+      snapshots: (db.prepare('SELECT COUNT(*) AS n FROM report_snapshots').get() as { n: number }).n,
+      maintenance: (db.prepare('SELECT COUNT(*) AS n FROM maintenance_events').get() as { n: number }).n,
+    }).toEqual(before)
+  })
+
+  it('0035：v34 CNY 实例升级不改正确单价层，并置待复核标志', () => {
+    expect(migrate(db, migrationDirThrough(34))).toBe(34)
     db.prepare(
       "INSERT INTO system_config (id, base_currency, initialized_at) VALUES (1, 'CNY', '2026-07-09T00:00:00Z')",
     ).run()
     db.prepare("INSERT INTO sizes (key, label, area, sort) VALUES ('A4', 'A4', 97, 1)").run()
     db.prepare(
-      "INSERT INTO printers (id, code, name, type, equipment_cost_c, monthly_cost_c) VALUES (1, 'C850', 'C850', 'laser', 2060000, 50000)",
+      "INSERT INTO printers (id, code, name, type, equipment_cost_c, monthly_cost_c) VALUES (1, 'C850', 'C850', 'laser', 206000000, 5000000)",
     ).run()
     db.prepare(
       `INSERT INTO print_modes (id, name, printer_id, ink_type, pricing_mode, ink_price_c,
                                 yield_sheets, ref_size, max_size)
-       VALUES (1, 'C850 黑白', 1, 'toner', 'set', 140000, 56000, 'A4', 'A4')`,
+       VALUES (1, 'C850 黑白', 1, 'toner', 'set', 14000000, 56000, 'A4', 'A4')`,
     ).run()
     db.prepare("INSERT INTO papers (id, name, category) VALUES (1, '亚太森博 A4', 'plain')").run()
     db.prepare(
-      "INSERT INTO paper_size_costs (paper_id, size_key, pack_price_c, pack_count) VALUES (1, 'A4', 39653, 12500)",
+      "INSERT INTO paper_size_costs (paper_id, size_key, pack_price_c, pack_count) VALUES (1, 'A4', 3965300, 12500)",
     ).run()
     db.prepare("INSERT INTO combos (id, mode_id, paper_id) VALUES (1, 1, 1)").run()
     db.prepare(
-      "INSERT INTO combo_prices (combo_id, size_key, sell_c, internal_sell_c) VALUES (1, 'A4', 7, 5)",
+      "INSERT INTO combo_prices (combo_id, size_key, sell_c, internal_sell_c) VALUES (1, 'A4', 700, 500)",
     ).run()
     db.prepare(
-      "INSERT INTO combo_price_tiers (combo_id, size_key, min_qty, sell_c, internal_sell_c) VALUES (1, 'A4', 100, 6, 4)",
+      "INSERT INTO combo_price_tiers (combo_id, size_key, min_qty, sell_c, internal_sell_c) VALUES (1, 'A4', 100, 600, 400)",
     ).run()
     db.prepare(
       `INSERT INTO consumables (id, name, type, printer_id, quantity, cost_model, rated_life_pages, unit_cost_c)
-       VALUES ('t01', 'T01', 'toner', 1, 1, 'per_page', 56000, 140000)`,
+       VALUES ('t01', 'T01', 'toner', 1, 1, 'per_page', 56000, 14000000)`,
     ).run()
     db.prepare(
-      "INSERT INTO finishing_ops (id, name, pricing, price_c, category) VALUES (99, '测试工艺', 'per_book', 200, 'binding')",
+      "INSERT INTO finishing_ops (id, name, pricing, price_c, category) VALUES (99, '测试工艺', 'per_book', 20000, 'binding')",
     ).run()
 
-    db.pragma('user_version = 34')
-
-    expect(migrate(db)).toBe(1)
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(migrate(db)).toBe(2)
+    expect(db.pragma('user_version', { simple: true })).toBe(36)
     expect(
       db
         .prepare(
@@ -93,6 +162,10 @@ describe('migration runner', () => {
       unit_cost_c: 14000000,
       price_c: 20000,
     })
+    expect(
+      (db.prepare('SELECT pricing_needs_reentry FROM system_config WHERE id = 1').get() as { pricing_needs_reentry: number })
+        .pricing_needs_reentry,
+    ).toBe(1)
   })
 
   it('外键每连接开启', () => {

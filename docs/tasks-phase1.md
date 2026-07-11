@@ -16,3 +16,4 @@
 - [x] T13 提醒: 阈值检查 · 去重 · resolve ← acceptance §4
 - [x] T14 Dashboard 四宫格
 - [x] T15 备份: VACUUM INTO systemd timer · 恢复演练脚本
+- [x] R01 迁移安全: 0019/0035 无损化 · CNY 单价层显式复核/备份/幂等修复

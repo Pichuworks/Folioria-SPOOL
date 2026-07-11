@@ -16,6 +16,15 @@ const app = buildApp(db, { cookieSecure })
 
 if (applied > 0) app.log.info({ applied }, 'migrations applied')
 
+const priceScaleState = db
+  .prepare('SELECT base_currency, pricing_needs_reentry FROM system_config WHERE id = 1')
+  .get() as { base_currency: string; pricing_needs_reentry: number } | undefined
+if (priceScaleState?.base_currency === 'CNY' && priceScaleState.pricing_needs_reentry !== 0) {
+  app.log.warn(
+    'CNY price layer requires review; inspect with `pnpm run cli pricing-scale inspect --db <file>` before marking canonical or repairing',
+  )
+}
+
 if (process.env['SPOOL_RESEND_API_KEY'] && !process.env['SPOOL_PUBLIC_ORIGIN']) {
   app.log.warn('SPOOL_PUBLIC_ORIGIN not set — email links will contain localhost URLs')
 }

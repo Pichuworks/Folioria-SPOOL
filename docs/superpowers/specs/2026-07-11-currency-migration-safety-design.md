@@ -36,20 +36,16 @@ Changing an already published migration is normally avoided, but it is necessary
 
 ## Explicit CNY Scale Decision
 
-A new migration will add a small operational marker to `system_config` with three states:
+A new migration will reuse `system_config.pricing_needs_reentry` as the operational marker instead of adding a duplicate state column. `1` means an upgraded CNY instance requires operator review and already blocks new orders; `0` means price-layer values are canonical. `admin_audit` records whether canonical state came from inspection or from the explicit repair, preserving the third-state history without another schema field.
 
-- `canonical`: price-layer values are already stored as minor currency unit x100.
-- `unknown`: an upgraded CNY instance requires operator review.
-- `repaired`: the explicit repair command multiplied the known old-scale values once.
-
-Fresh setup and CNY seed import write `canonical`. Existing initialized CNY databases receive `unknown`; JPY and USD databases receive `canonical` because the CNY repair does not apply.
+Fresh setup and CNY seed import retain the default canonical state. Existing initialized CNY databases receive `pricing_needs_reentry=1`; JPY and USD databases remain canonical because the CNY repair does not apply.
 
 The CLI will expose two explicit actions for an `unknown` CNY instance:
 
 - `pricing-scale mark-canonical`: record that inspected values are already correct without changing data.
 - `pricing-scale repair-cny`: back up and verify the database, print before/after samples and affected row counts, multiply the defined price-layer columns in one transaction, then set `repaired`.
 
-Both actions require a confirmation flag in non-interactive use. Neither action is available for non-CNY instances or an instance already marked `canonical`/`repaired`.
+Both actions require a confirmation flag in non-interactive use. Neither action is available for non-CNY instances or an instance whose `pricing_needs_reentry` flag is already clear.
 
 The server may continue serving an `unknown` instance, but it must emit a high-visibility startup warning. Blocking startup is intentionally avoided because it would turn a safe upgrade into an outage.
 
@@ -72,7 +68,7 @@ It must not change orders, jobs, payments, report snapshots, maintenance costs, 
 
 ## Failure Handling
 
-Backup verification must finish before any price update begins. A failed backup or integrity check aborts without changing the database. All scale updates and the marker transition run in one SQLite transaction. Overflow is checked before the transaction; any value whose product is outside SQLite or JavaScript safe integer limits aborts the entire repair.
+Backup verification must finish before any price update begins. A failed backup or integrity check aborts without changing the database. All scale updates, the guard transition, and the audit entry run in one SQLite transaction. Overflow is checked before the transaction; any value whose product is outside SQLite or JavaScript safe integer limits aborts the entire repair.
 
 ## Tests
 

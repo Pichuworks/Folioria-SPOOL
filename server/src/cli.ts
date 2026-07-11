@@ -4,6 +4,11 @@ import { parseArgs } from 'node:util'
 import { backupDb, verifyBackup } from './backup.js'
 import { migrate, openDb } from './db.js'
 import { spoolInit } from './init.js'
+import {
+  inspectPriceLayerScale,
+  markPriceLayerScaleCanonical,
+  repairCnyPriceLayerFile,
+} from './pricing-scale.js'
 import { snapshotMonth } from './reports-routes.js'
 import { importSeed } from './seed.js'
 
@@ -21,6 +26,9 @@ commands:
   backup         VACUUM INTO 一致性快照: --db <file> --dest <dir> [--keep 30]（禁止直接 cp）
   verify-backup  恢复演练: --file <backup.db>（integrity / FK / user_version）
   snapshot-month 月度报表归档: --db <file> [--month YYYY-MM]（缺省 = 上月; 幂等 upsert）
+  pricing-scale inspect: --db <file>
+  pricing-scale mark-canonical: --db <file> --confirm
+  pricing-scale repair-cny: --db <file> --backup-dir <dir> --confirm
 `
 
 async function main(): Promise<void> {
@@ -107,6 +115,37 @@ async function main(): Promise<void> {
     console.log(
       `snapshot ${month}: 作业 ${snap.jobs_done} · 外部营收 ${snap.ext_revenue} · 外部毛利 ${snap.ext_profit} · 内部成本 ${snap.int_cost}`,
     )
+  } else if (cmd === 'pricing-scale') {
+    const [action, ...actionArgs] = rest
+    const { values } = parseArgs({
+      args: actionArgs,
+      options: {
+        db: { type: 'string', default: 'folioria.db' },
+        'backup-dir': { type: 'string' },
+        confirm: { type: 'boolean', default: false },
+      },
+    })
+    if (action === 'repair-cny') {
+      if (!values.confirm) throw new Error('pricing scale: confirmation_required')
+      if (!values['backup-dir']) throw new Error('pricing scale: missing --backup-dir')
+      const result = repairCnyPriceLayerFile(values.db, values['backup-dir'], { confirm: true })
+      console.log(JSON.stringify(result, null, 2))
+    } else {
+      const db = openDb(values.db)
+      try {
+        migrate(db)
+        const before = inspectPriceLayerScale(db)
+        console.log(JSON.stringify({ before }, null, 2))
+        if (action === 'mark-canonical') {
+          if (!values.confirm) throw new Error('pricing scale: confirmation_required')
+          console.log(JSON.stringify({ after: markPriceLayerScaleCanonical(db) }, null, 2))
+        } else if (action !== 'inspect') {
+          throw new Error('pricing scale: action must be inspect, mark-canonical, or repair-cny')
+        }
+      } finally {
+        db.close()
+      }
+    }
   } else {
     console.log(USAGE)
     process.exitCode = cmd ? 1 : 0
