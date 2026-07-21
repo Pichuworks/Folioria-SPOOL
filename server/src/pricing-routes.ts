@@ -7,6 +7,7 @@ import { finishingContribution, type FinishingPricing } from './finishing.js'
 import { requireAdmin } from './guards.js'
 import { formatMoney, formatMoneyC, lineTotal, moneyC } from './money.js'
 import { invalidateQuotableCache, listProducts, listQuotable, quote } from './pricing.js'
+import { rebuildSizeConversions } from './size-conversions.js'
 import { sendXlsx } from './xlsx.js'
 
 const MONEY_C = { type: 'integer', minimum: 0 }
@@ -73,14 +74,17 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
     async (req, reply) => {
       const b = req.body as { key: string; label: string; area: number; sort?: number; width_mm?: number | null; height_mm?: number | null }
       try {
-        db.prepare('INSERT INTO sizes (key, label, area, sort, width_mm, height_mm) VALUES (?, ?, ?, ?, ?, ?)').run(
-          b.key,
-          b.label,
-          b.area,
-          b.sort ?? 0,
-          b.width_mm ?? null,
-          b.height_mm ?? null,
-        )
+        db.transaction(() => {
+          db.prepare('INSERT INTO sizes (key, label, area, sort, width_mm, height_mm) VALUES (?, ?, ?, ?, ?, ?)').run(
+            b.key,
+            b.label,
+            b.area,
+            b.sort ?? 0,
+            b.width_mm ?? null,
+            b.height_mm ?? null,
+          )
+          rebuildSizeConversions(db)
+        })()
       } catch (err) {
         if (isConstraint(err, 'UNIQUE') || isConstraint(err, 'PRIMARY')) {
           return reply.status(409).send({ error: 'key_exists' })
@@ -118,14 +122,17 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         | undefined
       if (!existing) return reply.status(404).send({ error: 'not_found' })
       const b = req.body as Partial<{ label: string; area: number; sort: number; width_mm: number | null; height_mm: number | null }>
-      db.prepare('UPDATE sizes SET label = ?, area = ?, sort = ?, width_mm = ?, height_mm = ? WHERE key = ?').run(
-        b.label ?? existing.label,
-        b.area ?? existing.area,
-        b.sort ?? existing.sort,
-        'width_mm' in b ? (b.width_mm ?? null) : existing.width_mm,
-        'height_mm' in b ? (b.height_mm ?? null) : existing.height_mm,
-        key,
-      )
+      db.transaction(() => {
+        db.prepare('UPDATE sizes SET label = ?, area = ?, sort = ?, width_mm = ?, height_mm = ? WHERE key = ?').run(
+          b.label ?? existing.label,
+          b.area ?? existing.area,
+          b.sort ?? existing.sort,
+          'width_mm' in b ? (b.width_mm ?? null) : existing.width_mm,
+          'height_mm' in b ? (b.height_mm ?? null) : existing.height_mm,
+          key,
+        )
+        rebuildSizeConversions(db)
+      })()
       logEdit(req.user?.id ?? null, 'pricing.size', key, `改尺寸 ${key}`)
       return db.prepare('SELECT * FROM sizes WHERE key = ?').get(key)
     },
@@ -134,7 +141,12 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
   app.delete('/api/pricing/sizes/:key', { preHandler: requireAdmin }, async (req, reply) => {
     const { key } = req.params as { key: string }
     try {
-      const { changes } = db.prepare('DELETE FROM sizes WHERE key = ?').run(key)
+      const { changes } = db.transaction(() => {
+        db.prepare('DELETE FROM size_conversions WHERE source_size_key = ? OR target_size_key = ?').run(key, key)
+        const result = db.prepare('DELETE FROM sizes WHERE key = ?').run(key)
+        rebuildSizeConversions(db)
+        return result
+      })()
       if (changes === 0) return reply.status(404).send({ error: 'not_found' })
     } catch (err) {
       if (isConstraint(err, 'FOREIGN KEY')) {
@@ -751,6 +763,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
           { header: '打印模式', key: 'mode_name', width: 20 },
           { header: '纸张', key: 'paper_name', width: 18 },
           { header: '尺寸', key: 'size_label', width: 10 },
+          { header: '原纸尺寸', key: 'paper_source_size', width: 12 },
+          { header: '开数', key: 'paper_yield', width: 8 },
           { header: '墨耗成本', key: 'ink_display', width: 12 },
           { header: '纸张成本', key: 'paper_display', width: 12 },
           { header: '总成本', key: 'total_display', width: 12 },
@@ -764,6 +778,8 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
           mode_name: modes.get(q.mode_id) ?? String(q.mode_id),
           paper_name: papers.get(q.paper_id) ?? String(q.paper_id),
           size_label: sizes.get(q.size_key) ?? q.size_key,
+          paper_source_size: sizes.get(q.paper_source_size_key) ?? q.paper_source_size_key,
+          paper_yield: q.paper_yield,
           ink_display: formatMoneyC(q.ink_c, currency),
           paper_display: formatMoneyC(q.paper_c, currency),
           total_display: formatMoneyC(q.total_c, currency),
@@ -986,9 +1002,12 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         }
         entry.prices[q.size_key] = { sell_c: q.sell_c, display: formatMoneyC(q.sell_c, currency) }
       }
+      const quotableSizeKeys = new Set(quotes.map((q) => q.size_key))
       return {
         currency,
-        sizes: db.prepare('SELECT key, label, sort FROM sizes ORDER BY sort').all(),
+        sizes: (db.prepare('SELECT key, label, sort FROM sizes ORDER BY sort').all() as Array<{
+          key: string; label: string; sort: number
+        }>).filter((size) => quotableSizeKeys.has(size.key)),
         modes: (
           db
             .prepare('SELECT id, name, duplex, max_size FROM print_modes WHERE archived = 0 ORDER BY id')
@@ -1057,10 +1076,13 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
         sell_c: p.sell_c as number,
         display: formatMoneyC(p.sell_c, currency),
       }))
+      const productSizeKeys = new Set(products.map((product) => product.size_key))
       return {
         currency,
         papers: db.prepare('SELECT id, name FROM papers WHERE archived = 0 ORDER BY id').all(),
-        sizes: db.prepare('SELECT key, label, sort FROM sizes ORDER BY sort').all(),
+        sizes: (db.prepare('SELECT key, label, sort FROM sizes ORDER BY sort').all() as Array<{
+          key: string; label: string; sort: number
+        }>).filter((size) => productSizeKeys.has(size.key)),
         products,
       }
     },
@@ -1391,8 +1413,17 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
                     name: { type: 'string' },
                     category: { type: ['string', 'null'] },
                     gsm: { type: ['integer', 'null'] },
-                    available_sizes: { type: 'array', items: { type: 'string' } },
-                    color_classes: { type: 'array', items: { type: 'string' } },
+                    variants: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          size_key: { type: 'string' },
+                          color_classes: { type: 'array', items: { type: 'string' } },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -1445,23 +1476,23 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
       const papers = db.prepare('SELECT id, name, category, gsm FROM papers WHERE archived = 0 ORDER BY id').all() as Array<{
         id: number; name: string; category: string | null; gsm: number | null
       }>
-      const psc = db.prepare('SELECT paper_id, size_key FROM paper_size_costs').all() as Array<{
-        paper_id: number; size_key: string
-      }>
-      const paperSizes = new Map<number, string[]>()
-      for (const row of psc) {
-        const arr = paperSizes.get(row.paper_id)
-        if (arr) arr.push(row.size_key)
-        else paperSizes.set(row.paper_id, [row.size_key])
-      }
       const products = listProducts(db, { internal })
-      const paperColors = new Map<string, Set<string>>()
+      const paperVariants = new Map<number, Map<string, Set<string>>>()
       for (const p of products) {
-        const key = `${p.paper_id}:${p.size_key}`
-        const set = paperColors.get(key)
-        if (set) set.add(p.category)
-        else paperColors.set(key, new Set([p.category]))
+        let variants = paperVariants.get(p.paper_id)
+        if (!variants) {
+          variants = new Map()
+          paperVariants.set(p.paper_id, variants)
+        }
+        let colors = variants.get(p.size_key)
+        if (!colors) {
+          colors = new Set()
+          variants.set(p.size_key, colors)
+        }
+        colors.add(p.category)
       }
+      const sizeOrder = new Map(sizes.map((size, index) => [size.key, index]))
+      const quotableSizeKeys = new Set(products.map((product) => product.size_key))
 
       const fins = db
         .prepare('SELECT id, name, pricing, price_c, category FROM finishing_ops WHERE archived = 0 ORDER BY id')
@@ -1471,16 +1502,18 @@ export function registerPricingRoutes(app: FastifyInstance, db: DB): void {
 
       return {
         currency,
-        sizes,
+        sizes: sizes.filter((size) => quotableSizeKeys.has(size.key)),
         papers: papers.map((p) => ({
           id: p.id,
           name: p.name,
           category: p.category,
           gsm: p.gsm,
-          available_sizes: paperSizes.get(p.id) ?? [],
-          color_classes: [...new Set(
-            (paperSizes.get(p.id) ?? []).flatMap((sk) => [...(paperColors.get(`${p.id}:${sk}`) ?? [])]),
-          )],
+          variants: [...(paperVariants.get(p.id) ?? new Map<string, Set<string>>())]
+            .sort(([a], [b]) => (sizeOrder.get(a) ?? 0) - (sizeOrder.get(b) ?? 0))
+            .map(([size_key, colorClasses]) => ({
+              size_key,
+              color_classes: [...colorClasses],
+            })),
         })),
         finishings: {
           binding: binding.map((f) => ({

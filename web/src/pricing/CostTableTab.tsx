@@ -14,6 +14,7 @@ export interface CostRow {
   modeName: string
   paperName: string
   sizeKey: string
+  sourceTrace: string
   inkDisplay: string
   paperDisplay: string
   totalDisplay: string
@@ -31,6 +32,9 @@ export function buildCostRows(quotes: QuoteDto[], modes: ModeDto[], papers: Pape
     modeName: modeName.get(q.mode_id) ?? `mode#${q.mode_id}`,
     paperName: paperName.get(q.paper_id) ?? `paper#${q.paper_id}`,
     sizeKey: q.size_key,
+    sourceTrace: q.paper_source_size_key === q.size_key && q.paper_yield === 1
+      ? '原尺寸'
+      : `${q.paper_source_size_key} → ${q.size_key} · ${q.paper_yield}开`,
     inkDisplay: q.ink_display,
     paperDisplay: q.paper_display,
     totalDisplay: q.total_display,
@@ -61,7 +65,8 @@ export default function CostTableTab({
         needle === '' ||
         r.modeName.toLowerCase().includes(needle) ||
         r.paperName.toLowerCase().includes(needle) ||
-        r.sizeKey.toLowerCase().includes(needle)
+        r.sizeKey.toLowerCase().includes(needle) ||
+        r.sourceTrace.toLowerCase().includes(needle)
       const matchesFlag = flagFilter === 'all' || r.flag === flagFilter
       return matchesText && matchesFlag
     })
@@ -104,6 +109,7 @@ export default function CostTableTab({
               <th className="min-w-[170px] px-4 py-2.5 text-left font-mono text-[10.5px] tracking-[.14em] text-dim">模式</th>
               <th className="min-w-[210px] px-3 py-2.5 text-left font-mono text-[10.5px] tracking-[.14em] text-dim">纸张</th>
               <th className="px-3 py-2.5 text-left font-mono text-[10.5px] tracking-[.14em] text-dim">尺寸</th>
+              <th className="min-w-[150px] px-3 py-2.5 text-left font-mono text-[10.5px] tracking-[.14em] text-dim">原纸换算</th>
               <th className="px-3 py-2.5 text-right font-mono text-[10.5px] tracking-[.14em] text-dim">墨耗</th>
               <th className="px-3 py-2.5 text-right font-mono text-[10.5px] tracking-[.14em] text-dim">纸张</th>
               <th className="px-3 py-2.5 text-right font-mono text-[10.5px] tracking-[.14em] text-dim">总成本</th>
@@ -120,6 +126,7 @@ export default function CostTableTab({
                   <td className="px-4 py-[9px] font-medium text-ink">{r.modeName}</td>
                   <td className="px-3 py-[9px] text-ink">{r.paperName}</td>
                   <td className="px-3 py-[9px] font-mono text-[12px] text-dim">{r.sizeKey}</td>
+                  <td className="px-3 py-[9px] font-mono text-[11.5px] text-dim">{r.sourceTrace}</td>
                   <td className="px-3 py-[9px] text-right font-mono text-[12px] text-ink">{r.inkDisplay}</td>
                   <td className="px-3 py-[9px] text-right font-mono text-[12px] text-ink">{r.paperDisplay}</td>
                   <td className="px-3 py-[9px] text-right font-mono text-[12px] font-medium text-ink">{r.totalDisplay}</td>
@@ -134,7 +141,7 @@ export default function CostTableTab({
             })}
             {paged.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-[13px] text-dim">
+                <td colSpan={10} className="px-4 py-8 text-center text-[13px] text-dim">
                   {search || flagFilter !== 'all' ? '无匹配结果' : '暂无成本数据'}
                 </td>
               </tr>

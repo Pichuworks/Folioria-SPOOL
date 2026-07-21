@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { type DB } from './db.js'
+import { rebuildSizeConversions } from './size-conversions.js'
 
 const SEED_PATH = fileURLToPath(new URL('../../data/seed.json', import.meta.url))
 
@@ -26,7 +27,14 @@ interface SeedData {
     overhead_dep_months: number
     overhead_month_volume: number
   }
-  sizes: Array<{ key: string; label: string; area: number; sort: number }>
+  sizes: Array<{
+    key: string
+    label: string
+    area: number
+    sort: number
+    width_mm: number | null
+    height_mm: number | null
+  }>
   printers: Array<{
     code: string
     name: string
@@ -96,21 +104,14 @@ export function importSeed(db: DB, seedPath: string = SEED_PATH): void {
 
   db.transaction(() => {
     const insertSize = db.prepare(
-      'INSERT INTO sizes (key, label, area, sort) VALUES (@key, @label, @area, @sort)',
+      `INSERT INTO sizes (key, label, area, sort, width_mm, height_mm)
+       VALUES (@key, @label, @area, @sort, @width_mm, @height_mm)`,
     )
     for (const s of seed.sizes) insertSize.run(s)
-
-    // D36 标准尺寸物理 mm（seed.json 不含；与 migration 0018 同口径——迁移覆盖既有库，本处覆盖全新 seed 库，
-    // 因 migrate 先于 seed 运行、迁移内 UPDATE 在空表无效）。A3+（A3P）因机型而异留 NULL 待 admin 填。
-    const STD_SIZE_MM: Record<string, readonly [number, number]> = {
-      '6': [152, 102],
-      A5: [148, 210],
-      A4: [210, 297],
-      A3: [297, 420],
-      SRA3: [320, 450],
-    }
-    const setSizeMm = db.prepare('UPDATE sizes SET width_mm = ?, height_mm = ? WHERE key = ?')
-    for (const [key, [w, h]] of Object.entries(STD_SIZE_MM)) setSizeMm.run(w, h, key)
+    const hasSizeConversions = db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'size_conversions'")
+      .get()
+    if (hasSizeConversions) rebuildSizeConversions(db)
 
     const insertPrinter = db.prepare(
       `INSERT INTO printers (code, name, type, equipment_cost_c, monthly_cost_c)

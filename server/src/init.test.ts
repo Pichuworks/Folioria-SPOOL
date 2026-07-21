@@ -61,7 +61,7 @@ describe('spool init（B1：初始 admin + 基准货币）', () => {
   it('init 后可正常导入 seed', () => {
     spoolInit(db, OPTS)
     importSeed(db)
-    expect((db.prepare('SELECT COUNT(*) n FROM sizes').get() as { n: number }).n).toBe(7)
+    expect((db.prepare('SELECT COUNT(*) n FROM sizes').get() as { n: number }).n).toBe(31)
   })
 })
 describe('POST /api/setup（Web 初始化向导）', () => {
@@ -87,7 +87,7 @@ describe('POST /api/setup（Web 初始化向导）', () => {
     expect(me.role).toBe('admin')
     expect(me.must_change_password).toBe(false)
     expect(String(res.headers['set-cookie'])).toContain('spool_session=')
-    expect((db.prepare('SELECT COUNT(*) n FROM sizes').get() as { n: number }).n).toBe(7)
+    expect((db.prepare('SELECT COUNT(*) n FROM sizes').get() as { n: number }).n).toBe(31)
     const cfg = await app.inject({ method: 'GET', url: '/api/public-config' })
     expect((cfg.json() as { initialized: boolean }).initialized).toBe(true)
     const again = await app.inject({

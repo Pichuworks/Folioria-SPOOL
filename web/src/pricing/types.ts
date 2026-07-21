@@ -2,6 +2,8 @@ export interface QuoteDto {
   mode_id: number
   paper_id: number
   size_key: string
+  paper_source_size_key: string
+  paper_yield: number
   ink_c: number
   paper_c: number
   total_c: number

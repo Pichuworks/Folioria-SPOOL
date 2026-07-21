@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { MIGRATIONS_DIR, migrate, openDb, type DB } from './db.js'
 import { spoolInit } from './init.js'
 import { importSeed } from './seed.js'
+import { withSystemConfig } from './test-helpers.js'
 
 const SCHEMA_PATH = fileURLToPath(new URL('../../docs/schema.sql', import.meta.url))
 const MIGRATION_0001_PATH = fileURLToPath(new URL('../migrations/0001_init.sql', import.meta.url))
@@ -40,10 +41,70 @@ describe('migration runner', () => {
   })
 
   it('migrate 应用全部 migration 后 user_version=最新，重复执行幂等', () => {
-    expect(migrate(db)).toBe(36)
-    expect(db.pragma('user_version', { simple: true })).toBe(36)
+    expect(migrate(db)).toBe(37)
+    expect(db.pragma('user_version', { simple: true })).toBe(37)
     expect(migrate(db)).toBe(0)
-    expect(db.pragma('user_version', { simple: true })).toBe(36)
+    expect(db.pragma('user_version', { simple: true })).toBe(37)
+  })
+
+  it('0037：完整常用尺寸目录与开纸换算规则落库', () => {
+    migrate(db)
+    withSystemConfig(db)
+    importSeed(db)
+    const keys = (db.prepare('SELECT key FROM sizes ORDER BY key').all() as Array<{ key: string }>).map((s) => s.key)
+    expect(keys).toEqual(expect.arrayContaining([
+      'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8',
+      'B0', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8',
+      'RA0', 'RA1', 'RA2', 'RA3', 'RA4',
+      'SRA0', 'SRA1', 'SRA2', 'SRA3', 'SRA4',
+      '6', 'A3P', 'A3PP',
+    ]))
+
+    const yieldOf = (source: string, target: string) =>
+      (db.prepare(
+        'SELECT yield_count FROM size_conversions WHERE source_size_key = ? AND target_size_key = ?',
+      ).get(source, target) as { yield_count: number } | undefined)?.yield_count
+    expect(yieldOf('A4', 'A5')).toBe(2)
+    expect(yieldOf('A3', 'A5')).toBe(4)
+    expect(yieldOf('A3', 'B5')).toBe(2)
+    expect(yieldOf('SRA3', '6')).toBe(8)
+    expect(yieldOf('A3', '6')).toBe(6)
+    const missingRules = db.prepare(
+      `SELECT COUNT(*) AS n
+       FROM sizes source CROSS JOIN sizes target
+       WHERE source.key <> target.key
+         AND source.width_mm IS NOT NULL AND source.height_mm IS NOT NULL
+         AND target.width_mm IS NOT NULL AND target.height_mm IS NOT NULL
+         AND MAX(
+           CAST(source.width_mm / target.width_mm AS INTEGER) * CAST(source.height_mm / target.height_mm AS INTEGER),
+           CAST(source.width_mm / target.height_mm AS INTEGER) * CAST(source.height_mm / target.width_mm AS INTEGER)
+         ) > 0
+         AND NOT EXISTS (
+           SELECT 1 FROM size_conversions sc
+           WHERE sc.source_size_key = source.key AND sc.target_size_key = target.key
+         )`,
+    ).get() as { n: number }
+    expect(missingRules.n).toBe(0)
+    expect(
+      (db.prepare("SELECT COUNT(*) AS n FROM size_conversions WHERE source_size_key IN ('A3P','A3PP')").get() as { n: number }).n,
+    ).toBe(0)
+  })
+
+  it('0037：既有实例统一目录顺序，同时保留管理员已填的物理尺寸', () => {
+    migrate(db, migrationDirThrough(36))
+    db.prepare(
+      "INSERT INTO sizes (key, label, area, sort, width_mm, height_mm) VALUES ('A5', '旧 A5', 49, 1, 150, 212)",
+    ).run()
+
+    expect(migrate(db)).toBe(1)
+    expect(db.prepare("SELECT label, area, sort, width_mm, height_mm FROM sizes WHERE key = 'A5'").get()).toEqual({
+      label: 'A5',
+      area: 48,
+      sort: 40,
+      width_mm: 150,
+      height_mm: 212,
+    })
+    expect((db.prepare('SELECT COUNT(*) AS n FROM sizes').get() as { n: number }).n).toBe(31)
   })
 
   it('0019：v18 JPY 实例升级时保留业务数据与基准货币', () => {
@@ -88,7 +149,7 @@ describe('migration runner', () => {
       maintenance: (db.prepare('SELECT COUNT(*) AS n FROM maintenance_events').get() as { n: number }).n,
     }
 
-    expect(migrate(db)).toBe(18)
+    expect(migrate(db)).toBe(19)
     expect((db.prepare('SELECT base_currency FROM system_config WHERE id = 1').get() as { base_currency: string }).base_currency).toBe('JPY')
     expect({
       orders: (db.prepare('SELECT COUNT(*) AS n FROM orders').get() as { n: number }).n,
@@ -132,8 +193,8 @@ describe('migration runner', () => {
       "INSERT INTO finishing_ops (id, name, pricing, price_c, category) VALUES (99, '测试工艺', 'per_book', 20000, 'binding')",
     ).run()
 
-    expect(migrate(db)).toBe(2)
-    expect(db.pragma('user_version', { simple: true })).toBe(36)
+    expect(migrate(db)).toBe(3)
+    expect(db.pragma('user_version', { simple: true })).toBe(37)
     expect(
       db
         .prepare(

@@ -54,6 +54,43 @@ function buildBook(): { book: number; cover: number; inner: number; bind: number
 }
 
 describe('下单域目录 / 实时报价（机器不可见）', () => {
+  it('GET /api/calculator/book-config：A5 能由大纸派生，能力按尺寸分组且隐藏不可报价尺寸', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/calculator/book-config' })
+    expect(res.statusCode).toBe(200)
+    const body = res.json() as {
+      sizes: Array<{ key: string }>
+      papers: Array<{ id: number; variants: Array<{ size_key: string; color_classes: string[] }> }>
+    }
+    const paper = body.papers.find((p) => p.id === 1)
+    const a5 = paper?.variants.find((v) => v.size_key === 'A5')
+    expect(a5?.color_classes).toEqual(expect.arrayContaining(['bw', 'color']))
+    expect(body.sizes.some((s) => s.key === 'A5')).toBe(true)
+    expect(body.sizes.some((s) => s.key === 'A0')).toBe(false)
+    expect(collectForbiddenKeys(body)).toEqual([])
+    expect(JSON.stringify(body)).not.toContain('paper_source_size_key')
+    expect(JSON.stringify(body)).not.toContain('paper_yield')
+  })
+
+  it('POST /api/calculator/book-spec-quote：A5 封面与内页可经 A4 原纸正常报价', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/calculator/book-spec-quote',
+      payload: {
+        count: 2,
+        size_key: 'A5',
+        components: [
+          { role: 'cover', paper_id: 1, color_class: 'color', duplex: 0, sheets_per_book: 1 },
+          { role: 'inner', paper_id: 1, color_class: 'bw', duplex: 0, sheets_per_book: 20 },
+        ],
+      },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json() as { line_total: number; components: unknown[] }
+    expect(body.line_total).toBeGreaterThan(0)
+    expect(body.components).toHaveLength(2)
+    expect(collectForbiddenKeys(body)).toEqual([])
+  })
+
   it('GET /api/calculator/books：组件无 mode_id；工艺带 price_display；§6 无 cost/profit/margin', async () => {
     buildBook()
     const res = await app.inject({ method: 'GET', url: '/api/calculator/books' })

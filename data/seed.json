@@ -18,43 +18,249 @@
       "key": "6",
       "label": "6寸",
       "area": 24,
-      "sort": 0
+      "sort": 0,
+      "width_mm": 152,
+      "height_mm": 102
+    },
+    {
+      "key": "A8",
+      "label": "A8",
+      "area": 6,
+      "sort": 10,
+      "width_mm": 52,
+      "height_mm": 74
+    },
+    {
+      "key": "A7",
+      "label": "A7",
+      "area": 12,
+      "sort": 20,
+      "width_mm": 74,
+      "height_mm": 105
+    },
+    {
+      "key": "A6",
+      "label": "A6",
+      "area": 24,
+      "sort": 30,
+      "width_mm": 105,
+      "height_mm": 148
     },
     {
       "key": "A5",
       "label": "A5",
       "area": 48,
-      "sort": 1
+      "sort": 40,
+      "width_mm": 148,
+      "height_mm": 210
     },
     {
       "key": "A4",
       "label": "A4",
       "area": 97,
-      "sort": 2
+      "sort": 50,
+      "width_mm": 210,
+      "height_mm": 297
     },
     {
       "key": "A3",
       "label": "A3",
       "area": 193,
-      "sort": 3
+      "sort": 60,
+      "width_mm": 297,
+      "height_mm": 420
+    },
+    {
+      "key": "A2",
+      "label": "A2",
+      "area": 386,
+      "sort": 70,
+      "width_mm": 420,
+      "height_mm": 594
+    },
+    {
+      "key": "A1",
+      "label": "A1",
+      "area": 772,
+      "sort": 80,
+      "width_mm": 594,
+      "height_mm": 841
+    },
+    {
+      "key": "A0",
+      "label": "A0",
+      "area": 1544,
+      "sort": 90,
+      "width_mm": 841,
+      "height_mm": 1189
+    },
+    {
+      "key": "B8",
+      "label": "B8",
+      "area": 9,
+      "sort": 110,
+      "width_mm": 62,
+      "height_mm": 88
+    },
+    {
+      "key": "B7",
+      "label": "B7",
+      "area": 17,
+      "sort": 120,
+      "width_mm": 88,
+      "height_mm": 125
+    },
+    {
+      "key": "B6",
+      "label": "B6",
+      "area": 34,
+      "sort": 130,
+      "width_mm": 125,
+      "height_mm": 176
+    },
+    {
+      "key": "B5",
+      "label": "B5",
+      "area": 68,
+      "sort": 140,
+      "width_mm": 176,
+      "height_mm": 250
+    },
+    {
+      "key": "B4",
+      "label": "B4",
+      "area": 137,
+      "sort": 150,
+      "width_mm": 250,
+      "height_mm": 353
+    },
+    {
+      "key": "B3",
+      "label": "B3",
+      "area": 273,
+      "sort": 160,
+      "width_mm": 353,
+      "height_mm": 500
+    },
+    {
+      "key": "B2",
+      "label": "B2",
+      "area": 546,
+      "sort": 170,
+      "width_mm": 500,
+      "height_mm": 707
+    },
+    {
+      "key": "B1",
+      "label": "B1",
+      "area": 1092,
+      "sort": 180,
+      "width_mm": 707,
+      "height_mm": 1000
+    },
+    {
+      "key": "B0",
+      "label": "B0",
+      "area": 2184,
+      "sort": 190,
+      "width_mm": 1000,
+      "height_mm": 1414
+    },
+    {
+      "key": "RA4",
+      "label": "RA4",
+      "area": 115,
+      "sort": 210,
+      "width_mm": 215,
+      "height_mm": 305
+    },
+    {
+      "key": "RA3",
+      "label": "RA3",
+      "area": 230,
+      "sort": 220,
+      "width_mm": 305,
+      "height_mm": 430
+    },
+    {
+      "key": "RA2",
+      "label": "RA2",
+      "area": 460,
+      "sort": 230,
+      "width_mm": 430,
+      "height_mm": 610
+    },
+    {
+      "key": "RA1",
+      "label": "RA1",
+      "area": 920,
+      "sort": 240,
+      "width_mm": 610,
+      "height_mm": 860
+    },
+    {
+      "key": "RA0",
+      "label": "RA0",
+      "area": 1840,
+      "sort": 250,
+      "width_mm": 860,
+      "height_mm": 1220
+    },
+    {
+      "key": "SRA4",
+      "label": "SRA4",
+      "area": 125,
+      "sort": 310,
+      "width_mm": 225,
+      "height_mm": 320
     },
     {
       "key": "A3P",
       "label": "A3+",
       "area": 230,
-      "sort": 4
+      "sort": 319,
+      "width_mm": null,
+      "height_mm": null
     },
     {
       "key": "SRA3",
       "label": "A3++",
       "area": 250,
-      "sort": 5
+      "sort": 320,
+      "width_mm": 320,
+      "height_mm": 450
     },
     {
       "key": "A3PP",
       "label": "A3+++",
       "area": 270,
-      "sort": 6
+      "sort": 321,
+      "width_mm": null,
+      "height_mm": null
+    },
+    {
+      "key": "SRA2",
+      "label": "SRA2",
+      "area": 500,
+      "sort": 330,
+      "width_mm": 450,
+      "height_mm": 640
+    },
+    {
+      "key": "SRA1",
+      "label": "SRA1",
+      "area": 1000,
+      "sort": 340,
+      "width_mm": 640,
+      "height_mm": 900
+    },
+    {
+      "key": "SRA0",
+      "label": "SRA0",
+      "area": 2000,
+      "sort": 350,
+      "width_mm": 900,
+      "height_mm": 1280
     }
   ],
   "printers": [

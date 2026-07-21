@@ -144,8 +144,10 @@ export interface BookConfigPaper {
   name: string
   category: string | null
   gsm: number | null
-  available_sizes: string[]
-  color_classes: string[]
+  variants: Array<{
+    size_key: string
+    color_classes: string[]
+  }>
 }
 export interface BookConfigFinishing {
   id: number

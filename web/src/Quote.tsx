@@ -211,8 +211,13 @@ export default function Quote() {
   return (
     <MagSec title="自助报价 · 在线下单">
       {me && <VerifyBanner me={me} />}
-      <div className="mt-2 grid grid-cols-1 border border-ink md:grid-cols-[5fr_7fr]">
-        <div className="space-y-5 border-b border-ink p-7 md:border-b-0 md:border-r">
+      <div className="mt-2 grid grid-cols-1 border border-ink lg:grid-cols-[minmax(0,3fr)_minmax(340px,2fr)]">
+        {/* 移动端配置在前；桌面端按参考计价台把配置固定在右栏。 */}
+        <aside className="order-1 space-y-5 border-b border-ink bg-card/25 p-6 sm:p-7 lg:order-2 lg:border-b-0 lg:border-l">
+          <div className="flex items-baseline justify-between border-b border-line pb-2">
+            <span className="text-[14px] font-medium tracking-[.08em] text-ink">印刷配置</span>
+            <span className="font-mono text-[10px] tracking-[.14em] text-dim">SPECIFICATION</span>
+          </div>
           <div className="flex gap-2">
             <button type="button" className={catBtn(mode === 'single')} onClick={() => setMode('single')}>
               单页
@@ -228,11 +233,14 @@ export default function Quote() {
           ) : (
             <QuoteSelector data={data} onAdd={(line) => setCart((prev) => [...prev, line])} />
           )}
-        </div>
+        </aside>
 
-        {/* 右栏：清单与提交 */}
-        <div className="flex flex-col p-7">
-          <div className="font-mono text-[10px] tracking-[.14em] text-dim">清单 · {cart.length}</div>
+        {/* 桌面左栏：报价结果、订单清单与提交。 */}
+        <section className="order-2 flex min-h-[520px] flex-col p-6 sm:p-7 lg:order-1">
+          <div className="flex items-baseline justify-between border-b border-line pb-2">
+            <span className="text-[14px] font-medium tracking-[.08em] text-ink">报价清单</span>
+            <span className="font-mono text-[10px] tracking-[.14em] text-dim">ITEMS · {cart.length}</span>
+          </div>
           {reorderNotice && (
             <p className="mt-2 border border-warn bg-warn/10 px-3 py-2 text-[12px] text-warn">{reorderNotice}</p>
           )}
@@ -310,7 +318,7 @@ export default function Quote() {
               {submitting ? '提交中…' : me ? '提交订单 →' : guestOpen ? '以访客提交订单 →' : '登录并提交订单 →'}
             </button>
           </div>
-        </div>
+        </section>
       </div>
     </MagSec>
   )

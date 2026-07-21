@@ -81,13 +81,13 @@ describe('定价四表 CRUD', () => {
       method: 'POST',
       url: '/api/pricing/sizes',
       headers: { cookie: adminCookie },
-      payload: { key: 'B5', label: 'B5', area: 60, sort: 9 },
+      payload: { key: 'X5', label: 'X5', area: 60, sort: 9 },
     })
     expect(created.statusCode).toBe(201)
 
     const patched = await app.inject({
       method: 'PATCH',
-      url: '/api/pricing/sizes/B5',
+      url: '/api/pricing/sizes/X5',
       headers: { cookie: adminCookie },
       payload: { label: 'B5判' },
     })
@@ -98,7 +98,7 @@ describe('定价四表 CRUD', () => {
       (
         await app.inject({
           method: 'DELETE',
-          url: '/api/pricing/sizes/B5',
+          url: '/api/pricing/sizes/X5',
           headers: { cookie: adminCookie },
         })
       ).statusCode,
@@ -151,7 +151,7 @@ describe('定价四表 CRUD', () => {
       method: 'POST',
       url: '/api/pricing/sizes',
       headers: { cookie: adminCookie },
-      payload: { key: 'B4', label: 'B4', area: 140, width_mm: 257, height_mm: 364 },
+      payload: { key: 'X4', label: 'X4', area: 140, width_mm: 257, height_mm: 364 },
     })
     expect(created.statusCode).toBe(201)
     expect(created.json()).toMatchObject({ width_mm: 257, height_mm: 364 })
@@ -347,7 +347,7 @@ describe('计算器（下单域）', () => {
   it('可选性三条件不满足 → 404（§2.4 经 API）', async () => {
     for (const payload of [
       { mode_id: 9, paper_id: 1, size_key: 'A3', quantity: 1 },
-      { mode_id: 6, paper_id: 7, size_key: 'A4', quantity: 1 },
+      { mode_id: 6, paper_id: 7, size_key: 'A0', quantity: 1 },
       { mode_id: 14, paper_id: 10, size_key: 'A4', quantity: 1 },
     ]) {
       expect(
@@ -389,7 +389,7 @@ describe('计算器（下单域）', () => {
     expect((member.json() as { unit_price_c: number }).unit_price_c).toBe(500)
   })
 
-  it('§6 序列化白名单：options 与 quote 深度遍历无 cost/profit/margin 键', async () => {
+  it('§6 序列化白名单：options 与 quote 不泄露成本或原纸换算来源', async () => {
     const options = await app.inject({ method: 'GET', url: '/api/calculator/options' })
     expect(options.statusCode).toBe(200)
     expect(collectForbiddenKeys(options.json())).toEqual([])
@@ -400,15 +400,17 @@ describe('计算器（下单域）', () => {
       payload: { mode_id: 7, paper_id: 11, size_key: 'A3', quantity: 10 },
     })
     expect(collectForbiddenKeys(quote.json())).toEqual([])
+    expect(quote.json()).not.toHaveProperty('paper_source_size_key')
+    expect(quote.json()).not.toHaveProperty('paper_yield')
   })
 
-  it('options：60 个可报价组合尺寸对全量带价', async () => {
+  it('options：672 个可报价组合尺寸对全量带价', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/calculator/options' })
     const body = res.json() as {
       options: Array<{ mode_id: number; paper_id: number; prices: Record<string, unknown> }>
     }
     const totalPairs = body.options.reduce((n, o) => n + Object.keys(o.prices).length, 0)
-    expect(totalPairs).toBe(60)
+    expect(totalPairs).toBe(672)
     const m9p12 = body.options.find((o) => o.mode_id === 9 && o.paper_id === 12)
     expect(m9p12?.prices['6']).toBeDefined()
     expect(m9p12?.prices['A3']).toBeUndefined()
@@ -508,16 +510,23 @@ describe('限流（PRD §6：/api/calculator/quote 按 IP）', () => {
 })
 
 describe('管理域成本速查', () => {
-  it('GET /api/admin/pricing/quotes：60 行含成本与警示 flag；下单域不可达', async () => {
+  it('GET /api/admin/pricing/quotes：672 行含成本、原纸来源与警示 flag；下单域不可达', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/admin/pricing/quotes',
       headers: { cookie: adminCookie },
     })
     expect(res.statusCode).toBe(200)
-    const rows = res.json() as Array<{ flag: string; total_c: number }>
-    expect(rows.length).toBe(60)
-    expect(rows.filter((r) => r.flag === 'LOSS').length).toBe(1)
+    const rows = res.json() as Array<{
+      mode_id: number; paper_id: number; size_key: string; flag: string; total_c: number
+      paper_source_size_key: string; paper_yield: number
+    }>
+    expect(rows.length).toBe(672)
+    expect(rows.filter((r) => r.flag === 'LOSS').length).toBe(4)
+    expect(rows.find((r) => r.mode_id === 1 && r.paper_id === 1 && r.size_key === 'A5')).toMatchObject({
+      paper_source_size_key: 'A4',
+      paper_yield: 2,
+    })
 
     expect(
       (await app.inject({ method: 'GET', url: '/api/admin/pricing/quotes' })).statusCode,
@@ -583,6 +592,8 @@ describe('③⑤ /api/calculator/products（客户产品视图）', () => {
     expect(s.includes('C850')).toBe(false)
     expect(s.includes('P708')).toBe(false)
     expect(s.includes('OKI')).toBe(false)
+    expect(s.includes('paper_source_size_key')).toBe(false)
+    expect(s.includes('paper_yield')).toBe(false)
   })
 
   it('member 取内部价口径', async () => {

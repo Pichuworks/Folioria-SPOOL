@@ -200,6 +200,12 @@ function PriceEditModal({
           <span className="font-mono text-ink">{quote.ink_display}</span>
           <span className="text-dim">纸张</span>
           <span className="font-mono text-ink">{quote.paper_display}</span>
+          <span className="text-dim">原纸换算</span>
+          <span className="font-mono text-ink">
+            {quote.paper_source_size_key === quote.size_key && quote.paper_yield === 1
+              ? '原尺寸'
+              : `${quote.paper_source_size_key} → ${quote.size_key} · ${quote.paper_yield}开`}
+          </span>
           <span className="text-dim">总成本</span>
           <span className="font-mono font-medium text-ink">{quote.total_display}</span>
           <span className="text-dim">自动地板价</span>
@@ -525,7 +531,7 @@ export default function QuotesTab({
                         key={s.key}
                         className={`cursor-pointer px-2 py-[9px] text-center transition-colors ${FLAG_BG[q.flag] ?? ''} hover:bg-deep/40`}
                         onClick={() => combo && setEditTarget({ quote: q, combo })}
-                        title={`墨耗 ${q.ink_display} + 纸张 ${q.paper_display} = 成本 ${q.total_display}\n地板价 ${q.auto_display} · 售价 ${q.sell_display} (${q.source})`}
+                        title={`墨耗 ${q.ink_display} + 纸张 ${q.paper_display} = 成本 ${q.total_display}\n原纸 ${q.paper_source_size_key} → ${q.size_key} · ${q.paper_yield}开\n地板价 ${q.auto_display} · 售价 ${q.sell_display} (${q.source})`}
                       >
                         <span className={`font-mono text-[12.5px] ${f.cls === 'text-dim' ? 'text-ink' : f.cls}`}>
                           {q.sell_display}

@@ -15,6 +15,9 @@ export interface Quote {
   mode_id: number
   paper_id: number
   size_key: string
+  /** 管理域追溯字段：实际采用的采购纸尺寸及其每张可裁成品数。 */
+  paper_source_size_key: string
+  paper_yield: number
   ink_c: MoneyC
   paper_c: MoneyC
   total_c: MoneyC
@@ -97,22 +100,109 @@ export function invalidateQuotableCache(): void {
   productsCache = null
 }
 
-interface CostRow {
+interface CostCandidateRow {
   pricing_mode: string
   ink_price_c: number
   ml_per_batch: number | null
   yield_sheets: number
   ref_area: number
   max_area: number
-  size_area: number
-  pack_price_c: number | null
-  pack_count: number | null
+  max_width_mm: number | null
+  max_height_mm: number | null
+  target_area: number
+  source_size_key: string
+  source_sort: number
+  source_area: number
+  source_width_mm: number | null
+  source_height_mm: number | null
+  paper_yield: number
+  pack_price_c: number
+  pack_count: number
 }
 
 export interface UnitCost {
+  paper_source_size_key: string
+  paper_yield: number
   ink_c: MoneyC
   paper_c: MoneyC
   total_c: MoneyC
+}
+
+const COST_CANDIDATES_SQL = `
+  WITH paper_targets AS (
+    SELECT paper_id, size_key AS source_size_key, size_key AS target_size_key,
+           1 AS paper_yield, pack_price_c, pack_count
+    FROM paper_size_costs
+    UNION ALL
+    SELECT psc.paper_id, psc.size_key, sc.target_size_key,
+           sc.yield_count, psc.pack_price_c, psc.pack_count
+    FROM paper_size_costs psc
+    JOIN size_conversions sc ON sc.source_size_key = psc.size_key
+  )
+  SELECT m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
+         rs.area AS ref_area,
+         mx.area AS max_area, mx.width_mm AS max_width_mm, mx.height_mm AS max_height_mm,
+         target.area AS target_area,
+         source.key AS source_size_key, source.sort AS source_sort,
+         source.area AS source_area,
+         source.width_mm AS source_width_mm, source.height_mm AS source_height_mm,
+         pt.paper_yield, pt.pack_price_c, pt.pack_count
+  FROM print_modes m
+  JOIN sizes rs ON rs.key = m.ref_size
+  JOIN sizes mx ON mx.key = m.max_size
+  JOIN sizes target ON target.key = @size
+  JOIN paper_targets pt ON pt.paper_id = @paper AND pt.target_size_key = target.key
+  JOIN sizes source ON source.key = pt.source_size_key
+  WHERE m.id = @mode AND m.archived = 0`
+
+function sourceFitsMode(row: CostCandidateRow): boolean {
+  if (
+    row.source_width_mm != null && row.source_height_mm != null &&
+    row.max_width_mm != null && row.max_height_mm != null
+  ) {
+    return (
+      (row.source_width_mm <= row.max_width_mm && row.source_height_mm <= row.max_height_mm) ||
+      (row.source_width_mm <= row.max_height_mm && row.source_height_mm <= row.max_width_mm)
+    )
+  }
+  return row.source_area <= row.max_area
+}
+
+/** 比较 pack_price_c ÷ (pack_count × 开数)，全程整数交叉相乘。 */
+function comparePaperUnitCost(a: CostCandidateRow, b: CostCandidateRow): number {
+  const left = BigInt(a.pack_price_c) * BigInt(b.pack_count) * BigInt(b.paper_yield)
+  const right = BigInt(b.pack_price_c) * BigInt(a.pack_count) * BigInt(a.paper_yield)
+  if (left !== right) return left < right ? -1 : 1
+  // 成本相同优先少裁切，再按后台尺寸顺序稳定择源。
+  if (a.paper_yield !== b.paper_yield) return a.paper_yield - b.paper_yield
+  if (a.source_sort !== b.source_sort) return a.source_sort - b.source_sort
+  return a.source_size_key.localeCompare(b.source_size_key)
+}
+
+function choosePaperSource(rows: readonly CostCandidateRow[]): CostCandidateRow | null {
+  let best: CostCandidateRow | null = null
+  for (const row of rows) {
+    if (!sourceFitsMode(row)) continue
+    if (!best || comparePaperUnitCost(row, best) < 0) best = row
+  }
+  return best
+}
+
+function unitCostFromRow(row: CostCandidateRow, modeId: number): UnitCost {
+  if (row.pricing_mode === 'ml' && row.ml_per_batch == null) {
+    throw new Error(`pricing: mode ${modeId} pricing_mode=ml requires ml_per_batch`)
+  }
+  const effInk =
+    row.pricing_mode === 'ml' ? row.ink_price_c * (row.ml_per_batch as number) : row.ink_price_c
+  const ink = divRoundHalfUp(effInk * row.target_area, row.yield_sheets * row.ref_area)
+  const paper = divRoundHalfUp(row.pack_price_c, row.pack_count * row.paper_yield)
+  return {
+    paper_source_size_key: row.source_size_key,
+    paper_yield: row.paper_yield,
+    ink_c: moneyC(ink),
+    paper_c: moneyC(paper),
+    total_c: moneyC(ink + paper),
+  }
 }
 
 /** §2.3 单张成本推导（不要求 combo 存在——内部作业也要核算）。尺寸越界/无采购口径 → null */
@@ -122,40 +212,15 @@ export function deriveUnitCost(
   paperId: number,
   sizeKey: string,
 ): UnitCost | null {
-  const row = db
-    .prepare(
-      `SELECT m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
-              rs.area AS ref_area, mx.area AS max_area, s.area AS size_area,
-              psc.pack_price_c, psc.pack_count
-       FROM print_modes m
-       JOIN sizes rs ON rs.key = m.ref_size
-       JOIN sizes mx ON mx.key = m.max_size
-       JOIN sizes s ON s.key = @size
-       LEFT JOIN paper_size_costs psc ON psc.paper_id = @paper AND psc.size_key = @size
-       WHERE m.id = @mode AND m.archived = 0`,
-    )
-    .get({ mode: modeId, paper: paperId, size: sizeKey }) as CostRow | undefined
-
+  const rows = db
+    .prepare(COST_CANDIDATES_SQL)
+    .all({ mode: modeId, paper: paperId, size: sizeKey }) as CostCandidateRow[]
+  const row = choosePaperSource(rows)
   if (!row) {
-    getLog().debug({ modeId, paperId, sizeKey }, 'deriveUnitCost: mode/size join empty')
+    getLog().debug({ modeId, paperId, sizeKey }, 'deriveUnitCost: no fitting paper source')
     return null
   }
-  if (row.size_area > row.max_area) {
-    getLog().debug({ modeId, sizeKey, sizeArea: row.size_area, maxArea: row.max_area }, 'deriveUnitCost: size exceeds max')
-    return null
-  }
-  if (row.pack_price_c == null || row.pack_count == null) {
-    getLog().debug({ paperId, sizeKey }, 'deriveUnitCost: no paper_size_costs')
-    return null
-  }
-  if (row.pricing_mode === 'ml' && row.ml_per_batch == null) {
-    throw new Error(`pricing: mode ${modeId} pricing_mode=ml requires ml_per_batch`)
-  }
-  const effInk =
-    row.pricing_mode === 'ml' ? row.ink_price_c * (row.ml_per_batch as number) : row.ink_price_c
-  const ink = divRoundHalfUp(effInk * row.size_area, row.yield_sheets * row.ref_area)
-  const paper = divRoundHalfUp(row.pack_price_c, row.pack_count)
-  return { ink_c: moneyC(ink), paper_c: moneyC(paper), total_c: moneyC(ink + paper) }
+  return unitCostFromRow(row, modeId)
 }
 
 /** 可选性三条件 + §2.3 推导。不可选 → null（API 层转 404） */
@@ -212,6 +277,8 @@ export function quote(
     mode_id: modeId,
     paper_id: paperId,
     size_key: sizeKey,
+    paper_source_size_key: cost.paper_source_size_key,
+    paper_yield: cost.paper_yield,
     ink_c: moneyC(ink),
     paper_c: moneyC(paper),
     total_c: moneyC(total),
@@ -222,27 +289,21 @@ export function quote(
   }
 }
 
-interface QuotableRow {
+interface QuotableCandidateRow extends CostCandidateRow {
+  combo_id: number
   mode_id: number
   paper_id: number
   size_key: string
-  pricing_mode: string
-  ink_price_c: number
-  ml_per_batch: number | null
-  yield_sheets: number
-  ref_area: number
-  size_area: number
-  pack_price_c: number
-  pack_count: number
+  target_sort: number
   manual_sell_c: number | null
   internal_sell_c: number | null
 }
 
-function deriveQuoteFromRow(r: QuotableRow, cfg: PricingConfig, internal?: boolean): Quote {
-  const effInk = r.pricing_mode === 'ml' ? r.ink_price_c * (r.ml_per_batch as number) : r.ink_price_c
-  const ink = divRoundHalfUp(effInk * r.size_area, r.yield_sheets * r.ref_area)
-  const paper = divRoundHalfUp(r.pack_price_c, r.pack_count)
-  const total = ink + paper
+function deriveQuoteFromRow(r: QuotableCandidateRow, cfg: PricingConfig, internal?: boolean): Quote {
+  const cost = unitCostFromRow(r, r.mode_id)
+  const ink: number = cost.ink_c
+  const paper: number = cost.paper_c
+  const total: number = cost.total_c
 
   const auto = ceilDiv(total * 10000, 10000 - cfg.min_margin_bp)
   const manual = internal ? (r.internal_sell_c ?? r.manual_sell_c) : r.manual_sell_c
@@ -250,35 +311,62 @@ function deriveQuoteFromRow(r: QuotableRow, cfg: PricingConfig, internal?: boole
 
   return {
     mode_id: r.mode_id, paper_id: r.paper_id, size_key: r.size_key,
+    paper_source_size_key: r.source_size_key, paper_yield: r.paper_yield,
     ink_c: moneyC(ink), paper_c: moneyC(paper), total_c: moneyC(total),
     auto_sell_c: moneyC(auto), sell_c: moneyC(sell), source, flag,
   }
 }
 
 const QUOTABLE_SQL = `
-  SELECT c.mode_id, c.paper_id, s.key AS size_key,
+  WITH paper_targets AS (
+    SELECT paper_id, size_key AS source_size_key, size_key AS target_size_key,
+           1 AS paper_yield, pack_price_c, pack_count
+    FROM paper_size_costs
+    UNION ALL
+    SELECT psc.paper_id, psc.size_key, sc.target_size_key,
+           sc.yield_count, psc.pack_price_c, psc.pack_count
+    FROM paper_size_costs psc
+    JOIN size_conversions sc ON sc.source_size_key = psc.size_key
+  )
+  SELECT c.id AS combo_id, c.mode_id, c.paper_id,
+         target.key AS size_key, target.sort AS target_sort,
          m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
-         rs.area AS ref_area, s.area AS size_area,
-         psc.pack_price_c, psc.pack_count,
+         rs.area AS ref_area,
+         mx.area AS max_area, mx.width_mm AS max_width_mm, mx.height_mm AS max_height_mm,
+         target.area AS target_area,
+         source.key AS source_size_key, source.sort AS source_sort,
+         source.area AS source_area,
+         source.width_mm AS source_width_mm, source.height_mm AS source_height_mm,
+         pt.paper_yield, pt.pack_price_c, pt.pack_count,
          cp.sell_c AS manual_sell_c, cp.internal_sell_c
   FROM combos c
   JOIN print_modes m ON m.id = c.mode_id AND m.archived = 0
   JOIN papers p ON p.id = c.paper_id AND p.archived = 0
   JOIN sizes rs ON rs.key = m.ref_size
   JOIN sizes mx ON mx.key = m.max_size
-  JOIN sizes s ON s.area <= mx.area
-  JOIN paper_size_costs psc ON psc.paper_id = c.paper_id AND psc.size_key = s.key
-  LEFT JOIN combo_prices cp ON cp.combo_id = c.id AND cp.size_key = s.key
+  JOIN paper_targets pt ON pt.paper_id = c.paper_id
+  JOIN sizes target ON target.key = pt.target_size_key
+  JOIN sizes source ON source.key = pt.source_size_key
+  LEFT JOIN combo_prices cp ON cp.combo_id = c.id AND cp.size_key = target.key
   WHERE c.archived = 0
-  ORDER BY c.id, s.sort`
+  ORDER BY c.id, target.sort, source.sort`
 
 /** 全部可选组合（三条件 SQL 同 quote 语义）按 combo id × size sort 序——单条 SQL + JS 侧定价 */
 export function listQuotable(db: DB, opts?: QuoteOptions): Quote[] {
   const key = opts?.internal ? 'internal' : 'normal'
   if (quotableCache?.[key] != null) return quotableCache[key]
-  const rows = db.prepare(QUOTABLE_SQL).all() as QuotableRow[]
+  const rows = db.prepare(QUOTABLE_SQL).all() as QuotableCandidateRow[]
+  const selected = new Map<string, QuotableCandidateRow>()
+  for (const row of rows) {
+    if (!sourceFitsMode(row)) continue
+    const rowKey = `${row.combo_id}|${row.size_key}`
+    const current = selected.get(rowKey)
+    if (!current || comparePaperUnitCost(row, current) < 0) selected.set(rowKey, row)
+  }
   const cfg = getConfig(db)
-  const result = rows.map((r) => deriveQuoteFromRow(r, cfg, opts?.internal))
+  const result = [...selected.values()]
+    .sort((a, b) => a.combo_id - b.combo_id || a.target_sort - b.target_sort)
+    .map((r) => deriveQuoteFromRow(r, cfg, opts?.internal))
   if (!quotableCache) quotableCache = { normal: null, internal: null }
   quotableCache[key] = result
   return result
@@ -297,49 +385,39 @@ export interface Product {
 /**
  * ③⑤ 客户产品视图：把可报价 (mode,paper,size) 按「色彩档 × 技术 × 纸 × 尺寸 × 单双面」折叠，
  * 取最低售价 + 对应最便宜模式（机器对客户不可见）。color_class 多值（如 'bw,color'）= 同时归多档。
- * combos/价不变；纸张 seed 覆盖后 §2.5 stored 基线为 60/13，这是叠加的展示层。
+ * combos/价不变；D43 起目录包含由采购大纸派生的可报价成品尺寸。
  */
 export function listProducts(db: DB, opts?: QuoteOptions): Product[] {
   const key = opts?.internal ? 'internal' : 'normal'
   if (productsCache?.[key] != null) return productsCache[key]
 
-  const rows = db
+  const modeRows = db
     .prepare(
-      `SELECT c.mode_id, c.paper_id, s.key AS size_key, m.duplex,
-              COALESCE(m.color_class, 'color') AS color_class, pr.type AS tech,
-              m.pricing_mode, m.ink_price_c, m.ml_per_batch, m.yield_sheets,
-              rs.area AS ref_area, s.area AS size_area,
-              psc.pack_price_c, psc.pack_count,
-              cp.sell_c AS manual_sell_c, cp.internal_sell_c
-       FROM combos c
-       JOIN print_modes m ON m.id = c.mode_id AND m.archived = 0
+      `SELECT m.id AS mode_id, m.duplex,
+              COALESCE(m.color_class, 'color') AS color_class, pr.type AS tech
+       FROM print_modes m
        JOIN printers pr ON pr.id = m.printer_id AND pr.archived = 0
-       JOIN papers p ON p.id = c.paper_id AND p.archived = 0
-       JOIN sizes rs ON rs.key = m.ref_size
-       JOIN sizes mx ON mx.key = m.max_size
-       JOIN sizes s ON s.area <= mx.area
-       JOIN paper_size_costs psc ON psc.paper_id = c.paper_id AND psc.size_key = s.key
-       LEFT JOIN combo_prices cp ON cp.combo_id = c.id AND cp.size_key = s.key
-       WHERE c.archived = 0`,
+       WHERE m.archived = 0`,
     )
-    .all() as Array<QuotableRow & { duplex: number; color_class: string; tech: string }>
+    .all() as Array<{ mode_id: number; duplex: number; color_class: string; tech: string }>
+  const modeMap = new Map(modeRows.map((row) => [row.mode_id, row]))
 
-  const cfg = getConfig(db)
   const map = new Map<string, Product>()
-  for (const r of rows) {
-    const q = deriveQuoteFromRow(r, cfg, opts?.internal)
-    for (const category of r.color_class.split(',')) {
-      const key = [category, r.tech, r.paper_id, r.size_key, r.duplex].join('|')
-      const cur = map.get(key)
+  for (const q of listQuotable(db, opts)) {
+    const mode = modeMap.get(q.mode_id)
+    if (!mode) continue
+    for (const category of mode.color_class.split(',').map((v) => v.trim()).filter(Boolean)) {
+      const productKey = [category, mode.tech, q.paper_id, q.size_key, mode.duplex].join('|')
+      const cur = map.get(productKey)
       if (!cur || (q.sell_c as number) < (cur.sell_c as number)) {
-        map.set(key, {
+        map.set(productKey, {
           category,
-          tech: r.tech,
-          paper_id: r.paper_id,
-          size_key: r.size_key,
-          duplex: r.duplex,
+          tech: mode.tech,
+          paper_id: q.paper_id,
+          size_key: q.size_key,
+          duplex: mode.duplex,
           sell_c: q.sell_c,
-          mode_id: r.mode_id,
+          mode_id: q.mode_id,
         })
       }
     }

@@ -69,20 +69,19 @@ export default function BookConfigurator({ onAdd }: { onAdd: (line: BookCartLine
 
   const coverPapers = useMemo(() => {
     if (!sizeKey) return []
-    return papers.filter((p) =>
-      p.available_sizes.includes(sizeKey) &&
-      p.color_classes.some((cc) => cc === 'color' || cc === 'bw'),
-    )
+    return papers.filter((p) => p.variants.some(
+      (variant) => variant.size_key === sizeKey && variant.color_classes.includes('color'),
+    ))
   }, [papers, sizeKey])
 
   const innerPapers = useMemo(() => {
     if (!sizeKey) return []
-    return papers.filter((p) => p.available_sizes.includes(sizeKey))
+    return papers.filter((p) => p.variants.some((variant) => variant.size_key === sizeKey))
   }, [papers, sizeKey])
 
-  const paperName = (id: number) => papers.find((p) => p.id === id)?.name ?? `纸 ${id}`
-
-  const canPrint = (paper: BookConfigPaper, cc: string) => paper.color_classes.includes(cc)
+  const canPrint = (paper: BookConfigPaper, cc: string) => paper.variants.some(
+    (variant) => variant.size_key === sizeKey && variant.color_classes.includes(cc),
+  )
 
   const updateInner = (idx: number, patch: Partial<InnerSection>) => {
     setInners((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))

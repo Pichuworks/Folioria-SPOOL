@@ -99,7 +99,7 @@ printers + maintenance_events（字段见 schema.sql）。要点：
 ```
 eff_ink_c   = pricing_mode==ml ? ink_price_c × ml_per_batch : ink_price_c
 ink_c       = round_half_up( eff_ink_c × size.area ÷ (yield_sheets × ref_size.area) )
-paper_c     = round_half_up( pack_price_c ÷ pack_count )
+paper_c     = round_half_up( source.pack_price_c ÷ (source.pack_count × paper_yield) )
 overhead_c  = round( equipment_cost_c ÷ (dep_months × month_volume) )   // 设置默认 36×2000
 total_c     = ink_c + paper_c [+ overhead_c]
 auto_sell_c = ceil( total_c × 10000 ÷ (10000 − min_margin_bp) )
@@ -116,7 +116,7 @@ force_min_margin 设置开启时才将手动价抬升至地板价（默认关闭
 unify_pricing 设置：同纸张同尺寸同单双面取各模式最低有效价（管理域展示用）
 ```
 
-**可选性规则**（报价配置器）：组合可选 ⇔ `Combo 存在 ∧ size.area ≤ mode.max_size.area ∧ PaperSizeCost 存在`。三条件任一不满足即不可选，客户永远选不出报不了价的组合。
+**可选性规则**（报价配置器）：组合可选 ⇔ `Combo 存在 ∧ 存在可裁出目标尺寸的 PaperSizeCost 来源 ∧ 来源纸尺寸不超过 mode.max_size`。直接采购目标尺寸视为 `paper_yield=1`；同纸存在多个来源时，以整数交叉相乘比较精确有效单张成本，自动采用最低者。三条件任一不满足即不可选，客户永远选不出报不了价的组合。换算来源与开数仅管理域可见；库存仍按实际纸张×尺寸人工录入、人工裁切转换。
 
 管理域 `/admin/pricing` 对 sizes / print_modes / papers+paper_size_costs / combos 提供全量 CRUD（即现有成本计算器"参数设置"tab 的 API 化）。
 
@@ -344,7 +344,7 @@ Settings:   GET|PATCH /api/settings（admin）
 
 以 `data/seed.json` 为准（自 folioria_cost.html 提取，金额已转 `_c` 整数，提取脚本零精度损失校验通过）：
 
-- 7 尺寸（6寸/A5/A4/A3/A3+/SRA3/A3+++，含相对面积）
+- 31 尺寸（6寸；ISO A0–A8、B0–B8、RA0–RA4、SRA0–SRA4；兼容 A3+/A3++/A3+++，含物理尺寸与相对面积）
 - 5 物理打印机（C850/P708/G580/L15168/C650）
 - 16 打印模式 · 50 纸张 · 50 组纸张×尺寸采购口径 · 70 组合（20 组带手动定价 / 50 组纯自动地板价）
 - 耗材：备用 T01 一套（14000000_c，CNY 1400 元）—— C850 设备投入 206000000_c 不含此项
@@ -377,7 +377,7 @@ feat / fix / refactor / style / data / docs / test / chore
 
 | # | 决策 | 结论与理由 |
 |---|---|---|
-| D1 | 开纸换算 | 不建自动模型；裁切人工折算 + convert 成对日志留痕（不买卷纸） |
+| D1 | 开纸换算 | **库存侧**不自动拆分：裁切数量仍人工折算 + convert 成对日志留痕（不买卷纸）。**报价侧**由 D43 补充确定性开数换算，不自动改库存。 |
 | D2 | 耗材模型 | 单表 + 换装走 MaintenanceEvent(final_usage)；喷墨成本走推导不走寿命 |
 | D3 | 扣减时机 | done 实扣含废品；预占用动态算不落库；cancelled 零回滚（否决 reserved 状态：同步 bug 面大） |
 | D4 | 3D/UV | 整体移出，另行记账（否决 Material 泛化：MVP 不背包袱） |
@@ -421,6 +421,7 @@ feat / fix / refactor / style / data / docs / test / chore
 | D40 | 打印耗材成本覆盖（旧 index.html 校验） | `D:/Users/neko/Desktop/印刷生产系统/枫光映刻-生产级打印系统-v3/index.html` 的设备成本表经公开资料校验后只作为保守经验口径导入 `print_modes`，仍沿 D8/D22 的推导式模型，不恢复平面 CostRule。确认口径：C850 T01 CMYK 套装按 14000000_c；G580/L15168 墨水套装按 2500000_c；P708 表格低成本区间只对应 `P708 灌装`（mode 8，ml 口径 eff=10000×1000=10000000_c，yield 440@A3），不覆盖 `P708 原装`（mode 7 继续保留 25000000_c 高成本原装核算）。seed `_meta.cost_basis` 与耗材 JSON note 留痕；schema 不变，喷墨墨水成本继续由 print_modes 面积推导，C850 备用粉库存继续仅一条 per_page consumable。 |
 | D41 | CNY 单价层低 100 倍修复（历史方案，已由 D42 取代） | `_c` 定义始终是“最小货币单位×100”；CNY 最小单位为分，因此 `1 RMB=10000_c`。D39/D40 数据曾按 `RMB×100` 写入，导致显示和行小计均低 100 倍。`data/seed.json` 的 printers/print_modes/paper_size_costs/combo sell_c/consumables 全部补乘 100；0035 原方案会对既有 CNY 实例的配置/价格事实源统一乘 100，但因无法证明历史口径而在 D42 改为 no-op。 |
 | D42 | 历史币种迁移安全修订 | 0019 原实现会删除业务流水并把所有实例强制切到 CNY，0035 又仅凭 `base_currency='CNY'` 自动乘 100；两者均改为保留版本号的 no-op，因为新增迁移无法在旧迁移执行前介入。0036 对既有 CNY 实例置 `pricing_needs_reentry=1`，由 `spool pricing-scale inspect` 后人工选择 `mark-canonical` 或先验证备份再 `repair-cny`；操作清标志并写 `admin_audit`，重复执行与非 CNY 实例均拒绝。新装实例在 migration 后才 init，保持 canonical。 |
+| D43 | 完整尺寸目录与报价开纸换算 | migration 0037 新增 `size_conversions(source_size_key,target_size_key,yield_count)`，一次加入 6寸、A0–A8、B0–B8、RA0–RA4、SRA0–SRA4，并保留 A3+/A3++/A3+++；有明确 mm 的尺寸按横/竖矩形排版生成全部可行来源→成品开数，A3→6寸按混排校正为 6 开，物理尺寸未定的 A3+/A3+++ 不推测换算。报价从同纸所有可上机来源中按 `pack_price_c/(pack_count×yield_count)` 的精确有理数择最低，平价时优先少裁切；墨耗仍按成品尺寸计算。打印上限按**来源纸**物理宽高（可旋转）判断，无 mm 才回退相对面积。来源与开数只在管理域成本表/报价矩阵/XLSX 展示，公开 calculator/book DTO 均不暴露；库存裁切继续 D1 人工录入。book-config 改为按成品尺寸返回实际可报价 `variants`，因此 A5 可由 A4 2开或 A3 4开正常选纸。自助报价桌面排版采用左侧约 60% 报价清单、右侧约 40% 参数配置，移动端配置优先；继续使用现有暖白/酒红主题。§2.5 新基线：672 可报价（手动 31：LOSS 4 / below_margin 18 / manual 9；自动 641）。 |
 
 ---
 

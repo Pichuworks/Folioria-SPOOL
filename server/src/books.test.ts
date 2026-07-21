@@ -166,8 +166,8 @@ describe('priceBook — 张数语义与可选性', () => {
 
   it('组件规格不可做（无产品）→ 422 component_not_quotable', () => {
     const book = makeBook('bad-comp')
-    // color × paper 7 铜版157g @ A4：无 A4 采购口径（§2.4）→ 无产品
-    const bad = addComp(book, 'cover', 7, 'A4', 'color')
+    // A0 没有可用采购来源且超过所有现有机型上限 → 无产品
+    const bad = addComp(book, 'cover', 7, 'A0', 'color')
     expect(() => priceBook(db, { book_id: book, count: 1, sheets: {} })).toThrow(
       new RegExp(`component_not_quotable_${bad}`),
     )
