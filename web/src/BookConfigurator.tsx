@@ -29,6 +29,11 @@ interface InnerSection {
   paper_id: number | null
   color_class: 'bw' | 'color'
   duplex: 0 | 1
+  sheets: string
+}
+
+interface ReadyInnerSection extends Omit<InnerSection, 'paper_id' | 'sheets'> {
+  paper_id: number
   sheets: number
 }
 
@@ -37,7 +42,13 @@ const COLOR_LABEL: Record<string, string> = { bw: '黑白', color: '彩色' }
 type QState = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
 
 function newInner(): InnerSection {
-  return { paper_id: null, color_class: 'bw', duplex: 0, sheets: 20 }
+  return { paper_id: null, color_class: 'bw', duplex: 0, sheets: '20' }
+}
+
+function resolveInner(section: InnerSection): ReadyInnerSection | null {
+  const sheets = Number(section.sheets)
+  if (section.paper_id === null || section.sheets.trim() === '' || !Number.isSafeInteger(sheets) || sheets < 1) return null
+  return { ...section, paper_id: section.paper_id, sheets }
 }
 
 /** D36 自定义书册配置器：扁平自助表单 */
@@ -91,7 +102,9 @@ export default function BookConfigurator({ onAdd }: { onAdd: (line: BookCartLine
     setInners((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)))
   }
 
-  const allReady = sizeKey && coverPaperId && inners.every((s) => s.paper_id && s.sheets >= 1)
+  const resolvedInners = inners.map(resolveInner)
+  const readyInners = resolvedInners.filter((s): s is ReadyInnerSection => s !== null)
+  const allReady = Boolean(sizeKey && coverPaperId && resolvedInners.every((s) => s !== null))
   const finishingIds = useMemo(() => {
     const ids: number[] = []
     if (bindingId) ids.push(bindingId)
@@ -103,16 +116,16 @@ export default function BookConfigurator({ onAdd }: { onAdd: (line: BookCartLine
     if (!allReady) return null
     const comps = [
       { role: 'cover' as const, paper_id: coverPaperId!, color_class: 'color', duplex: 0, sheets_per_book: 1 },
-      ...inners.filter((s) => s.paper_id).map((s) => ({
+      ...readyInners.map((s) => ({
         role: 'inner' as const,
-        paper_id: s.paper_id!,
+        paper_id: s.paper_id,
         color_class: s.color_class,
         duplex: s.duplex,
         sheets_per_book: s.sheets,
       })),
     ]
     return JSON.stringify({ count, size_key: sizeKey, components: comps, finishing_ids: finishingIds })
-  }, [allReady, coverPaperId, inners, sizeKey, count, finishingIds])
+  }, [allReady, coverPaperId, readyInners, sizeKey, count, finishingIds])
 
   useEffect(() => {
     setQuote(null)
@@ -131,19 +144,19 @@ export default function BookConfigurator({ onAdd }: { onAdd: (line: BookCartLine
   }, [specKey])
 
   const add = () => {
-    if (!quote || !sizeKey || !coverPaperId) return
+    if (!quote || !sizeKey || !coverPaperId || !allReady) return
     const comps: BookCartLine['components'] = [
       { role: 'cover', paper_id: coverPaperId, color_class: 'color', duplex: 0, sheets_per_book: 1 },
-      ...inners.filter((s) => s.paper_id).map((s) => ({
+      ...readyInners.map((s) => ({
         role: 'inner' as const,
-        paper_id: s.paper_id!,
+        paper_id: s.paper_id,
         color_class: s.color_class,
         duplex: s.duplex,
         sheets_per_book: s.sheets,
       })),
     ]
     const sLabel = sizes.find((s) => s.key === sizeKey)?.label ?? sizeKey
-    const innerDesc = inners.filter((s) => s.paper_id).map((s) =>
+    const innerDesc = readyInners.map((s) =>
       `${COLOR_LABEL[s.color_class]}${s.sheets}张`,
     ).join('+')
     onAdd({
@@ -241,7 +254,7 @@ export default function BookConfigurator({ onAdd }: { onAdd: (line: BookCartLine
                     min={1}
                     className={specInput}
                     value={s.sheets}
-                    onChange={(e) => updateInner(idx, { sheets: Math.max(1, Math.trunc(Number(e.target.value) || 1)) })}
+                    onChange={(e) => updateInner(idx, { sheets: e.target.value })}
                   />
                 </Field>
               </div>
